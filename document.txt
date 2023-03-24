@@ -1,0 +1,32 @@
+Chức năng lưu lịch sử hoạt động
+    Các thông tin thiết bị cần lưu:
+        Thay đổi giá trị dp
+        Thay đổi trạng thái online/offline
+        Thêm/xóa thiết bị
+        Khóa trẻ em
+        Khóa hãng
+        Thời gian
+        Nguyên nhân làm thay đổi trạng thái (senderId nếu điều khiển từ app, sceneId nếu điều khiển từ kịch bản)
+    Thời gian lưu tối đa:
+
+
+Chức năng enable/disable kịch bản:
+    Kịch bản MANUAL: Không tắt được => khi nhận được request TYPE_CTR_SCENE thì luôn chạy kịch bản
+    Kịch bản Auto: Không chạy được từ trên app => Khi nhận được request TYPE_CTR_SCENE thì luôn enable/disable kịch bản dựa vào trường 'state' gửi xuống
+
+Chức năng update kịch bản:
+    Với kịch bản HC chỉ cần lưu lại thông tin kịch bản mới vào database
+    Với kịch bản LC:
+        Update actions:
+            Xóa hết các actions cũ mà không có trong list actions mới
+            Add các actions mới mà không có trong list actions cũ
+
+
+Những hàm cần phải free memory giá trị trả về:
+    JSON_Parse()
+    JSON_CreateObject()
+    JSON_CreateArray()
+    cJSON_Print()
+    cJSON_PrintUnformatted()
+    List_Create()
+    String_Split()
