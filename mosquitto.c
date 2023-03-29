@@ -9,44 +9,14 @@ char* g_dbgFileName;
 int g_dbgLineNumber;
 extern struct mosquitto * mosq;
 
-bool sendPacketToFunc(struct mosquitto* mosq, const char* serviceToSend, int reqType, JSON* packet) {
-    bool ret = false;
-    char* layerService;
-    char topic[100];
-    if (strcmp(serviceToSend, SERVICE_CORE) == 0) {
-        layerService = MOSQ_LayerService_Core;
-    } else if (strcmp(serviceToSend, SERVICE_CMD) == 0) {
-        layerService = MOSQ_LayerService_Core;
-    } else if (strcmp(serviceToSend, SERVICE_BLE) == 0) {
-        layerService = MOSQ_LayerService_Device;
-    } else if (strcmp(serviceToSend, SERVICE_AWS) == 0) {
-        layerService = MOSQ_LayerService_App;
-    } else if (strcmp(serviceToSend, MOSQ_NameService_Support_Rule_Schedule) == 0) {
-        layerService = MOSQ_LayerService_Support;
-    } else if (strcmp(serviceToSend, MOSQ_NameService_Support_Rule_Schedule) == 0) {
-        layerService = MOSQ_LayerService_Support;
-    } else {
-        layerService = "Unknown";
-    }
-
-    sprintf(topic, "%s/%s/%s", layerService, serviceToSend, SERVICE_NAME);
-    if (JSON_HasObjectItem(packet, "reqType")) {
-        cJSON_DeleteItemFromObject(packet, "reqType");
-    }
-    JSON_SetNumber(packet, "reqType", reqType);
-    char* message = cJSON_PrintUnformatted(packet);
-    int reponse = mosquitto_publish(mosq, NULL, topic, strlen(message), message, 0, false);
-    if (MOSQ_ERR_SUCCESS == reponse) {
-        myLogInfo("Sent to %s (topic %s), data: %s", serviceToSend, topic, message);
-        ret = true;
-    } else {
-        myLogInfo("Failed to publish to local topic: %s", topic);
-    }
-    free(message);
+bool sendPacketToFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, JSON* packet) {
+    char* payload = cJSON_PrintUnformatted(packet);
+    bool ret = sendToServiceFunc(mosq, serviceToSend, typeAction, payload);
+    free(payload);
     return ret;
 }
 
-bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, const char * extend, const char *id, const char* payload) {
+bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, const char* payload) {
     bool ret = false;
     char* layerService;
     char topic[100];
@@ -67,7 +37,7 @@ bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int ty
         layerService = "Unknown";
     }
 
-    sprintf(topic, "%s/%s/%d/%s", layerService, serviceToSend, typeAction, extend);
+    sprintf(topic, "%s/%s/%d", layerService, serviceToSend, typeAction);
 
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
@@ -75,8 +45,6 @@ bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int ty
     // json_object_set_string(root_object, MOSQ_LayerService, layerService);
     json_object_set_string(root_object, MOSQ_NameService, SERVICE_NAME);
     json_object_set_number(root_object, MOSQ_ActionType, typeAction);
-    json_object_set_string(root_object, MOSQ_Extend, extend);
-    json_object_set_string(root_object, MOSQ_Id, id);
     json_object_set_number(root_object, MOSQ_TimeCreat, timeInMilliseconds());
     json_object_set_string(root_object, MOSQ_Payload, payload);
 
@@ -487,17 +455,17 @@ bool getPayloadReponseDeleteSceneAWS(char** result,char *sceneID)
     return true;
 }
 
-bool getPayloadReponseStateDeviceAWS(char** result,char *deviceID,int  state)
+char* getPayloadReponseStateDeviceAWS(char *deviceID, int  state)
 {
     char *serialized_string = malloc(1000);
     sprintf(serialized_string,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":%d}}}}",TYPE_UPDATE_DEVICE,SENDER_HC_VIA_CLOUD,deviceID,KEY_STATE,state);
     printf("serialized_string %s\n",serialized_string );
     int size_t = strlen(serialized_string);
-    *result = malloc(size_t+1);
-    memset(*result,'\0',size_t+1);
-    strcpy(*result,serialized_string);
+    char* result = malloc(size_t+1);
+    memset(result,'\0',size_t+1);
+    strcpy(result, serialized_string);
     free(serialized_string);
-    return true;    
+    return result;
 }
 
 bool getPayloadReponseValueSceneAWS(char** result,int sender,int type,char *value)
@@ -536,7 +504,7 @@ void Aws_updateGroupState(const char* groupAddr, int state)
 {
     char payload[200];
     sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"groups\":{\"%s\": {\"%s\":%d}}}}}", TYPE_UPDATE_GROUP_NORMAL, SENDER_HC_VIA_CLOUD, groupAddr, KEY_STATE, state);
-    sendToService(SERVICE_AWS, GW_RESPONSE_ADD_GROUP_NORMAL, MOSQ_ActResponse, "", payload);
+    sendToService(SERVICE_AWS, GW_RESPONSE_ADD_GROUP_NORMAL, payload);
 }
 
 void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const list_t* failedDevices) {
@@ -565,7 +533,7 @@ void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const 
         // sendNotiToUser(notification);
     }
     char* payload = json_serialize_to_string(jsonValue);
-    sendToService(SERVICE_AWS, GW_RESPONSE_ADD_GROUP_NORMAL, MOSQ_ActResponse, "", payload);
+    sendToService(SERVICE_AWS, GW_RESPONSE_ADD_GROUP_NORMAL, payload);
     json_free_serialized_string(payload);
 }
 
@@ -589,7 +557,7 @@ bool getPayloadReponseDevicesGroupAWS(char** result,char *deviceID,char*  device
 void sendNotiToUser(const char* message) {
     char payload[200];
     sprintf(payload, "{\"type\": %d, \"sender\":%d,\"%s\": \"%s\" }", TYPE_NOTIFI_REPONSE, SENDER_HC_VIA_CLOUD, KEY_MESSAGE, message);
-    sendToService(SERVICE_AWS, TYPE_NOTIFI_REPONSE, MOSQ_ActResponse, "", payload);
+    sendToService(SERVICE_AWS, TYPE_NOTIFI_REPONSE, payload);
 }
 
 

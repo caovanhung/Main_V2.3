@@ -1,4 +1,19 @@
-Chức năng lưu lịch sử hoạt động
+# Danh sách thiết bị:
+    Công tắc
+        Công tắc Homegy
+        Công tắc rèm
+    Đèn
+        Đèn HG Skylight
+        Đèn CT Rạng đông
+        Đèn RGB Rạng đông
+    Cảm biến
+        Cảm biến cửa: trạng thái cửa đóng/mở, trạng thái cảm biến đã được gắn lên tường hay chưa, % pin
+        Cảm biến khói: có khói hay không, % pin
+        Cảm biến nhiệt độ/độ ẩm
+        Cảm biến chuyển động
+
+
+# Chức năng lưu lịch sử hoạt động
     Các thông tin thiết bị cần lưu:
         Thay đổi giá trị dp
         Thay đổi trạng thái online/offline
@@ -10,11 +25,11 @@ Chức năng lưu lịch sử hoạt động
     Thời gian lưu tối đa:
 
 
-Chức năng enable/disable kịch bản:
+# Chức năng enable/disable kịch bản:
     Kịch bản MANUAL: Không tắt được => khi nhận được request TYPE_CTR_SCENE thì luôn chạy kịch bản
     Kịch bản Auto: Không chạy được từ trên app => Khi nhận được request TYPE_CTR_SCENE thì luôn enable/disable kịch bản dựa vào trường 'state' gửi xuống
 
-Chức năng update kịch bản:
+# Chức năng update kịch bản:
     Với kịch bản HC chỉ cần lưu lại thông tin kịch bản mới vào database
     Với kịch bản LC:
         Update actions:
@@ -22,7 +37,7 @@ Chức năng update kịch bản:
             Add các actions mới mà không có trong list actions cũ
 
 
-Những hàm cần phải free memory giá trị trả về:
+# Những hàm cần phải free memory giá trị trả về:
     JSON_Parse()
     JSON_CreateObject()
     JSON_CreateArray()
@@ -30,3 +45,21 @@ Những hàm cần phải free memory giá trị trả về:
     cJSON_PrintUnformatted()
     List_Create()
     String_Split()
+
+
+Tính năng OTA cho HC, Gateway, devices
+Tính năng khóa trẻ em, khóa hãng, set độ sáng cho hạt công tắc Homegy
+Tính năng update nhóm đèn, nhóm công tắc
+Tính năng ping HC từ app
+Tích hợp các thiết bị cảm biến, thiết bị của Tuya và Homekit vào HC
+Tính năng scan trạng thái on/off của thiết bị (công tắc, đèn) lúc bật nguồn HC
+Tính năng đồng bộ database giữa HC và cloud
+Tính năng đồng bộ trạng thái bật/tắt của thiết bị và HC khi bật tắt cùng lúc làm gói tin BLE bị miss
+
+Tính năng cài đặt wifi, HomeID cho HC
+Tính năng thay HC
+Tính năng chạy 2 Gateway trên 1 HC
+Tính năng chạy nhiều HC trong 1 nhà
+Thêm chức năng của loa và nút nhấn cho HC
+Test tải cho HC
+Tạo file image nạp cho HC, chỉ cần nạp file này xuống board là HC sẽ chạy luôn mà không cần cài đặt gì thêm

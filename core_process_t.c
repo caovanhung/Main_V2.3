@@ -52,6 +52,19 @@ void String2HexArr(char *givenStr, unsigned char *hexStr)
 	}
 }
 
+// uint16_t String2Hex(char *str, unsigned char *hexStr)
+// {
+//     int length = (int)strlen(str);
+//     int i  = 0;
+//     char temp1[3] = {'\0'};
+//     for(i = 0;i< length/2;i ++)
+//     {
+//         temp1[0] = str[i*2];
+//         temp1[1] = str[i*2+1];
+//         hexStr[i] = strtol(temp1,NULL,16);
+//     }
+// }
+
 int String2Int(const char *str)
 {
     if (str) {

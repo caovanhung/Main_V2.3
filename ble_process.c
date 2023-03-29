@@ -4,6 +4,29 @@
 #include "time_t.h"
 #include "uart.h"
 
+// Variables to wait response after send a packet
+static uint8_t g_bleFrameRespType = 0;
+static uint16_t g_bleFrameSender = 0;
+int fd = 0;
+
+void waitResponse(uint16_t addr) {
+    int i = 0;
+    long long start = timeInMilliseconds();
+    while (g_bleFrameSender != addr) {
+        usleep(10);
+        i++;
+        if (i > 2500) {
+            break;
+        }
+    }
+    long long end = timeInMilliseconds();
+    if (addr != g_bleFrameSender) {
+        myLogInfo("Time spent: TIMEOUT after %lld ms", end - start);
+    } else {
+        myLogInfo("Time spent: %lld ms", end - start);
+    }
+}
+
 void BLE_PrintFrame(char* str, ble_rsp_frame_t* frame) {
     char paramStr[1000];
     int n = 0;
@@ -624,7 +647,7 @@ int get_count_element_of_DV(const char* pid_)
     {
         return 4;
     }
-        else if(isMatchString(pid_,HG_BLE_CURTAIN))
+        else if(isMatchString(pid_,HG_BLE_CURTAIN_NORMAL))
     {
         return 1;
     }
@@ -708,24 +731,19 @@ void ble_getStringControlOnOff_SW(char **result,const char* strAddress,const cha
     strcat(*result, tmp_3);
 }
 
-int ble_controlOnOFF_SW(int fd,const char *address_element,const char *state)
+int ble_controlOnOFF_SW(const char* dpAddr, uint8_t dpValue)
 {
-    char *str_send_uart;
-    unsigned char *hex_send_uart;
-    int check = 0;
+    uint8_t data[] = {0xe8, 0xff,  0x00,0x00,0x00,0x00,0x00,0x00,  0xff,0xff,  0x82,0x03, 0x00};
+    long int dpAddrHex = strtol(dpAddr, NULL, 16);
+    data[9] = dpAddrHex & (0xFF);
+    data[8] = (dpAddrHex >> 8) & 0xFF;
+    data[12] = dpValue;
 
-    ble_getStringControlOnOff_SW(&str_send_uart,address_element,state);
+    g_bleFrameSender = 0;
+    int sentLength = UART0_Send(fd, data, 13);
+    waitResponse(dpAddrHex);
 
-    int len_str = (int)strlen(str_send_uart);
-    hex_send_uart  = (char*) malloc(len_str * sizeof(char));
-    String2HexArr(str_send_uart,hex_send_uart);
-    check = UART0_Send(fd,hex_send_uart,len_str/2);
-    usleep(DELAY_SEND_UART_MS);
-    free(hex_send_uart);
-    free(str_send_uart);
-    hex_send_uart = NULL;
-    if(check != len_str/2)
-    {
+    if (sentLength != 13) {
         return -1;
     }
     return 0;
@@ -763,15 +781,15 @@ int ble_controlOnOFF(int fd,const char *address_element,const char *state)
     char *str_send_uart;
     unsigned char *hex_send_uart;
     int check = 0;
-
+    long int dpAddrHex = strtol(address_element, NULL, 16);
+    g_bleFrameSender = 0;
     ble_getStringControlOnOff(&str_send_uart,address_element,state);
 
     int len_str = (int)strlen(str_send_uart);
     hex_send_uart  = (char*) malloc(len_str * sizeof(char));
     String2HexArr(str_send_uart,hex_send_uart);
-    printf("str_send_uart %s\n",str_send_uart );
     check = UART0_Send(fd,hex_send_uart,len_str/2);
-    usleep(DELAY_SEND_UART_MS);
+    waitResponse(dpAddrHex);
     free(hex_send_uart);
     free(str_send_uart);
     hex_send_uart = NULL;
@@ -842,7 +860,7 @@ bool ble_dimLedSwitch_HOMEGY(int fd,const char *address_device,int lightness)
     return true;
 }
 
-bool ble_addDeviceToGroupLightCCT_HOMEGY(int fd,const char *address_group,const char *address_device,const char *address_element)
+bool ble_addDeviceToGroupLightCCT_HOMEGY(const char *address_group,const char *address_device,const char *address_element)
 {
     int check = 0,i = 0;
     uint8_t  SET_GROUP[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00   ,0x00,0x00 ,0x80,0x1b  ,0x00,0x00,0x00,0x00,  0x00,0x10};
@@ -874,7 +892,7 @@ bool ble_addDeviceToGroupLightCCT_HOMEGY(int fd,const char *address_group,const 
 }
 
 
-bool ble_addDeviceToGroupLink(int fd,const char *address_group,const char *address_device,const char *address_element)
+bool ble_addDeviceToGroupLink(const char *address_group,const char *address_device,const char *address_element)
 {
     if (address_group == NULL || address_device == NULL || address_element == NULL) {
         return false;
@@ -900,7 +918,7 @@ bool ble_addDeviceToGroupLink(int fd,const char *address_group,const char *addre
     SET_GROUP[15] = *(hex_address_group+1);
 
     check = UART0_Send(fd,SET_GROUP,19);
-    usleep(DELAY_SEND_UART_MS);
+    usleep(1000000);
     free(hex_address_group);
     free(hex_address_device);
     free(hex_address_element);
@@ -916,7 +934,7 @@ bool ble_addDeviceToGroupLink(int fd,const char *address_group,const char *addre
     return true;
 }
 
-bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int fd,const char *address_group,const char *address_device,const char *address_element)
+bool ble_deleteDeviceToGroupLightCCT_HOMEGY(const char *address_group,const char *address_device,const char *address_element)
 {
 
     int check = 0,i = 0;
@@ -938,13 +956,6 @@ bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int fd,const char *address_group,con
 
     SET_GROUP[14] = *hex_address_group;
     SET_GROUP[15] = *(hex_address_group+1);
-
-    printf("DEL_GROUP : ");
-    for(i=0;i<18;i++)
-    {
-        printf("  %02X",SET_GROUP[i]);
-    }
-    printf("\n\n");
     check = UART0_Send(fd,SET_GROUP,18);
     usleep(DELAY_SEND_UART_MS);
     free(hex_address_group);
@@ -1104,10 +1115,10 @@ int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* origin
             resultFrames[frameCount].flag = ((uint16_t)originPackage[i] << 8) | originPackage[i + 1];;
             if (originPackage[i + 1] == 0x9d) {
                 // Online/Online frame
-                resultFrames[frameCount].onlineState = originPackage[i + 8];
-                resultFrames[frameCount].onlineState2 = originPackage[i + 15];
+                resultFrames[frameCount].onlineState = originPackage[i + 8] > 0? 1 : 0;
+                resultFrames[frameCount].onlineState2 = originPackage[i + 14] > 0? 1 : 0;
                 resultFrames[frameCount].sendAddr = ((uint16_t)originPackage[i + 6] << 8) | originPackage[i + 7];
-                resultFrames[frameCount].sendAddr2 = ((uint16_t)originPackage[i + 13] << 8) | originPackage[i + 14];
+                resultFrames[frameCount].sendAddr2 = ((uint16_t)originPackage[i + 12] << 8) | originPackage[i + 13];
             } else {
                 // Other frames
                 resultFrames[frameCount].sendAddr = ((uint16_t)originPackage[i + 2] << 8) | originPackage[i + 3];
@@ -1133,7 +1144,7 @@ int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* origin
 char str[10];
 int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame)
 {
-
+    g_bleFrameSender = frame->sendAddr;
     char *address_t = (char *)malloc(5);
     char *value_t = (char *)malloc(10);
     memset(address_t,'\0',5);
@@ -1145,13 +1156,6 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
 
     // Online/Offline
     if (frame->flag == 0x919d) {
-        temp->value = NULL;
-        if (frame->sendAddr2 != 0)
-        {
-            char *address_2 = (char *)malloc(5);
-            sprintf(address_2, "%04X", frame->sendAddr2);
-            temp->value = address_2;
-        }
         return GW_RESPONSE_DEVICE_STATE;
     }
     // Device is kicked out from mesh network
@@ -1182,8 +1186,12 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         } else if (frame->paramSize > 1) {
             sprintf(str, "%d", frame->param[1]);
             temp->dpValue = frame->param[1];
+        } else {
+            sprintf(str, "%d", frame->param[0]);
+            temp->dpValue = frame->param[0];
         }
         temp->value = str;
+        g_bleFrameRespType = GW_RESPONSE_DEVICE_CONTROL;
         return GW_RESPONSE_DEVICE_CONTROL;
     }
 
@@ -1212,11 +1220,11 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
             }
         }
         temp->value = value_t;
-        return GW_RESPONSE_SENSOR_AIR;
+        return GW_RESPONSE_SMOKE_SENSOR;
     }
 
     // Temperature/Humidity sensor
-    else if (frame->opcode == 0x5206 && frame->paramSize == 5 && frame->param[0] == 0x00)
+    else if (frame->opcode == 0x5206 && frame->paramSize >= 5 && frame->param[0] == 0x00)
     {
         char *nhietdo_ = malloc(10);
         sprintf(nhietdo_, "%02X%02X", frame->param[1], frame->param[2]);
@@ -1237,117 +1245,28 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         return GW_RESPONSE_SENSOR_BATTERY;
     }
 
-    // //type pir for detect object
-    // else if(len_uart == 17 && rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x52 &&rcv_uart_buff[9] == 0x05 && rcv_uart_buff[10] == 0x00)
-    // {
-    //     //type pir for detect object
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     temp->address_element=address_t;
-    //     if(rcv_uart_buff[11] == 0x00)
-    //     {
-    //         temp->value = KEY_FALSE;
-    //     }
-    //     if(rcv_uart_buff[11] == 0x01)
-    //     {
-    //         temp->value = KEY_TRUE;
-    //     }
-    //     return GW_RESPONSE_SENSOR_PIR_DETECT;
-    // }
-
-    // //type pir for light intensity
-    // else if(len_uart == 15 && rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x52 &&rcv_uart_buff[9] == 0x04 && rcv_uart_buff[10] == 0x00)
-    // {
-    //     //type pir for light intensity
-    //     char *lux_byte_hight = (char *)malloc(5);
-    //     char *lux_byte_low = (char *)malloc(5);
-
-    //     memset(lux_byte_hight,'\0',5);
-    //     memset(lux_byte_low,'\0',5);
-
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     sprintf(lux_byte_hight, "%02X", rcv_uart_buff[11]);
-    //     sprintf(lux_byte_low,   "%02X", rcv_uart_buff[12]);
-
-    //     long long lux_hight = Hex2Dec(lux_byte_hight);
-    //     long long lux_low = Hex2Dec(lux_byte_low);
-    //     int tmp = lux_hight/16;
-    //     int lux = (int)(0.01*pow(2,tmp)*(lux_hight%16*16*16+lux_low));
-    //     Int2String(lux,value_t);
-    //     temp->address_element=address_t;
-    //     temp->value = value_t;
-
-    //     free(lux_byte_hight);
-    //     free(lux_byte_low);
-    //     return GW_RESPONSE_SENSOR_PIR_LIGHT;
-    // }
-
-    // //type detect door sensor
-    // else if(len_uart == 13 && rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x52 &&rcv_uart_buff[9] == 0x09 && rcv_uart_buff[10] == 0x00)
-    // {
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     temp->address_element=address_t;
-    //     if(rcv_uart_buff[11] == 0x00)
-    //     {
-    //         temp->value = KEY_TRUE;
-    //     }
-    //     if(rcv_uart_buff[11] == 0x01)
-    //     {
-    //         temp->value = KEY_FALSE;
-    //     }
-    //     return GW_RESPONSE_SENSOR_DOOR_DETECT;
-    // }
-
-    // //type alarm door sensor
-    // else if(len_uart == 13 && rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x52 &&rcv_uart_buff[9] == 0x09 && rcv_uart_buff[10] == 0x04)
-    // {
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     temp->address_element=address_t;
-    //     if(rcv_uart_buff[11] == 0x00)
-    //     {
-    //         temp->value = KEY_FALSE;
-    //     }
-    //     if(rcv_uart_buff[11] == 0x01)
-    //     {
-    //         temp->value = KEY_TRUE;
-    //     }
-
-    //     return GW_RESPONSE_SENSOR_DOOR_ALARM;
-    // }
-
-    // //type reponse of light CT RANGDONG
-    // else if(len_uart == 13 && rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x82 &&rcv_uart_buff[9] == 0x04)
-    // {
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     temp->address_element=address_t;
-    //     if(rcv_uart_buff[10] == 0x00)
-    //     {
-    //         temp->value = "0";
-    //     }
-    //     if(rcv_uart_buff[10] == 0x01)
-    //     {
-    //         temp->value = "1";
-    //     }
-    //     return GW_RESPONSE_LIGHT_RD_CONTROL;
-    // }
-
-    //SAVE_GW
-    else if (frame->opcode == 0xe111 && frame->paramSize >= 5 && frame->param[0] == 0x02 && frame->param[1] == 0x02 && frame->param[2] == 0x00) {
-        temp->value = KEY_TRUE;
-        return GW_RESPONSE_SAVE_GATEWAY_HG;
+    // Door sensor detect
+    else if(frame->opcode == 0x5209 && frame->paramSize >= 2 && frame->param[0] == 0x00)
+    {
+        return GW_RESPONSE_SENSOR_DOOR_DETECT;
     }
-    //ACTIVE
-    else if (frame->opcode == 0xe111 && frame->paramSize >= 9 && frame->param[0] == 0x02 && frame->param[1] == 0x03 && frame->param[2] == 0x00) {
-        temp->value = KEY_TRUE;
-        if (frame->param[3] != 0xFF && frame->param[4] != 0xFF && frame->param[5] != 0xFF && frame->param[6] != 0xFF && frame->param[7] != 0xFF && frame->param[8] != 0xFF)
-        {
-            printf("ACTIVE DEVICE_HG_RD_SUCCESS\n");
-            return GW_RESPONSE_ACTIVE_DEVICE_HG_RD_SUCCESS;
-        }
-        else
-        {
-            printf("ACTIVE DEVICE_HG_RD_UNSUCCESS\n");
-            return GW_RESPONSE_ACTIVE_DEVICE_HG_RD_UNSUCCESS;
-        }
+
+    // Door sensor hanging detect
+    else if(frame->opcode == 0x5209 && frame->paramSize >= 2 && frame->param[0] == 0x04)
+    {
+        return GW_RESPONSE_SENSOR_DOOR_ALARM;
+    }
+
+    // PIR sensor human detect
+    else if(frame->opcode == 0x5205 && frame->paramSize >= 2 && frame->param[0] == 0x00)
+    {
+        return GW_RESPONSE_SENSOR_PIR_DETECT;
+    }
+
+    // PIR sensor light intensity
+    else if(frame->opcode == 0x5204 && frame->paramSize >= 3 && frame->param[0] == 0x00)
+    {
+        return GW_RESPONSE_SENSOR_PIR_LIGHT;
     }
 
     // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x82 &&rcv_uart_buff[9] == 0x45)

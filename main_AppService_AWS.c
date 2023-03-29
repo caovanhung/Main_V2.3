@@ -124,7 +124,7 @@
 // #define MQTT_PUB_TOPIC_GROUP                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/87329695/update"
 // #define MQTT_PUB_TOPIC_GROUP_LENGTH          (( uint16_t ) ( sizeof( MQTT_PUB_TOPIC_GROUP ) - 1 ) )
 
-const char* SERVICE_NAME = "AWS";
+const char* SERVICE_NAME = SERVICE_AWS;
 FILE *fptr;
 int rc;
 struct mosquitto * mosq;
@@ -1082,24 +1082,47 @@ void* MOSQ_SUB_TASK(void* p)
             const char *Extern          = json_object_get_string(json_object(schema),MOSQ_Extend);
             const char *object_string   = json_object_get_string(json_object(schema),MOSQ_Payload);
             long long int TimeCreat_end = 0;
-            if (type_action_t == -1) {
-                JSON* recvPacket = JSON_Parse(val_input);
-                int reqType = JSON_GetNumber(recvPacket, "reqType");
-                switch (reqType) {
-                    case GW_RESPONSE_DEVICE_CONTROL: {
-                        JSON* cloudPacket = Aws_CreateCloudPacket(recvPacket);
-                        sendPacketToCloud(MQTT_PUB_TOPIC_DEVICES, cloudPacket);
-                        JSON_Delete(cloudPacket);
-                        break;
-                    }
+
+            char *message;
+            JSON* recvPacket = JSON_Parse(val_input);
+            int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
+            JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
+            switch (reqType) {
                 case TYPE_GET_DEVICE_HISTORY: {
-                        mqttCloudPublish(MQTT_SUB_TOPIC_NOTIFY, val_input);
-                        break;
+                    mqttCloudPublish(MQTT_SUB_TOPIC_NOTIFY, val_input);
+                    break;
+                }
+                case GW_RESPONSE_DEVICE_CONTROL: {
+                    JSON* cloudPacket = Aws_CreateCloudPacket(payload);
+                    sendPacketToCloud(MQTT_PUB_TOPIC_DEVICES, cloudPacket);
+                    JSON_Delete(cloudPacket);
+                    break;
+                }
+                case GW_RESPONSE_DEVICE_STATE: {
+                    JSON* devicesArray = JSON_GetObject(payload, "devices");
+                    JSON_ForEach(arrayItem, devicesArray) {
+                        char* deviceId = JSON_GetText(arrayItem, "deviceId");
+                        int deviceState = JSON_GetNumber(arrayItem, "deviceState");
+                        char* payload = getPayloadReponseStateDeviceAWS(deviceId, deviceState);
+                        mqttCloudPublish(MQTT_PUB_TOPIC_DEVICES, payload);
+                        free(payload);
                     }
                 }
-                JSON_Delete(recvPacket);
+                case GW_RESPONSE_SENSOR_BATTERY:
+                case GW_RESPONSE_SMOKE_SENSOR:
+                case GW_RESPONSE_SENSOR_PIR_DETECT:
+                case GW_RESPONSE_SENSOR_PIR_LIGHT:
+                case GW_RESPONSE_SENSOR_ENVIRONMENT:
+                case GW_RESPONSE_SENSOR_DOOR_DETECT:
+                case GW_RESPONSE_SENSOR_DOOR_ALARM: {
+                    JSON* cloudPacket = Aws_CreateCloudPacket(payload);
+                    sendPacketToCloud(MQTT_PUB_TOPIC_DEVICES, cloudPacket);
+                    JSON_Delete(cloudPacket);
+                    break;
+                }
             }
-
+            JSON_Delete(recvPacket);
+            JSON_Delete(payload);
 
             object = json_parse_string(object_string);
             if(object != NULL)
@@ -1139,28 +1162,6 @@ void* MOSQ_SUB_TASK(void* p)
                         break;
                     }
 
-                    case GW_RESPONSE_SENSOR_AIR:
-                    case GW_RESPONSE_SENSOR_PIR_DETECT:
-                    case GW_RESPONSE_SENSOR_PIR_LIGHT:
-                    case GW_RESPONSE_SENSOR_ENVIRONMENT_TEMPER:
-                    case GW_RESPONSE_SENSOR_ENVIRONMENT_HUMIDITY:
-                    case GW_RESPONSE_SENSOR_DOOR_DETECT:
-                    case GW_RESPONSE_SENSOR_DOOR_ALARM:
-                    {
-                        LogInfo((get_localtime_now()),("type_action_t = %d",type_action_t));
-                        if(TypeReponse_t == TYPE_DATA_REPONSE_STATE)
-                        {
-                            AWS_getTemplateReponseStateDevice(&message,json_object_get_string(json_object(object),KEY_DEVICE_ID),json_object_get_string(json_object(object),KEY_DP_ID),json_object_get_string(json_object(object),KEY_VALUE));
-                        }
-                        else if(TypeReponse_t == TYPE_DATA_REPONSE_VALUE)
-                        {
-                            AWS_getTemplateReponseValueDevice(&message,json_object_get_string(json_object(object),KEY_DEVICE_ID),json_object_get_string(json_object(object),KEY_DP_ID),String2Int(json_object_get_string(json_object(object),KEY_VALUE)));
-                        }
-                        mqttCloudPublish(MQTT_PUB_TOPIC_DEVICES, message);
-                        free(message);
-                        break;
-                    }
-
                     case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
                         break;
 
@@ -1171,7 +1172,6 @@ void* MOSQ_SUB_TASK(void* p)
                     }
 
                     case GW_RESPONSE_DEVICE_KICKOUT:
-                    case GW_RESPONSE_DEVICE_STATE:
                     case GW_RESPONSE_ADD_DEVICE:
                     {
                         mqttCloudPublish(MQTT_PUB_TOPIC_DEVICES, object_string);
@@ -1194,11 +1194,6 @@ void* MOSQ_SUB_TASK(void* p)
                     case GW_RESPONSE_DEL_SCENE_HC:
                     {
                         mqttCloudPublish(MQTT_PUB_TOPIC_SCENE, object_string);
-                        break;
-                    }             
-                    default:
-                    {
-                        LogError((get_localtime_now()),("Error detect"));
                         break;
                     }
                 }
@@ -1269,12 +1264,11 @@ int main( int argc,char ** argv )
 
             char *val_input = (char*)malloc(10000);
             strcpy(val_input,(char *)dequeue(queue_received_aws));
-            
-            printf("\n\r");
-            logInfo("Received msg from MQTT cloud: %s", val_input);
             check_flag = AWS_pre_detect_message_received(pre_detect,val_input);
             if(check_flag && (pre_detect->sender == SENDER_APP_VIA_LOCAL || pre_detect->sender == SENDER_APP_VIA_CLOUD ))
             {
+                printf("\n\r");
+                logInfo("Received msg from MQTT cloud: %s", val_input);
                 char *topic;
                 char *payload;
                 char *message;
@@ -1282,25 +1276,16 @@ int main( int argc,char ** argv )
                 {
                     case TYPE_CTR_DEVICE:
                     {
-                        TimeCreat = timeInMilliseconds();
                         AWS_getInfoControlDevice(inf_device,pre_detect);
                         MOSQ_getTemplateControlDevice(&payload,inf_device);
-                        sendToService(SERVICE_CORE,
-                                      pre_detect->type,
-                                      MOSQ_ActResponse,
-                                      pre_detect->object,
-                                      payload);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
                     case TYPE_CTR_GROUP_NORMAL:
                     {
                         AWS_getInfoControlGroupNormal(info_group_t,pre_detect);
                         MOSQ_getTemplateControlGroupNormal(&payload, info_group_t);
-                        sendToService(SERVICE_CORE,
-                                      pre_detect->type,
-                                      MOSQ_ActResponse,
-                                      pre_detect->object,
-                                      payload);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
                     case TYPE_DIM_LED_SWITCH:
@@ -1356,11 +1341,7 @@ int main( int argc,char ** argv )
                         if (check_flag) {
                             // Send device info to Core service
                             MOSQ_getTemplateAddDevice(&payload, inf_device);
-                            sendToService(SERVICE_CORE,
-                                          pre_detect->type,
-                                          MOSQ_ActResponse,
-                                          pre_detect->object,
-                                          payload);
+                            sendToService(SERVICE_CORE, pre_detect->type, payload);
                         } else {
                             logError("Invalid message");
                         }
@@ -1370,11 +1351,7 @@ int main( int argc,char ** argv )
                     {
                         AWS_getInfoDeleteDevice(inf_device, pre_detect);
                         MOSQ_getTemplateDeleteDevice(&payload, inf_device);
-                        sendToService(SERVICE_CORE,
-                                      pre_detect->type,
-                                      MOSQ_ActResponse,
-                                      pre_detect->object,
-                                      payload);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
                     case TYPE_ADD_SCENE:
@@ -1424,33 +1401,21 @@ int main( int argc,char ** argv )
                         TimeCreat = timeInMilliseconds();
                         AWS_getInfoAddGroupNormal(info_group_t, pre_detect);
                         MOSQ_getTemplateAddGroupNormal(&payload, info_group_t);
-                        sendToService(SERVICE_CORE,
-                                      pre_detect->type,
-                                      MOSQ_ActResponse,
-                                      pre_detect->object,
-                                      payload);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
                     case TYPE_DEL_GROUP_NORMAL:
                     {
                         AWS_getInfoDeleteGroupNormal(info_group_t,pre_detect);
                         MOSQ_getTemplateDeleteGroupNormal(&payload, info_group_t);
-                        sendToService(SERVICE_CORE,
-                                      pre_detect->type,
-                                      MOSQ_ActResponse,
-                                      pre_detect->object,
-                                      payload);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
                     case TYPE_UPDATE_GROUP_NORMAL:
                     {
                         AWS_getInfoAddGroupNormal(info_group_t, pre_detect);
                         MOSQ_getTemplateAddGroupNormal(&payload, info_group_t);
-                        sendToService(SERVICE_CORE,
-                                      pre_detect->type,
-                                      MOSQ_ActResponse,
-                                      pre_detect->object,
-                                      payload);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                      }
                     case TYPE_ADD_GROUP_LINK:
@@ -1503,16 +1468,6 @@ int main( int argc,char ** argv )
                         mqttLocalPublish(topic, message);
                         break;
                     }
-                    case TYPE_DEBUG_CTL_LOOP_DEVICE:
-                    {
-                        // TimeCreat = timeInMilliseconds();
-                        // AWS_getInfoControlDevice_DEBUG(inf_device_Debug,pre_detect);
-                        // MOSQ_getTemplateControlDevice_DEBUG(&payload,inf_device_Debug);
-                        // getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_DEBUG_CTL_LOOP_DEVICE,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        // get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CMD,TYPE_DEBUG_CTL_LOOP_DEVICE,MOSQ_ActResponse);
-                        // mqttLocalPublish(topic, message);
-                        break;
-                    }
                     default:
                     {
                         LogError((get_localtime_now()),("Error detect"));
@@ -1538,6 +1493,7 @@ int main( int argc,char ** argv )
                     {
                         JSON* packet = JSON_Parse(val_input);
                         sendPacketTo(SERVICE_CORE, pre_detect->type, packet);
+                        JSON_Delete(packet);
                         break;
                     }
                     default:

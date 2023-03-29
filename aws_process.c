@@ -77,6 +77,10 @@ bool AWS_pre_detect_message_received(Pre_parse *var,char *mess)
 						else if(isMatchString(temp,KEY_PROVIDER))
 						{
 							var->provider = (int)json_object_get_number(object,KEY_PROVIDER);
+							// Ignore packets for wifi devices except TYPE_ADD_DEVICE and TYPE_DEL_DEVICE
+							if (var->provider != 2 && (var->type != TYPE_ADD_DEVICE || var->type != TYPE_DEL_DEVICE)) {
+								return false;
+							}
 						}
 						else if(isMatchString(temp,KEY_PAGE_INDEX))
 						{
@@ -208,6 +212,7 @@ bool MOSQ_getTemplateAddDevice(char **result,Info_device *inf_device)
     JSON_Object *root_object = json_value_get_object(root_value);
     char *serialized_string = NULL;
     json_object_set_string(root_object, "deviceID",inf_device->deviceID);
+    json_object_dotset_number(root_object, "provider",inf_device->provider);
     json_object_set_string(root_object, "name",inf_device->name);
     json_object_set_string(root_object, "Service",inf_device->Service);
     json_object_set_number(root_object, "created", 234565665);

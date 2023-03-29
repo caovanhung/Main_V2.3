@@ -30,7 +30,7 @@ typedef struct {
     char gatewayId[10];
     int provider;
     char pid[20];
-} device_info_t;
+} DeviceInfo;
 
 typedef enum {
     SceneTypeManual = 0,
@@ -103,9 +103,9 @@ extern int g_sceneCount;
 #define Sql_Query(sqlCmd, row)    int rc = 0; sqlite3_stmt *row; rc = sqlite3_prepare_v2(db, sqlCmd, -1, &row, NULL); while (sqlite3_step(row) == SQLITE_ROW)
 #define Sql_Exec(sqlCmd)    { char *err_msg; if (sqlite3_exec(db, sqlCmd, 0, 0, &err_msg) != SQLITE_OK) { myLogError("SQL Error: %s, %s", sqlCmd, err_msg); sqlite3_free(err_msg); return 0; }}
 
-int Db_FindDeviceBySql(device_info_t* deviceInfo, const char* sqlCommand);
-int Db_FindDevice(device_info_t* deviceInfo, const char* deviceId);
-int Db_FindDeviceByAddr(device_info_t* deviceInfo, const char* deviceAddr);
+int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand);
+int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId);
+int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr);
 int Db_SaveDeviceState(const char* deviceId, int state);
 int Db_DeleteDevice(const char* deviceId);
 
@@ -115,7 +115,7 @@ char* Db_FindDevicesInGroup(const char* groupAddr);
 
 int Db_FindDp(dp_info_t* dpInfo, const char* deviceId, int dpId);
 int Db_FindDpByAddr(dp_info_t* dpInfo, const char* dpAddr);
-int Db_SaveDpValue(const char* dpAddr, double value);
+int Db_SaveDpValue(const char* dpAddr, int dpId, double value);
 
 int Db_LoadSceneToRam();
 int Db_SaveSceneCondRepeat(const char* sceneId, int conditionIndex, uint8_t repeat);

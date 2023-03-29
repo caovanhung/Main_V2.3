@@ -116,12 +116,12 @@ typedef struct
  * On/Off control
  * Models: HG_BLE_SWITCH_1, HG_BLE_SWITCH_2, HG_BLE_SWITCH_3, HG_BLE_SWITCH_4
  */
-int ble_controlOnOFF_SW(int fd, const char *address_element, const char *state);
+int ble_controlOnOFF_SW(const char* dpAddr, uint8_t dpValue);
 
 /*
  * On/Off control
  * Models: HG_BLE_LIGHT_WHITE (20), RD_BLE_LIGHT_WHITE (20), RD_BLE_LIGHT_WHITE_TEST (20),
- *         RD_BLE_LIGHT_RGB (20), HG_BLE_CURTAIN_2_LAYER, HG_BLE_ROLLING_DOOR, HG_BLE_CURTAIN,
+ *         RD_BLE_LIGHT_RGB (20), HG_BLE_CURTAIN_2_LAYER, HG_BLE_ROLLING_DOOR, HG_BLE_CURTAIN_NORMAL,
  *         LIGHT_GROUP (20)
  */
 int ble_controlOnOFF(int fd, const char *address_element, const char *state);
@@ -154,13 +154,13 @@ bool ble_dimLedSwitch_HOMEGY(int fd,const char *address_device, int lightness);
 /*
  * Add/Delete a CCT light to/from a group
  */
-bool ble_addDeviceToGroupLightCCT_HOMEGY(int fd, const char *address_group, const char *address_device, const char *address_element);
-bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int fd, const char *address_group, const char *address_device, const char *address_element);
+bool ble_addDeviceToGroupLightCCT_HOMEGY(const char *address_group, const char *address_device, const char *address_element);
+bool ble_deleteDeviceToGroupLightCCT_HOMEGY(const char *address_group, const char *address_device, const char *address_element);
 
 /*
  * Add a switch to a group
  */
-bool ble_addDeviceToGroupLink(int fd, const char *address_group, const char *address_device, const char *address_element);
+bool ble_addDeviceToGroupLink(const char *address_group, const char *address_device, const char *address_element);
 
 /*
  * Lock agency

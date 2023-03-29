@@ -100,7 +100,7 @@ void print_database(sqlite3 **db)
     printf("\n\n\n");
 }
 
-int Db_FindDeviceBySql(device_info_t* deviceInfo, const char* sqlCommand)
+int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand)
 {
     int rc = 0, rowCount = 0;
     sqlite3_stmt *sqlResponse;
@@ -122,14 +122,14 @@ int Db_FindDeviceBySql(device_info_t* deviceInfo, const char* sqlCommand)
     return rowCount;
 }
 
-int Db_FindDevice(device_info_t* deviceInfo, const char* deviceId)
+int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId)
 {
     char sqlCommand[100];
     sprintf(sqlCommand, "SELECT * FROM devices_inf WHERE deviceID = '%s';", deviceId);
     return Db_FindDeviceBySql(deviceInfo, sqlCommand);
 }
 
-int Db_FindDeviceByAddr(device_info_t* deviceInfo, const char* deviceAddr)
+int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr)
 {
     char sqlCommand[100];
     sprintf(sqlCommand, "SELECT * FROM devices_inf WHERE Unicast = '%s';", deviceAddr);
@@ -231,9 +231,9 @@ int Db_FindDpByAddr(dp_info_t* dpInfo, const char* dpAddr) {
     return rowCount;
 }
 
-int Db_SaveDpValue(const char* dpAddr, double value) {
+int Db_SaveDpValue(const char* dpAddr, int dpId, double value) {
     char sqlCmd[200];
-    sprintf(sqlCmd, "UPDATE devices SET dpValue='%f' WHERE address='%s';", value, dpAddr);
+    sprintf(sqlCmd, "UPDATE devices SET dpValue='%f' WHERE address='%s' AND dpId=%d", value, dpAddr, dpId);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -394,7 +394,7 @@ int Db_AddDeviceHistory(JSON* packet) {
     uint8_t statusType = JSON_GetNumber(packet, "statusType");
     char*   deviceId   = JSON_GetText(packet, "deviceId");
     uint8_t dpId       = JSON_GetNumber(packet, "dpId");
-    uint8_t dpValue    = JSON_GetNumber(packet, "dpValue");
+    uint16_t dpValue    = JSON_GetNumber(packet, "dpValue");
     char sqlCmd[500];
     sprintf(sqlCmd, "INSERT INTO device_histories(time  , causeType, causeId, statusType, deviceId, dpId, dpValue) \
                                            VALUES('%lld', %d       , '%s'   , %d        , '%s'    , %d  , %d     )",

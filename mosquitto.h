@@ -40,16 +40,16 @@ typedef struct
 
 typedef struct {
     int             reqType;
-    device_info_t*  deviceInfo;
+    DeviceInfo*  deviceInfo;
     dp_info_t       dps[20];
     size_t          dpCount;
 } local_packet_t;
 
-#define sendToService(serviceToSend, typeAction, extend, id, payload)  g_dbgFileName = FILENAME; g_dbgLineNumber =  __LINE__; sendToServiceFunc(mosq, serviceToSend, typeAction, extend, id, payload);
-bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, const char * extend, const char *id, const char* payload);
+#define sendToService(serviceToSend, typeAction, payload)  g_dbgFileName = FILENAME; g_dbgLineNumber =  __LINE__; sendToServiceFunc(mosq, serviceToSend, typeAction, payload);
+bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, const char* payload);
 
-#define sendPacketTo(serviceToSend, reqType, packet)  g_dbgFileName = FILENAME; g_dbgLineNumber =  __LINE__; sendPacketToFunc(mosq, serviceToSend, reqType, packet);
-bool sendPacketToFunc(struct mosquitto* mosq, const char* serviceToSend, int reqType, JSON* packet);
+#define sendPacketTo(serviceToSend, typeAction, packet)  g_dbgFileName = FILENAME; g_dbgLineNumber =  __LINE__; sendPacketToFunc(mosq, serviceToSend, typeAction, packet);
+bool sendPacketToFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, JSON* packet);
 
 
 /**
@@ -209,7 +209,7 @@ bool getPayloadReponseDeleteGroupAWS(char** result,char *groupAddress);
 
 bool getPayloadReponseDeleteSceneAWS(char** result,char *sceneID);
 
-bool getPayloadReponseStateDeviceAWS(char** result,char *deviceID,int  state);
+char* getPayloadReponseStateDeviceAWS(char *deviceID, int  state);
 
 
 bool getPayloadReponseValueSceneAWS(char** result,int sender,int type,char *value);

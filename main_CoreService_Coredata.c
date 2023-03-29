@@ -51,7 +51,7 @@
 #include "messages.h"
 #include "cJSON.h"
 
-const char* SERVICE_NAME = "CORE";
+const char* SERVICE_NAME = SERVICE_CORE;
 FILE *fptr;
 struct mosquitto * mosq;
 sqlite3 *db;
@@ -96,14 +96,16 @@ bool remove_Id2ListId(char** ListId, char* Id_remove);
 bool Scene_GetFullInfo(JSON* packet);
 
 bool compareSceneEntity(JSON* entity1, JSON* entity2) {
-    int dpId1 = JSON_GetNumber(entity1, "dpId");
-    int dpValue1 = JSON_GetNumber(entity1, "dpValue");
-    char* dpAddr1 = JSON_GetText(entity1, "dpAddr");
-    int dpId2 = JSON_GetNumber(entity2, "dpId");
-    int dpValue2 = JSON_GetNumber(entity2, "dpValue");
-    char* dpAddr2 = JSON_GetText(entity2, "dpAddr");
-    if (dpId1 == dpId2 && dpValue1 == dpValue2 && strcmp(dpAddr1, dpAddr2) == 0) {
-        return true;
+    if (entity1 && entity2) {
+        int dpId1 = JSON_GetNumber(entity1, "dpId");
+        int dpValue1 = JSON_GetNumber(entity1, "dpValue");
+        char* dpAddr1 = JSON_GetText(entity1, "dpAddr");
+        int dpId2 = JSON_GetNumber(entity2, "dpId");
+        int dpValue2 = JSON_GetNumber(entity2, "dpValue");
+        char* dpAddr2 = JSON_GetText(entity2, "dpAddr");
+        if (dpId1 == dpId2 && dpValue1 == dpValue2 && strcmp(dpAddr1, dpAddr2) == 0) {
+            return true;
+        }
     }
     return false;
 }
@@ -205,7 +207,7 @@ void CHECK_REPONSE_RESULT()
         } else {
             logError("Check Response Timeout. reqType: %d", reqType);
             list_t successDevices = {0}, failedDevices = {0};
-            device_info_t deviceInfo;
+            DeviceInfo deviceInfo;
             for (int d = 0; d < deviceCount; d++) {
                 JSON_Object* device = json_array_get_object(devices, d);
                 int length = Db_FindDeviceByAddr(&deviceInfo, json_object_get_string(device, "addr"));
@@ -222,595 +224,6 @@ void CHECK_REPONSE_RESULT()
             // Remove this respItem from response list
             json_array_remove(respArray, i);
         }
-
-
-        // char *reuestType            = json_object_get_name(json_object(Json_Value_checkReponses), i);  // Key name of each first level element
-        // JSON_Value *requestValueJson = json_object_get_value(json_object(Json_Value_checkReponses), reuestType);  // Json value of each first element
-        // reuestValueCount            = json_object_get_count(json_object(requestValueJson));   // Number of second level element
-        // if(reuestValueCount == 0)
-        // {
-        //     json_object_remove(json_object(Json_Value_checkReponses),reuestType);
-        //     break;
-        // }
-
-        // if(isMatchString(reuestType,TYPE_CTR_DEVICE_STRING))
-        // {
-        //     for(j=0;j<reuestValueCount;j++)
-        //     {
-        //         char *tmp_name_address                  = json_object_get_name(json_object(requestValueJson),j);  // Key name of second level element
-        //         JSON_Value *tmp_address_checkReponses   = json_object_get_value(json_object(requestValueJson),tmp_name_address);  // Json value of second level element
-        //         long long  int TimeCreate_t             = json_object_get_number(json_object(tmp_address_checkReponses),KEY_TIMECREAT);
-
-        //         JSON_Value *tmp_typeAction_InfoActionNeedReponses_JSON      = json_object_get_value(json_object(Json_Value_InfoActionNeedReponses),TYPE_CTR_DEVICE_STRING);
-        //         JSON_Value *tmp_address_InfoActionNeedReponses_JSON         = json_object_get_value(json_object(tmp_typeAction_InfoActionNeedReponses_JSON),tmp_name_address);
-
-        //         if(TimeCreate - TimeCreate_t < TIMEOUT_CTL_MS)
-        //         {
-        //             char *value_t = json_object_get_string(json_object(tmp_address_checkReponses),KEY_VALUE);
-        //             int control_val = json_object_get_number(json_object(tmp_address_InfoActionNeedReponses_JSON),KEY_CTL);
-
-        //             if((isMatchString(value_t,KEY_TRUE) && control_val == 1) || (isMatchString(value_t,KEY_FALSE) && control_val == 0))
-        //             {
-        //                 json_object_remove(json_object(tmp_typeAction_InfoActionNeedReponses_JSON),tmp_name_address);
-        //                 json_object_remove(json_object(requestValueJson),tmp_name_address);
-        //                 break;
-        //             }
-        //         }
-        //         else
-        //         {
-        //             LogWarn((get_localtime_now()),("TIMEOUT_CTL_MS"));
-
-        //             char* payload;
-        //             char* message;
-        //             char* topic;
-
-        //             leng = 0;
-        //             char** deviceID_t   = sql_getValueWithCondition(&db,&leng,KEY_DEVICE_ID,TABLE_DEVICES,KEY_ADDRESS,tmp_name_address);
-        //             if(leng < 1)
-        //             {
-        //                 break;
-        //             }
-        //             leng = 0;
-        //             char** dpid_t       = sql_getValueWithCondition(&db,&leng,KEY_DP_ID,TABLE_DEVICES,KEY_ADDRESS,tmp_name_address);
-        //             if(leng < 1)
-        //             {
-        //                 break;
-        //             }
-        //             leng = 0;
-        //             char** dpValue      = sql_getValueWithCondition(&db,&leng,KEY_DP_VAL,TABLE_DEVICES,KEY_ADDRESS,tmp_name_address);
-        //             if(leng < 1)
-        //             {
-        //                 break;
-        //             }
-
-        //             char pl[1000];
-        //             getPayloadReponseMOSQ(pl,MOSQ_Reponse,deviceID_t[0],dpid_t[0],dpValue[0],TimeCreate_t);
-        //             getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_DEVICE_CONTROL,MOSQ_ActResponse,"GW_RESPONSE_DEVICE_CONTROL",TimeCreate_t,pl);
-        //             get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_DEVICE_CONTROL,MOSQ_ActResponse);
-        //             mqttLocalPublish(topic, message);
-
-        //             // LogInfo((get_localtime_now()),("tmp_name_address %s",tmp_name_address));
-        //             json_object_remove(json_object(tmp_typeAction_InfoActionNeedReponses_JSON),tmp_name_address);
-        //             // LogInfo((get_localtime_now()),("tmp_name_address %s",tmp_name_address));
-        //             json_object_remove(json_object(requestValueJson),tmp_name_address);
-        //             free(message);
-        //             free(topic);
-        //             free_fields(deviceID_t,leng);
-        //             break;
-        //         }
-        //     }
-        // }
-        // else if(isMatchString(reuestType,TYPE_ADD_GROUP_LINK_STRING) || isMatchString(reuestType,TYPE_DEL_GROUP_LINK_STRING))
-        // {
-        //     for(j=0;j<reuestValueCount;j++)
-        //     {
-        //         char *tmp_name_address                  = json_object_get_name(json_object(requestValueJson),j);
-        //         JSON_Value *tmp_address_checkReponses   = json_object_get_value(json_object(requestValueJson),tmp_name_address);
-
-        //         long long   int TimeCreate_t            = json_object_get_number(json_object(tmp_address_checkReponses),KEY_TIMECREAT);
-        //         JSON_Array *devicesJson        = json_object_get_array(json_object(tmp_address_checkReponses),reuestType);
-        //         int deviceCount = 0;
-        //         if(devicesJson != NULL)
-        //         {
-        //             deviceCount = json_array_get_count(devicesJson);
-        //         }
-        //         if(TimeCreate - TimeCreate_t < TIMEOUT_ADD_GROUP_MS )
-        //         {
-        //             // LogInfo((get_localtime_now()),("    deviceCount %d",deviceCount));
-        //             for(k=0;k<deviceCount;k++)
-        //             {
-        //                 char *str_address_checkReponses = json_array_get_string(devicesJson,k);
-
-
-        //                 JSON_Value *tmp_typeAction_InfoActionNeedReponses_JSON      = json_object_get_value(json_object(Json_Value_InfoActionNeedReponses),reuestType);
-        //                 JSON_Value *tmp_address_InfoActionNeedReponses_JSON         = json_object_get_value(json_object(tmp_typeAction_InfoActionNeedReponses_JSON),str_address_checkReponses);
-
-        //                 int status = 0;
-        //                 if(isMatchString(reuestType,TYPE_ADD_GROUP_LINK_STRING))
-        //                 {
-        //                     status = json_object_get_number(json_object(tmp_address_InfoActionNeedReponses_JSON),KEY_ADD_GROUP_LINK);
-        //                 }
-        //                 else
-        //                 {
-        //                     status = json_object_get_number(json_object(tmp_address_InfoActionNeedReponses_JSON),KEY_DEL_GROUP_LINK);
-        //                 }
-
-        //                 if(status == TYPE_DEVICE_ADD_SUCCES_HC)
-        //                 {
-        //                     check_result = true;
-        //                     json_object_remove(json_object(tmp_typeAction_InfoActionNeedReponses_JSON),str_address_checkReponses);
-        //                     json_array_remove(devicesJson,k);
-        //                     break;
-        //                 }
-        //             }
-
-        //             devicesJson      = json_object_get_array(json_object(tmp_address_checkReponses),reuestType);
-        //             if(devicesJson != NULL)
-        //             {
-        //                 deviceCount = json_array_get_count(devicesJson);
-        //             }
-
-        //             if(deviceCount == 0)
-        //             {
-        //                 char* payload;
-        //                 char* message;
-        //                 char* topic;
-
-
-        //                 if(isMatchString(reuestType,TYPE_ADD_GROUP_LINK_STRING))
-        //                 {
-        //                     char* payload;
-        //                     char* message;
-        //                     char* topic;
-
-        //                     getPayloadReponseStateGroupAWS(&payload,tmp_name_address,TYPE_DEVICE_ADD_SUCCES_HC);
-        //                     getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_ADD_GROUP_LINK,MOSQ_ActResponse,"TYPE_ADD_GROUP_LINK_STRING",TimeCreate_t,payload);
-        //                     get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_ADD_GROUP_LINK,MOSQ_ActResponse);
-        //                     mqttLocalPublish(topic, message);
-        //                 }
-        //                 else
-        //                 {
-        //                     //delete group in GROUP_INF
-        //                     sql_deleteDeviceInTable(&db,TABLE_GROUP_INF,KEY_ADDRESS_GROUP,tmp_name_address);
-        //                 }
-        //                 topic = NULL;
-        //                 payload = NULL;
-        //                 message = NULL;
-        //                 getPayloadReponseNotifiAWS(&payload,MESSAGE_SUCCES_ADD_GROUP_LINK);
-        //                 getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_NOTIFI_REPONSE,MOSQ_ActResponse,"TYPE_NOTIFI_REPONSE",TimeCreate_t,payload);
-        //                 get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,TYPE_NOTIFI_REPONSE,MOSQ_ActResponse);
-        //                 mqttLocalPublish(topic, message);
-
-        //                 free(payload);
-        //                 free(message);
-        //                 free(topic);
-
-        //                 json_object_remove(json_object(requestValueJson),tmp_name_address);
-
-        //                 break;
-        //             }
-
-        //         }
-        //         else
-        //         {
-        //             LogError((get_localtime_now()),("TYPE_ADD_GROUP_LINK_STRING Timeout\n"));
-        //             char* payload;
-        //             char* message;
-        //             char* topic;
-        //             char *error = calloc(100,sizeof(char));
-        //             LogError((get_localtime_now()),("strlen(error) = %ld\n",strlen(error)));
-
-        //             JSON_Value *tmp_address_checkReponses   = json_object_get_value(json_object(requestValueJson),tmp_name_address);
-        //             LogWarn((get_localtime_now()),("debug"));
-        //             devicesJson      = json_object_get_array(json_object(tmp_address_checkReponses),reuestType);
-        //             LogWarn((get_localtime_now()),("debug"));
-        //             deviceCount = json_array_get_count(devicesJson);
-        //             LogWarn((get_localtime_now()),("debug"));
-        //             char **deviceID;
-        //             char **dpID;
-        //             char **devices;
-        //             int leng = 0,leng_devices = 0;
-        //             devices = sql_getValueWithCondition(&db,&leng_devices,DEVICES_INF,TABLE_GROUP_INF,KEY_ADDRESS_GROUP,tmp_name_address);
-        //             LogWarn((get_localtime_now()),("debug"));
-        //             if(leng_devices < 1)
-        //             {
-        //                 LogError((get_localtime_now()),("leng_devices is failed\n"));
-        //             }
-        //             else
-        //             {
-        //                 char *devices_new = (char*)calloc(strlen(devices[0])+1,sizeof(char));
-        //                 LogInfo((get_localtime_now()),("devices = %s\n",devices[0]));
-
-        //                 for(k=0;k<deviceCount;k++)
-        //                 {
-        //                     deviceID = sql_getValueWithCondition(&db,&leng,
-        //                                                         KEY_DEVICE_ID,TABLE_DEVICES,KEY_ADDRESS,
-        //                                                         (char*)json_array_get_string(devicesJson,k));
-        //                     LogError((get_localtime_now()),("leng get deviceID = %d\n",leng));
-
-        //                     if(leng < 0)
-        //                     {
-        //                         LogError((get_localtime_now()),("leng = 0\n"));
-        //                         break;
-        //                     }
-        //                     dpID    = sql_getValueWithCondition(&db,&leng,
-        //                                                         KEY_DP_ID,TABLE_DEVICES,KEY_ADDRESS,
-        //                                                         (char*)json_array_get_string(devicesJson,k));
-        //                     LogError((get_localtime_now()),("leng get dpID = %d\n",leng));
-        //                     //append list device of failed
-        //                     if(leng < 0)
-        //                     {
-        //                         LogError((get_localtime_now()),("leng = 0\n"));
-        //                         break;
-        //                     }
-        //                     if(strlen(error) == 0)
-        //                     {
-        //                         LogError((get_localtime_now()),("error = NULL\n"));
-        //                         strcpy(error,deviceID[0]);
-        //                         strcat(error,"|");
-        //                         strcat(error,dpID[0]);
-        //                         strcat(error,"|");
-
-        //                     }
-        //                     else
-        //                     {
-
-        //                         strcat(error,deviceID[0]);
-        //                         strcat(error,"|");
-        //                         strcat(error,dpID[0]);
-        //                         strcat(error,"|");
-        //                     }
-
-        //                     //update devices in group_info
-        //                     char *remove_DeviceID = (char *)calloc(LENGTH_DEVICE_ID+4,sizeof(char));
-        //                     strcpy(remove_DeviceID, deviceID[0]);
-        //                     strcat(remove_DeviceID, "|");
-        //                     strcat(remove_DeviceID,dpID[0]);
-        //                     strcat(remove_DeviceID, "|");
-        //                     LogInfo((get_localtime_now()),("remove_DeviceID = %s\n",remove_DeviceID));
-
-        //                     strcpy(devices_new,strremove(devices[0],remove_DeviceID));
-        //                     strcpy(devices[0],devices_new);
-
-        //                     //free val
-        //                     free_fields(deviceID,leng);
-        //                 }
-        //                 LogError((get_localtime_now()),("devices_new = %s\n",devices_new));
-        //                 LogError((get_localtime_now()),("error = %s\n",error));
-        //                 getPayloadReponseNotifiAWS(&payload,error);
-        //                 getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_NOTIFI_REPONSE,MOSQ_ActResponse,"TYPE_NOTIFI_REPONSE",TimeCreate_t,payload);
-        //                 get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,TYPE_NOTIFI_REPONSE,MOSQ_ActResponse);
-        //                 mqttLocalPublish(topic, message);
-
-        //                 //update state group to AWS
-        //                 topic = NULL;
-        //                 payload = NULL;
-        //                 message = NULL;
-        //                 if(check_result)
-        //                 {
-        //                     getPayloadReponseStateGroupAWS(&payload,tmp_name_address,TYPE_DEVICE_ADD_SUCCES_HC);
-        //                 }
-        //                 else
-        //                 {
-        //                     getPayloadReponseStateGroupAWS(&payload,tmp_name_address,TYPE_DEVICE_ADD_UNSUCCES_HC);
-        //                 }
-
-        //                 if(isMatchString(reuestType,TYPE_ADD_GROUP_LINK_STRING))
-        //                 {
-        //                     getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_ADD_GROUP_LINK,MOSQ_ActResponse,"TYPE_ADD_GROUP_LINK_STRING",TimeCreate_t,payload);
-        //                     get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_ADD_GROUP_LINK,MOSQ_ActResponse);
-        //                     mqttLocalPublish(topic, message);
-
-        //                 }
-        //                 else
-        //                 {
-        //                     sql_updateValueInTableWithCondition(&db,TABLE_GROUP_INF,DEVICES_INF,error,KEY_ADDRESS_GROUP,tmp_name_address);
-        //                 }
-
-        //                 //update new devices
-        //                 if(isMatchString(reuestType,TYPE_ADD_GROUP_LINK_STRING))
-        //                 {
-        //                     getPayloadReponseDevicesGroupAWS(&payload,tmp_name_address,devices_new);
-        //                     getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_ADD_GROUP_LINK,MOSQ_ActResponse,"TYPE_ADD_GROUP_LINK_STRING",TimeCreate_t,payload);
-        //                     get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_ADD_GROUP_LINK,MOSQ_ActResponse);
-        //                     mqttLocalPublish(topic, message);
-        //                     sql_updateValueInTableWithCondition(&db,TABLE_GROUP_INF,DEVICES_INF,devices_new,KEY_ADDRESS_GROUP,tmp_name_address);
-
-        //                 }
-        //                 else
-        //                 {
-        //                     sql_updateValueInTableWithCondition(&db,TABLE_GROUP_INF,DEVICES_INF,error,KEY_ADDRESS_GROUP,tmp_name_address);
-        //                 }
-
-
-        //                 //update error
-        //                 payload = NULL;
-        //                 message = NULL;
-        //                 getPayloadReponseErrorAWS(&payload,SENDER_HC_VIA_CLOUD,TYPE_ADD_GROUP_NORMAL,tmp_name_address,error);
-        //                 getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_ADD_GROUP_LINK,MOSQ_ActResponse,"TYPE_ADD_GROUP_LINK_STRING",TimeCreate_t,payload);
-        //                 mqttLocalPublish(topic, message);
-        //             }
-
-        //             LogWarn((get_localtime_now()),("debug"));
-        //             json_object_remove(json_object(requestValueJson),tmp_name_address);
-        //             LogError((get_localtime_now()),("size :%ld\n",strlen(error)));
-        //             LogError((get_localtime_now()),("size :%ld\n",strlen(error)));
-        //             free(error);
-        //             LogWarn((get_localtime_now()),("debug"));
-        //             free(payload);
-        //             LogWarn((get_localtime_now()),("debug"));
-        //             free(message);
-        //             LogWarn((get_localtime_now()),("debug"));
-        //             free(topic);
-        //             LogWarn((get_localtime_now()),("debug"));
-        //             break;
-        //         }
-        //     }
-        // }
-        // else if(isMatchString(reuestType,TYPE_ADD_SCENE_STRING))
-        // {
-        //     int count_array_action = 0,count_array_condition=0;
-        //     for(j=0;j<reuestValueCount;j++)
-        //     {
-        //         char *tmp_sceneID                       = json_object_get_name(json_object(requestValueJson),j);
-        //         JSON_Value *tmp_sceneID_checkReponses   = json_object_get_value(json_object(requestValueJson),tmp_sceneID);
-
-        //         long long   int TimeCreate_t            = json_object_get_number(json_object(tmp_sceneID_checkReponses),KEY_TIMECREAT);
-        //         JSON_Array *tmp_array_action            = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_ADD_SCENE_LC_ACTIONS_STRING);
-        //         JSON_Array *tmp_array_condition         = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_ADD_SCENE_LC_CONDITIONS_STRING);
-
-        //         if(TimeCreate - TimeCreate_t < TIMEOUT_ADD_GROUP_MS )
-        //         {
-        //             count_array_action = json_array_get_count(tmp_array_action);
-        //             for(k=0;k<count_array_action;k++)
-        //             {
-        //                 char *str_address_checkReponses = json_array_get_string(tmp_array_action,k);
-        //                 if(str_address_checkReponses == NULL)
-        //                 {
-        //                     break;
-        //                 }
-
-        //                 LogInfo((get_localtime_now()),("    str_address_checkReponses = %s\n",str_address_checkReponses));
-        //                 char *tmp = calloc(50,sizeof(char));
-        //                 sprintf(tmp,"%s.%s.%s",TYPE_ADD_SCENE_LC_ACTIONS_STRING,str_address_checkReponses,KEY_CREATE_SCENE_LC);
-        //                 LogInfo((get_localtime_now()),("    tmp = %s\n",tmp));
-
-        //                 if((int)json_object_dotget_number(json_object(Json_Value_InfoActionNeedReponses),tmp) == TYPE_DEVICE_ADD_SUCCES_HC)
-        //                 {
-        //                     check_result = true;
-        //                     json_object_dotremove(json_object(Json_Value_InfoActionNeedReponses),tmp);
-        //                     json_array_remove(tmp_array_action,k);
-        //                 }
-        //                 free(tmp);
-        //             }
-
-        //             count_array_condition = json_array_get_count(tmp_array_condition);
-        //             for(k=0;k<count_array_condition;k++)
-        //             {
-        //                 char *str_address_checkReponses = json_array_get_string(tmp_array_condition,k);
-        //                 if(str_address_checkReponses == NULL)
-        //                 {
-        //                     break;
-        //                 }
-
-        //                 LogInfo((get_localtime_now()),("    str_address_checkReponses = %s\n",str_address_checkReponses));
-        //                 char *tmp = calloc(50,sizeof(char));
-        //                 sprintf(tmp,"%s.%s.%s",TYPE_ADD_SCENE_LC_CONDITIONS_STRING,str_address_checkReponses,KEY_SET_SCENE_LC);
-        //                 LogInfo((get_localtime_now()),("    tmp = %s\n",tmp));
-
-        //                 if((int)json_object_dotget_number(json_object(Json_Value_InfoActionNeedReponses),tmp) == TYPE_DEVICE_ADD_SUCCES_HC)
-        //                 {
-        //                     check_result = true;
-        //                     json_object_dotremove(json_object(Json_Value_InfoActionNeedReponses),tmp);
-        //                     json_array_remove(tmp_array_condition,k);
-        //                 }
-        //                 free(tmp);
-        //             }
-
-        //             LogInfo((get_localtime_now()),("    CHECK RESULT\n"));
-        //             //kiem tra trong mang con phan tu can check khong?
-        //             tmp_array_action            = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_ADD_SCENE_LC_ACTIONS_STRING);
-        //             tmp_array_condition         = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_ADD_SCENE_LC_CONDITIONS_STRING);
-        //             count_array_action          = json_array_get_count(tmp_array_action);
-        //             count_array_condition       = json_array_get_count(tmp_array_condition);
-        //             LogInfo((get_localtime_now()),("        count_array_action = %d\n",count_array_action));
-        //             LogInfo((get_localtime_now()),("        count_array_condition = %d\n",count_array_condition));
-
-        //             if(count_array_action == 0 && count_array_condition == 0)
-        //             {
-        //                 char* payload;
-        //                 char* message;
-        //                 char* topic;
-
-        //                 getPayloadReponseStateDeviceAWS(&payload,tmp_sceneID,TYPE_DEVICE_ADD_SUCCES_HC);
-        //                 getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_ADD_SCENE_LC,MOSQ_ActResponse,"GW_RESPONSE_ADD_SCENE_LC",TimeCreate_t,payload);
-        //                 get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_ADD_SCENE_LC,MOSQ_ActResponse);
-        //                 mqttLocalPublish(topic, message);
-
-        //                 topic = NULL;
-        //                 payload = NULL;
-        //                 message = NULL;
-        //                 getPayloadReponseNotifiAWS(&payload,MESSAGE_SUCCES_ADD);
-        //                 getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_NOTIFI_REPONSE,MOSQ_ActResponse,"TYPE_NOTIFI_REPONSE",TimeCreate_t,payload);
-        //                 get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,TYPE_NOTIFI_REPONSE,MOSQ_ActResponse);
-        //                 mqttLocalPublish(topic, message);
-
-        //                 free(payload);
-        //                 free(message);
-        //                 free(topic);
-
-        //                 json_object_remove(json_object(requestValueJson),tmp_sceneID);
-
-        //             }
-
-        //         }
-        //         else
-        //         {
-        //             LogError((get_localtime_now()),("TYPE_ADD_SCENE_STRING Timeout\n"));
-
-
-        //             char* payload;
-        //             char* message;
-        //             char* topic;
-        //             char *error = calloc(100,sizeof(char));
-
-        //             tmp_array_action            = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_ADD_SCENE_LC_ACTIONS_STRING);
-        //             tmp_array_condition         = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_ADD_SCENE_LC_CONDITIONS_STRING);
-
-        //             count_array_action = json_array_get_count(tmp_array_action);
-        //             LogInfo((get_localtime_now()),("   count_array_action = %d\n",count_array_action));
-        //             for(k=0;k<count_array_action;k++)
-        //             {
-        //                     LogInfo((get_localtime_now()),("        %s\n",json_array_get_string(tmp_array_action,k)));
-
-
-        //             }
-
-        //             count_array_condition = json_array_get_count(tmp_array_condition);
-        //             LogInfo((get_localtime_now()),("   count_array_condition = %d\n",count_array_condition));
-
-        //             for(k=0;k<count_array_condition;k++)
-        //             {
-        //                     LogInfo((get_localtime_now()),("        %s\n",json_array_get_string(tmp_array_condition,k)));
-
-        //             }
-
-        //             break;
-        //         }
-        //     }
-        // }
-        // else if(isMatchString(reuestType,TYPE_DEL_SCENE_STRING))
-        // {
-        //     int count_array_action = 0,count_array_condition=0;
-        //     for(j=0;j<reuestValueCount;j++)
-        //     {
-        //         char *tmp_sceneID                       = json_object_get_name(json_object(requestValueJson),j);
-        //         JSON_Value *tmp_sceneID_checkReponses   = json_object_get_value(json_object(requestValueJson),tmp_sceneID);
-
-        //         long long   int TimeCreate_t            = json_object_get_number(json_object(tmp_sceneID_checkReponses),KEY_TIMECREAT);
-        //         JSON_Array *tmp_array_action            = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_DEL_SCENE_LC_ACTIONS_STRING);
-        //         JSON_Array *tmp_array_condition         = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_DEL_SCENE_LC_CONDITIONS_STRING);
-
-        //         if(TimeCreate - TimeCreate_t < TIMEOUT_ADD_GROUP_MS )
-        //         {
-        //             count_array_action = json_array_get_count(tmp_array_action);
-        //             for(k=0;k<count_array_action;k++)
-        //             {
-        //                 char *str_address_checkReponses = json_array_get_string(tmp_array_action,k);
-        //                 if(str_address_checkReponses == NULL)
-        //                 {
-        //                     break;
-        //                 }
-
-        //                 LogInfo((get_localtime_now()),("    str_address_checkReponses = %s\n",str_address_checkReponses));
-        //                 char *tmp = calloc(50,sizeof(char));
-        //                 sprintf(tmp,"%s.%s.%s",TYPE_DEL_SCENE_LC_ACTIONS_STRING,str_address_checkReponses,KEY_DEL_SCENE_LC);
-        //                 LogInfo((get_localtime_now()),("    tmp = %s\n",tmp));
-
-        //                 if((int)json_object_dotget_number(json_object(Json_Value_InfoActionNeedReponses),tmp) == TYPE_DEVICE_ADD_SUCCES_HC)
-        //                 {
-        //                     check_result = true;
-        //                     json_object_dotremove(json_object(Json_Value_InfoActionNeedReponses),tmp);
-        //                     json_array_remove(tmp_array_action,k);
-        //                 }
-        //                 free(tmp);
-        //             }
-
-        //             count_array_condition = json_array_get_count(tmp_array_condition);
-        //             for(k=0;k<count_array_condition;k++)
-        //             {
-        //                 char *str_address_checkReponses = json_array_get_string(tmp_array_condition,k);
-        //                 if(str_address_checkReponses == NULL)
-        //                 {
-        //                     break;
-        //                 }
-
-        //                 LogInfo((get_localtime_now()),("    str_address_checkReponses = %s\n",str_address_checkReponses));
-        //                 char *tmp = calloc(50,sizeof(char));
-        //                 sprintf(tmp,"%s.%s.%s",TYPE_DEL_SCENE_LC_CONDITIONS_STRING,str_address_checkReponses,KEY_DEL_SCENE_LC);
-        //                 LogInfo((get_localtime_now()),("    tmp = %s\n",tmp));
-
-        //                 if((int)json_object_dotget_number(json_object(Json_Value_InfoActionNeedReponses),tmp) == TYPE_DEVICE_ADD_SUCCES_HC)
-        //                 {
-        //                     check_result = true;
-        //                     json_object_dotremove(json_object(Json_Value_InfoActionNeedReponses),tmp);
-        //                     json_array_remove(tmp_array_condition,k);
-        //                 }
-        //                 free(tmp);
-        //             }
-
-        //             LogInfo((get_localtime_now()),("    CHECK RESULT\n"));
-        //             //kiem tra trong mang con phan tu can check khong?
-        //             tmp_array_action            = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_DEL_SCENE_LC_ACTIONS_STRING);
-        //             tmp_array_condition         = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_DEL_SCENE_LC_CONDITIONS_STRING);
-        //             count_array_action          = json_array_get_count(tmp_array_action);
-        //             count_array_condition       = json_array_get_count(tmp_array_condition);
-        //             LogInfo((get_localtime_now()),("        count_array_action = %d\n",count_array_action));
-        //             LogInfo((get_localtime_now()),("        count_array_condition = %d\n",count_array_condition));
-
-        //             if(count_array_action == 0 && count_array_condition == 0)
-        //             {
-        //                 char* payload;
-        //                 char* message;
-        //                 char* topic;
-
-        //                 getPayloadReponseStateDeviceAWS(&payload,tmp_sceneID,TYPE_DEVICE_ADD_SUCCES_HC);
-        //                 getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_DEL_SCENE_LC,MOSQ_ActResponse,"GW_RESPONSE_DEL_SCENE_LC",TimeCreate_t,payload);
-        //                 get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_DEL_SCENE_LC,MOSQ_ActResponse);
-        //                 mqttLocalPublish(topic, message);
-
-        //                 topic = NULL;
-        //                 payload = NULL;
-        //                 message = NULL;
-        //                 getPayloadReponseNotifiAWS(&payload,MESSAGE_SUCCES_ADD);
-        //                 getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_NOTIFI_REPONSE,MOSQ_ActResponse,"TYPE_NOTIFI_REPONSE",TimeCreate_t,payload);
-        //                 get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,TYPE_NOTIFI_REPONSE,MOSQ_ActResponse);
-        //                 mqttLocalPublish(topic, message);
-
-        //                 free(payload);
-        //                 free(message);
-        //                 free(topic);
-
-        //                 json_object_remove(json_object(requestValueJson),tmp_sceneID);
-
-        //             }
-
-        //         }
-        //         else
-        //         {
-        //             LogError((get_localtime_now()),("TYPE_DEL_SCENE_STRING Timeout\n"));
-
-
-        //             char* payload;
-        //             char* message;
-        //             char* topic;
-        //             char *error = calloc(100,sizeof(char));
-
-        //             tmp_array_action            = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_DEL_SCENE_LC_ACTIONS_STRING);
-        //             tmp_array_condition         = json_object_get_array(json_object(tmp_sceneID_checkReponses),TYPE_DEL_SCENE_LC_CONDITIONS_STRING);
-
-        //             count_array_action = json_array_get_count(tmp_array_action);
-        //             LogInfo((get_localtime_now()),("   count_array_action = %d\n",count_array_action));
-        //             for(k=0;k<count_array_action;k++)
-        //             {
-        //                     LogInfo((get_localtime_now()),("        %s\n",json_array_get_string(tmp_array_action,k)));
-
-
-        //             }
-
-        //             count_array_condition = json_array_get_count(tmp_array_condition);
-        //             LogInfo((get_localtime_now()),("   count_array_condition = %d\n",count_array_condition));
-
-        //             for(k=0;k<count_array_condition;k++)
-        //             {
-        //                     LogInfo((get_localtime_now()),("        %s\n",json_array_get_string(tmp_array_condition,k)));
-
-        //             }
-
-        //             break;
-        //         }
-        //     }
-        // }
     }
 }
 
@@ -939,6 +352,18 @@ void executeScenes() {
                 }
             } else if (runningAction->actionType == EntityScene) {
                 // Action type is "run another scene"
+                for (int s = 0; s < g_sceneCount; s++) {
+                    if (strcmp(g_sceneList[s].id, runningAction->entityId) == 0) {
+                        markSceneToRun(&g_sceneList[s]);
+                        break;
+                    }
+                }
+                // Move to next action
+                scene->delayStart = timeInMilliseconds();
+                scene->runningActionIndex++;
+                if (scene->runningActionIndex >= scene->actionCount) {
+                    scene->runningActionIndex = -1;     // No other actions need to execute, move scene to idle state
+                }
             } else if (runningAction->actionType == EntityDelay) {
                 // Action type is delay a given time
                 long long currentTime = timeInMilliseconds();
@@ -1033,7 +458,6 @@ int main( int argc,char ** argv )
             JSON_Array *actions_array_json = NULL;
             JSON_Array *condition_array_json = NULL;
             schema = json_parse_string(val_input);
-            const char *LayerService    = json_object_get_string(json_object(schema),MOSQ_LayerService);
             const char *NameService     = json_object_get_string(json_object(schema),MOSQ_NameService);
             int type_action_t           = json_object_get_number(json_object(schema),MOSQ_ActionType);
             TimeCreat                   = json_object_get_number(json_object(schema),MOSQ_TimeCreat);
@@ -1045,43 +469,89 @@ int main( int argc,char ** argv )
             int TypeReponse_t           = json_object_get_number(json_object(object),TYPE_REPONSE);
             printf("\n\r");
             logInfo("Received message: %s", val_input);
-            if (type_action_t == -1) {
-                JSON* recvPacket = JSON_Parse(val_input);
-                int reqType = JSON_GetNumber(recvPacket, "reqType");
+            JSON* recvPacket = JSON_Parse(val_input);
+            JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
+            int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
+            if (isMatchString(NameService, SERVICE_BLE)) {
                 switch (reqType) {
                     case GW_RESPONSE_DEVICE_CONTROL: {
-                        char* dpAddr = JSON_GetText(recvPacket, "dpAddr");
-                        double dpValue = JSON_GetNumber(recvPacket, "dpValue");
+                        char* dpAddr = JSON_GetText(payload, "dpAddr");
+                        double dpValue = JSON_GetNumber(payload, "dpValue");
                         dp_info_t dpInfo;
                         int foundDps = Db_FindDpByAddr(&dpInfo, dpAddr);
                         if (foundDps == 1) {
-                            JSON_SetText(recvPacket, "deviceId", dpInfo.deviceId);
-                            JSON_SetNumber(recvPacket, "dpId", dpInfo.id);
-                            JSON_SetNumber(recvPacket, "statusType", GW_RESPONSE_DEVICE_CONTROL);
+                            JSON_SetText(payload, "deviceId", dpInfo.deviceId);
+                            JSON_SetNumber(payload, "dpId", dpInfo.id);
+                            JSON_SetNumber(payload, "statusType", GW_RESPONSE_DEVICE_CONTROL);
                             // Send packet to AWS
-                            sendPacketTo(SERVICE_AWS, reqType, recvPacket);
-                            Db_SaveDpValue(dpAddr, dpValue);
+                            sendPacketTo(SERVICE_AWS, reqType, payload);
+                            Db_SaveDpValue(dpAddr, dpInfo.id, dpValue);
                             Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
-                            Db_AddDeviceHistory(recvPacket);
+                            Db_AddDeviceHistory(payload);
                             checkSceneForDevice(dpInfo.deviceId, dpInfo.id);     // Check and run scenes for this device if any
                         }
                         break;
                     }
+                    case GW_RESPONSE_DEVICE_STATE: {
+                        JSON* devicesArray = JSON_GetObject(payload, "devices");
+                        JSON_ForEach(arrayItem, devicesArray) {
+                            char* deviceAddr = JSON_GetText(arrayItem, "deviceAddr");
+                            int deviceState = JSON_GetNumber(arrayItem, "deviceState");
+                            DeviceInfo deviceInfo;
+                            int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr);
+                            if (foundDevices == 1) {
+                                JSON_SetText(arrayItem, "deviceId", deviceInfo.id);
+                                Db_SaveDeviceState(deviceInfo.id, deviceState);
+                            }
+                        }
+                        sendPacketTo(SERVICE_AWS, GW_RESPONSE_DEVICE_STATE, payload);
+                        break;
+                    }
+                    case GW_RESPONSE_SENSOR_BATTERY:
+                    case GW_RESPONSE_SMOKE_SENSOR:
+                    case GW_RESPONSE_SENSOR_PIR_DETECT:
+                    case GW_RESPONSE_SENSOR_PIR_LIGHT:
+                    case GW_RESPONSE_SENSOR_ENVIRONMENT:
+                    case GW_RESPONSE_SENSOR_DOOR_DETECT:
+                    case GW_RESPONSE_SENSOR_DOOR_ALARM: {
+                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                        int dpId = JSON_GetNumber(payload, "dpId");
+                        int dpValue = JSON_GetNumber(payload, "dpValue");
+                        DeviceInfo deviceInfo;
+                        int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr);
+                        if (foundDevices == 1) {
+                            JSON_SetText(payload, "deviceId", deviceInfo.id);
+                            sendPacketTo(SERVICE_AWS, reqType, payload);
+                            Db_SaveDpValue(deviceAddr, dpId, dpValue);
+                            JSON_SetNumber(payload, "causeType", 0);
+                            JSON_SetText(payload, "causeId", "");
+                            JSON_SetNumber(payload, "statusType", reqType);
+                            Db_AddDeviceHistory(payload);
+                            checkSceneForDevice(deviceInfo.id, dpId);     // Check and run scenes for this device if any
+                        }
+
+                        break;
+                    }
+                }
+            } else if (isMatchString(NameService, SERVICE_AWS)) {
+                switch (reqType) {
                     case TYPE_GET_DEVICE_HISTORY: {
                         long long currentTime = timeInMilliseconds();
-                        long long startTime = JSON_GetNumber(recvPacket, "start");
-                        long long endTime = JSON_GetNumber(recvPacket, "end");
-                        char* deviceId = JSON_GetText(recvPacket, "deviceId");
-                        int dpId = JSON_GetNumber(recvPacket, "dpId");
-                        int pageIndex = JSON_GetNumber(recvPacket, "pageIndex");
+                        long long startTime = JSON_GetNumber(payload, "start");
+                        long long endTime = JSON_GetNumber(payload, "end");
+                        char* deviceId = JSON_GetText(payload, "deviceId");
+                        int dpId = atoi(JSON_GetText(payload, "dpId"));
+                        int pageIndex = JSON_GetNumber(payload, "pageIndex");
                         startTime = startTime == 0? currentTime - 86400000 : startTime;
                         JSON* histories = Db_FindDeviceHistories(startTime, endTime, deviceId, dpId, pageIndex);
                         sendPacketTo(SERVICE_AWS, reqType, histories);
                         break;
                     }
                 }
-                JSON_Delete(recvPacket);
             }
+
+            JSON_Delete(recvPacket);
+            JSON_Delete(payload);
 
             switch(type_action_t)
             {
@@ -1126,12 +596,10 @@ int main( int argc,char ** argv )
                 case TYPE_CTR_DEVICE:
                 case TYPE_CTR_GROUP_NORMAL:
                 {
-                    get_topic(&topic, MOSQ_LayerService_Device, SERVICE_BLE, type_action_t, MOSQ_ActResponse);
-
                     cJSON* originObj = cJSON_Parse(object_string);
                     char* senderId = JSON_GetText(originObj, "senderId");
                     cJSON* originDPs = cJSON_GetObjectItem(originObj, "dictDPs");
-                    device_info_t deviceInfo;
+                    DeviceInfo deviceInfo;
                     char* deviceId;
                     int foundDevices = 0;
                     if (type_action_t == TYPE_CTR_DEVICE) {
@@ -1143,12 +611,10 @@ int main( int argc,char ** argv )
                     }
 
                     if (foundDevices == 1) {
-                        cJSON* root = cJSON_CreateObject();
-                        cJSON_AddNumberToObject(root, "reqType", type_action_t);
-                        // cJSON_AddStringToObject(root, "deviceId", deviceId);
-                        cJSON_AddStringToObject(root, "pid", deviceInfo.pid);
-                        JSON_SetText(root, "senderId", senderId);
-                        cJSON* dictDPs = cJSON_AddArrayToObject(root, "dictDPs");
+                        cJSON* packet = cJSON_CreateObject();
+                        cJSON_AddStringToObject(packet, "pid", deviceInfo.pid);
+                        JSON_SetText(packet, "senderId", senderId);
+                        cJSON* dictDPs = cJSON_AddArrayToObject(packet, "dictDPs");
                         JSON_ForEach(o, originDPs) {
                             int dpId = atoi(o->string);
                             dp_info_t dpInfo;
@@ -1161,12 +627,10 @@ int main( int argc,char ** argv )
                                 cJSON_AddItemToArray(dictDPs, dp);
                             }
                         }
-                        char* payload = cJSON_PrintUnformatted(root);
-                        mqttLocalPublish(topic, payload);
-                        cJSON_Delete(originObj);
-                        cJSON_Delete(root);
-                        free(payload);
+                        sendPacketTo(SERVICE_BLE, type_action_t, packet);
+                        cJSON_Delete(packet);
                     }
+                    cJSON_Delete(originObj);
                     break;
                 }
                 case TYPE_CTR_SCENE:
@@ -1193,7 +657,12 @@ int main( int argc,char ** argv )
                     } else {
                         logInfo("Executing HC scene %s", sceneId);
                         if (!isLocal) {
-                            markSceneToRun(&g_sceneList[i]);
+                            for (int i = 0; i < g_sceneCount; i++) {
+                                if (strcmp(g_sceneList[i].id, sceneId) == 0) {
+                                    markSceneToRun(&g_sceneList[i]);
+                                    break;
+                                }
+                            }
                         }
                     }
                     if (isLocal) {
@@ -1204,28 +673,31 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_ADD_GW:
                 {
-                    addGateway(&db,object_string);
+                    // addGateway(&db,object_string);
 
-                    get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_ADD_GW,MOSQ_ActResponse);
-                    replaceInfoFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_ADD_GW,MOSQ_ActResponse,val_input);
-                    mqttLocalPublish(topic, message);
-                    if(topic != NULL) free(topic);
-                    if(message != NULL) free(message);
+                    // get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_ADD_GW,MOSQ_ActResponse);
+                    // replaceInfoFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_ADD_GW,MOSQ_ActResponse,val_input);
+                    // mqttLocalPublish(topic, message);
+                    // if(topic != NULL) free(topic);
+                    // if(message != NULL) free(message);
                     break;
                 }
                 case TYPE_ADD_DEVICE:
                 {
                     JSON* localPacket = ConvertToLocalPacket(type_action_t, object_string);
                     char* deviceId = JSON_GetText(localPacket, "deviceId");
+                    int provider = JSON_GetNumber(localPacket, "provider");
                     logInfo("Adding device: %s", deviceId);
 
                     // Delete device from database if exist
                     logInfo("Delete device %s from database if exist", Id);
                     Db_DeleteDevice(deviceId);
 
-                    // Send packet to BLE to save device information in to gateway
-                    sendPacketTo(SERVICE_BLE, TYPE_ADD_DEVICE, localPacket);
-                    cJSON_Delete(localPacket);
+                    if (provider == HOMEGY_BLE) {
+                        // Send packet to BLE to save device information in to gateway
+                        sendPacketTo(SERVICE_BLE, TYPE_ADD_DEVICE, localPacket);
+                        JSON_Delete(localPacket);
+                    }
 
                     // Insert device to database
                     addNewDevice(&db, object_string);
@@ -1281,62 +753,65 @@ int main( int argc,char ** argv )
                     char* sceneId = JSON_GetText(newScene, "Id");
                     JSON* oldScene = Db_FindScene(sceneId);
                     if (oldScene) {
-                        JSON* oldActionsArray = JSON_GetObject(oldScene, "actions");
-                        JSON* newActionsArray = JSON_GetObject(newScene, "actions");
-                        // Find all actions that are need to be removed
-                        JSON* actionsNeedRemove = JSON_CreateArray();
-                        JSON_ForEach(oldAction, oldActionsArray) {
-                            bool found = false;
-                            JSON_ForEach(newAction, newActionsArray) {
-                                if (compareSceneEntity(oldAction, newAction)) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (!found) {
-                                cJSON_AddItemReferenceToArray(actionsNeedRemove, oldAction);
-                            }
-                        }
-
-                        // Find all actions that are need to be added
-                        JSON* actionsNeedAdd = JSON_CreateArray();
-                        JSON_ForEach(newAction, newActionsArray) {
-                            bool found = false;
+                        int isLocal = JSON_GetNumber(oldScene, "isLocal");
+                        if (isLocal) {
+                            JSON* oldActionsArray = JSON_GetObject(oldScene, "actions");
+                            JSON* newActionsArray = JSON_GetObject(newScene, "actions");
+                            // Find all actions that are need to be removed
+                            JSON* actionsNeedRemove = JSON_CreateArray();
                             JSON_ForEach(oldAction, oldActionsArray) {
-                                if (compareSceneEntity(oldAction, newAction)) {
-                                    found = true;
-                                    break;
+                                bool found = false;
+                                JSON_ForEach(newAction, newActionsArray) {
+                                    if (compareSceneEntity(oldAction, newAction)) {
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (!found) {
+                                    cJSON_AddItemReferenceToArray(actionsNeedRemove, oldAction);
                                 }
                             }
-                            if (!found) {
-                                cJSON_AddItemReferenceToArray(actionsNeedAdd, newAction);
+
+                            // Find all actions that are need to be added
+                            JSON* actionsNeedAdd = JSON_CreateArray();
+                            JSON_ForEach(newAction, newActionsArray) {
+                                bool found = false;
+                                JSON_ForEach(oldAction, oldActionsArray) {
+                                    if (compareSceneEntity(oldAction, newAction)) {
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (!found) {
+                                    cJSON_AddItemReferenceToArray(actionsNeedAdd, newAction);
+                                }
                             }
-                        }
 
-                        // Check if condition is need to change
-                        bool conditionNeedChange = true;
-                        JSON* oldConditionsArray = JSON_GetObject(oldScene, "conditions");
-                        JSON* newConditionsArray = JSON_GetObject(newScene, "conditions");
-                        JSON* oldCondition = JSON_ArrayGetObject(oldConditionsArray, 0);
-                        JSON* newCondition = JSON_ArrayGetObject(newConditionsArray, 0);
-                        if (compareSceneEntity(oldCondition, newCondition)) {
-                            conditionNeedChange = false;
-                        }
+                            // Check if condition is need to change
+                            bool conditionNeedChange = true;
+                            JSON* oldConditionsArray = JSON_GetObject(oldScene, "conditions");
+                            JSON* newConditionsArray = JSON_GetObject(newScene, "conditions");
+                            JSON* oldCondition = JSON_ArrayGetObject(oldConditionsArray, 0);
+                            JSON* newCondition = JSON_ArrayGetObject(newConditionsArray, 0);
+                            if (compareSceneEntity(oldCondition, newCondition)) {
+                                conditionNeedChange = false;
+                            }
 
-                        // Send updated packet to BLE
-                        JSON* packet = JSON_CreateObject();
-                        JSON_SetText(packet, "sceneId", sceneId);
-                        JSON_SetObject(packet, "actionsNeedRemove", actionsNeedRemove);
-                        JSON_SetObject(packet, "actionsNeedAdd", actionsNeedAdd);
-                        if (conditionNeedChange) {
-                            JSON_SetObject(packet, "conditionNeedRemove", oldCondition);
-                            JSON_SetObject(packet, "conditionNeedAdd", newCondition);
+                            // Send updated packet to BLE
+                            JSON* packet = JSON_CreateObject();
+                            JSON_SetText(packet, "sceneId", sceneId);
+                            JSON_SetObject(packet, "actionsNeedRemove", actionsNeedRemove);
+                            JSON_SetObject(packet, "actionsNeedAdd", actionsNeedAdd);
+                            if (conditionNeedChange) {
+                                JSON_SetObject(packet, "conditionNeedRemove", oldCondition);
+                                JSON_SetObject(packet, "conditionNeedAdd", newCondition);
+                            }
+                            sendPacketTo(SERVICE_BLE, type_action_t, packet);
                         }
-                        sendPacketTo(SERVICE_BLE, type_action_t, packet);
-
                         // Save new scene to database
                         Db_DeleteScene(sceneId);
                         Db_AddScene(newScene);
+                        sendNotiToUser("Cập nhật kịch bản thành công");
                     } else {
                         logInfo("Scene %s is not found", sceneId);
                     }
@@ -1354,15 +829,13 @@ int main( int argc,char ** argv )
                     cJSON* devicesArray = cJSON_AddArrayToObject(root, "devices");
                     list_t* splitList = String_Split(devices, "|");
                     for (int i = 0; i < splitList->count; i++) {
-                        device_info_t deviceInfo;
+                        DeviceInfo deviceInfo;
                         int foundDevices = Db_FindDevice(&deviceInfo, (char*)splitList->items[i]);
                         if (foundDevices > 0) {
                             JSON_ArrayAddText(devicesArray, deviceInfo.addr);
                         }
                     }
-                    char* payload = cJSON_PrintUnformatted(root);
-                    mqttLocalPublish("DEVICE_SERVICES/Ble/0", payload);
-                    free(payload);
+                    sendPacketTo(SERVICE_BLE, TYPE_ADD_GROUP_NORMAL, root);
                     List_Delete(splitList);
                     cJSON_Delete(root);
                     cJSON_Delete(originObj);
@@ -1415,7 +888,7 @@ int main( int argc,char ** argv )
                         cJSON* devicesArray = cJSON_AddArrayToObject(root, "devices");
                         list_t* splitList = String_Split(devices, "|");
                         for (int i = 0; i < splitList->count; i++) {
-                            device_info_t deviceInfo;
+                            DeviceInfo deviceInfo;
                             int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
                             if (foundDevices > 0) {
                                 JSON_ArrayAddText(devicesArray, deviceInfo.addr);
@@ -1924,41 +1397,6 @@ int main( int argc,char ** argv )
                     mqttLocalPublish(topic, message);
                     break;
                 }
-                case GW_RESPONSE_SENSOR_AIR:
-                case GW_RESPONSE_SENSOR_PIR_DETECT:
-                case GW_RESPONSE_SENSOR_PIR_LIGHT:
-                case GW_RESPONSE_SENSOR_ENVIRONMENT_TEMPER:
-                case GW_RESPONSE_SENSOR_ENVIRONMENT_HUMIDITY:
-                case GW_RESPONSE_SENSOR_DOOR_DETECT:
-                case GW_RESPONSE_SENSOR_DOOR_ALARM:
-                {
-                    //push mess into AWS
-                    getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,type_action_t,MOSQ_Reponse,json_object_get_string(json_object(object),KEY_DEVICE_ID),TimeCreat,object_string);
-                    get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,type_action_t,MOSQ_Reponse);
-                    mqttLocalPublish(topic, message);
-                    sql_updateValueInTableWithMultileCondition(&db,TABLE_DEVICES,KEY_DP_VAL,json_object_get_string(json_object(object),KEY_VALUE),KEY_DEVICE_ID,json_object_get_string(json_object(object),KEY_DEVICE_ID),KEY_DP_ID,json_object_get_string(json_object(object),KEY_DP_ID));
-                    break;
-                }
-                case GW_RESPONSE_SENSOR_BATTERY:
-                {
-                    deviceID    = json_object_get_string(json_object(object),KEY_DEVICE_ID);
-                    dpID        = json_object_get_string(json_object(object),KEY_DP_ID);
-                    if(deviceID == NULL || dpID == NULL)
-                    {
-                        LogError((get_localtime_now()),("Failed to update battery deviceID into database with Unicast = %s",Id));
-                        break;
-                    }
-                    leng        = sql_getCountColumnWithCondition(&db,TABLE_DEVICES,KEY_DEVICE_ID,deviceID,KEY_DP_ID,dpID);
-                    if(leng == 1)
-                    {
-                        check_flag      = sql_updateValueInTableWithMultileCondition(&db,TABLE_DEVICES,KEY_DP_VAL,json_object_get_string(json_object(object),KEY_VALUE),KEY_DEVICE_ID,deviceID,KEY_DP_ID,dpID);
-                    }
-                    else
-                    {
-                        LogError((get_localtime_now()),("Failed to update battery deviceID into database with Unicast = %s",Id));
-                    }
-                    break;
-                }
                 case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
                 {
                     break;
@@ -2183,119 +1621,6 @@ int main( int argc,char ** argv )
                         if(topic != NULL) free(topic);
                         if(message != NULL) free(message);
                     }
-                    break;  
-                }
-                case GW_RESPONSE_DEVICE_STATE:
-                {
-                    deviceID = json_object_get_string(json_object(object),KEY_DEVICE_ID);
-                    if(deviceID != NULL)
-                    {
-                        //get status device into databass
-                        state = sql_getNumberWithCondition(&db,&leng,KEY_STATE,TABLE_DEVICES_INF,KEY_DEVICE_ID,deviceID);
-                        LogInfo((get_localtime_now()),("state = %d\n",state));
-                        if(state != -1)
-                        {
-                            payload = NULL;
-                            message = NULL;
-                            topic = NULL;
-                            if(state == TYPE_DEVICE_ONLINE)
-                            {
-                                LogInfo((get_localtime_now()),("state == TYPE_DEVICE_ONLINE"));
-                                //update state in database
-                                sql_updateStateInTableWithCondition(&db,TABLE_DEVICES_INF,KEY_STATE,TYPE_DEVICE_OFFLINE,KEY_DEVICE_ID,deviceID);
-
-                                //push mess to AWS
-                                getPayloadReponseStateDeviceAWS(&payload,deviceID,TYPE_DEVICE_OFFLINE);
-                                // getPayloadReponseAWS(&payload,SENDER_HC_VIA_CLOUD,TYPE_UPDATE_DEVICE,deviceID,TYPE_DEVICE_OFFLINE);
-                                getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_DEVICE_STATE,MOSQ_Reponse,deviceID,TimeCreat,payload);
-                                get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_DEVICE_STATE,MOSQ_Reponse);
-                            }
-                            else if(state == TYPE_DEVICE_OFFLINE)
-                            {
-                                LogInfo((get_localtime_now()),("state == TYPE_DEVICE_OFFLINE"));
-                                //update state in database
-                                sql_updateStateInTableWithCondition(&db,TABLE_DEVICES_INF,KEY_STATE,TYPE_DEVICE_ONLINE,KEY_DEVICE_ID,deviceID);
-
-                                //push mess to AWS
-                                getPayloadReponseStateDeviceAWS(&payload,deviceID,TYPE_DEVICE_ONLINE);
-                                // getPayloadReponseAWS(&payload,SENDER_HC_VIA_CLOUD,TYPE_UPDATE_DEVICE,deviceID,TYPE_DEVICE_ONLINE);
-                                getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_DEVICE_STATE,MOSQ_Reponse,deviceID,TimeCreat,payload);
-                                get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_DEVICE_STATE,MOSQ_Reponse);
-                            }
-                            else if(state == TYPE_DEVICE_RESETED)
-                            {
-                                LogInfo((get_localtime_now()),("state == TYPE_DEVICE_RESETED"));
-                                //push mess delete device to BLE service
-                                getPayloadDeleteDeviceToBLE(&payload,deviceID);
-                                LogInfo((get_localtime_now()),("    payload %s",payload));
-                                getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_DEL_DEVICE,MOSQ_Reponse,deviceID,TimeCreat,payload);
-                                get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_DEL_DEVICE,MOSQ_Reponse);
-                            }
-                            mqttLocalPublish(topic, message);
-                        }
-                        else
-                        {
-                            LogWarn((get_localtime_now()),("deviceID is empty into database"));
-                        }
-                    }
-
-
-                    dpValue = json_object_get_string(json_object(object),KEY_VALUE);
-                    if(dpValue != NULL)
-                    {
-                        //get status device into databass
-                        state = sql_getNumberWithCondition(&db,&leng,KEY_STATE,TABLE_DEVICES_INF,KEY_DEVICE_ID,dpValue);
-                        LogInfo((get_localtime_now()),("state = %d\n",state));
-                        if(state != -1)
-                        {
-                            payload = NULL;
-                            message = NULL;
-                            topic = NULL;
-                            if(state == TYPE_DEVICE_ONLINE)
-                            {
-                                LogInfo((get_localtime_now()),("state == TYPE_DEVICE_ONLINE"));
-                                //update state in database
-                                sql_updateStateInTableWithCondition(&db,TABLE_DEVICES_INF,KEY_STATE,TYPE_DEVICE_OFFLINE,KEY_DEVICE_ID,dpValue);
-
-                                //push mess to AWS
-                                getPayloadReponseStateDeviceAWS(&payload,dpValue,TYPE_DEVICE_OFFLINE);
-                                // getPayloadReponseAWS(&payload,SENDER_HC_VIA_CLOUD,TYPE_UPDATE_DEVICE,dpValue,TYPE_DEVICE_OFFLINE);
-                                getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_DEVICE_STATE,MOSQ_Reponse,dpValue,TimeCreat,payload);
-                                get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_DEVICE_STATE,MOSQ_Reponse);
-                            }
-                            else if(state == TYPE_DEVICE_OFFLINE)
-                            {
-                                LogInfo((get_localtime_now()),("state == TYPE_DEVICE_OFFLINE"));
-                                //update state in database
-                                sql_updateStateInTableWithCondition(&db,TABLE_DEVICES_INF,KEY_STATE,TYPE_DEVICE_ONLINE,KEY_DEVICE_ID,dpValue);
-
-                                //push mess to AWS
-                                getPayloadReponseStateDeviceAWS(&payload,dpValue,TYPE_DEVICE_ONLINE);
-                                // getPayloadReponseAWS(&payload,SENDER_HC_VIA_CLOUD,TYPE_UPDATE_DEVICE,dpValue,TYPE_DEVICE_ONLINE);
-                                getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_DEVICE_STATE,MOSQ_Reponse,dpValue,TimeCreat,payload);
-                                get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_DEVICE_STATE,MOSQ_Reponse);
-                            }
-                            else if(state == TYPE_DEVICE_RESETED)
-                            {
-                                LogInfo((get_localtime_now()),("state == TYPE_DEVICE_RESETED"));
-                                //push mess delete device to BLE service
-                                getPayloadDeleteDeviceToBLE(&payload,dpValue);
-                                LogInfo((get_localtime_now()),("    payload %s",payload));
-                                getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_DEL_DEVICE,MOSQ_Reponse,dpValue,TimeCreat,payload);
-                                get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_DEL_DEVICE,MOSQ_Reponse);
-                            }
-                            mqttLocalPublish(topic, message);
-                        }
-                        else
-                        {
-                            LogWarn((get_localtime_now()),("deviceID is empty into database"));
-                        }
-                    }
-                    else
-                    {
-                        LogError((get_localtime_now()),("deviceID is empty"));
-                    }
-
                     break;  
                 }
                 case GW_RESPONSE_ADD_GROUP_LIGHT:
@@ -2897,6 +2222,7 @@ bool Scene_GetFullInfo(JSON* packet) {
     JSON* actionsArray = JSON_GetObject(packet, "actions");
     JSON_ForEach(action, actionsArray) {
         JSON* executorProperty = JSON_GetObject(action, "executorProperty");
+        char* actionExecutor = JSON_GetText(action, "actionExecutor");
         char* entityId = JSON_GetText(action, "entityId");
         int delaySeconds = 0;
         if (strcmp(entityId, "delay") == 0) {
@@ -2904,9 +2230,11 @@ bool Scene_GetFullInfo(JSON* packet) {
             delaySeconds = atoi(JSON_GetText(executorProperty, "seconds"));
             delaySeconds = minutes * 60 + delaySeconds;
             JSON_SetNumber(action, "actionType", EntityDelay);
+        } else if (strcmp(actionExecutor, "ruleTrigger") == 0) {
+            JSON_SetNumber(action, "actionType", EntityScene);
         } else {
             JSON_SetNumber(action, "actionType", EntityDevice);
-            device_info_t deviceInfo;
+            DeviceInfo deviceInfo;
             int foundDevices = Db_FindDevice(&deviceInfo, entityId);
             if (foundDevices == 1) {
                 JSON_SetText(action, "pid", deviceInfo.pid);
@@ -2943,7 +2271,7 @@ bool Scene_GetFullInfo(JSON* packet) {
             List_Delete(timeItems);
             JSON_SetNumber(condition, "conditionType", EntitySchedule);
         } else {
-            device_info_t deviceInfo;
+            DeviceInfo deviceInfo;
             int foundDevices = Db_FindDevice(&deviceInfo, entityId);
             if (foundDevices == 1) {
                 int dpId = atoi(JSON_ArrayGetText(exprArray, 0) + 3);   // Template is "$dp1"
@@ -2996,7 +2324,7 @@ Scene* Scene_ParseJson(const char* json) {
             sceneAction->actionType = EntityDelay;
         } else {
             sceneAction->actionType = EntityDevice;
-            device_info_t deviceInfo;
+            DeviceInfo deviceInfo;
             int foundDevices = Db_FindDevice(&deviceInfo, sceneAction->entityId);
             if (foundDevices == 1) {
                 StringCopy(sceneAction->pid, deviceInfo.pid);
@@ -3038,7 +2366,7 @@ Scene* Scene_ParseJson(const char* json) {
             List_Delete(timeItems);
             sceneCondition->conditionType = EntitySchedule;
         } else {
-            device_info_t deviceInfo;
+            DeviceInfo deviceInfo;
             int foundDevices = Db_FindDevice(&deviceInfo, entityId);
             if (foundDevices == 1) {
                 int dpId = atoi(JSON_ArrayGetText(exprArray, 0) + 3);   // Template is "$dp1"
@@ -3113,7 +2441,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
         char* deviceId = JSON_GetText(srcObj, "deviceId");
         JSON_SetText(destObj, "deviceId", deviceId);
         // Find device information from database
-        device_info_t deviceInfo;
+        DeviceInfo deviceInfo;
         int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
         if (foundDevices) {
             JSON_SetText(destObj, "deviceAddr", deviceInfo.addr);
@@ -3145,7 +2473,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
                 for (int i = 0; i < splitList->count; i++) {
                     if (i % 2 == 0) {
                         arrayItem = NULL;
-                        device_info_t deviceInfo;
+                        DeviceInfo deviceInfo;
                         int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
                         if (foundDevices) {
                             arrayItem = JSON_CreateObject();
@@ -3168,7 +2496,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
             } else if (reqType == TYPE_ADD_GROUP_NORMAL || reqType == TYPE_DEL_GROUP_NORMAL) {
                 for (int i = 0; i < splitList->count; i++) {
                     JSON* arrayItem = JSON_CreateObject();
-                    device_info_t deviceInfo;
+                    DeviceInfo deviceInfo;
                     int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
                     if (foundDevices) {
                         JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);

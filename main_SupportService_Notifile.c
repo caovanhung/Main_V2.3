@@ -194,7 +194,7 @@ int main( int argc,char ** argv )
                 case GW_RESPONSE_SENSOR_PIR_DETECT:
                 case GW_RESPONSE_SENSOR_BATTERY:
                 case GW_RESPONSE_SENSOR_ENVIRONMENT:
-                case GW_RESPONSE_SENSOR_AIR:
+                case GW_RESPONSE_SMOKE_SENSOR:
                 case GW_RESPONSE_DEVICE_CONTROL:
                 {
                     deviceID = json_object_get_string(json_object(object),KEY_DEVICE_ID);

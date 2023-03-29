@@ -670,7 +670,7 @@ int main( int argc,char ** argv )
                     break;
                 }
 
-                case GW_RESPONSE_SENSOR_AIR:
+                case GW_RESPONSE_SMOKE_SENSOR:
                 case GW_RESPONSE_SENSOR_ENVIRONMENT_TEMPER:
                 case GW_RESPONSE_SENSOR_ENVIRONMENT_HUMIDITY:
                 case GW_RESPONSE_SENSOR_PIR_DETECT:   
