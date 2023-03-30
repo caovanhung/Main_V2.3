@@ -1,7 +1,12 @@
 
 #include "time_t.h"
 
+#define TRUE    1
+#define FALSE   0
+
 #define FILENAME               ( strrchr( __FILE__, '/' ) ? strrchr( __FILE__, '/' ) + 1 : __FILE__ )
+
+#define ASSERT(...)  if (!(__VA_ARGS__)) { logError("ASSERT: %s:%d", __FILE__, __LINE__); return; }
 
 extern const char* SERVICE_NAME;
 extern char* g_dbgFileName;
@@ -81,12 +86,9 @@ extern int g_dbgLineNumber;
 #define TYPE_LOCK_KIDS                  (21U)
 #define TYPE_LOCK_AGENCY                (22U)
 #define TYPE_NOTIFI_REPONSE             (23U)
-
-
-
-
 #define TYPE_UPDATE_SERVICE             (25U)
 
+#define TYPE_SYNC_DEVICE_STATE          (99U)
 
 ///////////////////////Define type repons from Devices///////////////////////////////////////
 #define GW_RESPONSE_UNKNOW               ( -1 )

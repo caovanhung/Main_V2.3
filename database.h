@@ -112,6 +112,7 @@ int Db_DeleteDevice(const char* deviceId);
 int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight);
 int Db_DeleteGroup(const char* groupAddr);
 char* Db_FindDevicesInGroup(const char* groupAddr);
+int Db_SaveGroupDevices(const char* groupAddr, const char* devices);
 
 int Db_FindDp(dp_info_t* dpInfo, const char* deviceId, int dpId);
 int Db_FindDpByAddr(dp_info_t* dpInfo, const char* dpAddr);

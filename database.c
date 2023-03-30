@@ -153,7 +153,7 @@ int Db_DeleteDevice(const char* deviceId) {
 }
 
 int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight) {
-    char sqlCmd[100];
+    char* sqlCmd = malloc(sizeof(devices) + 200);
     sprintf(sqlCmd, "INSERT INTO GROUP_INF(groupAdress, name, devices) VALUES('%s', '%s', '%s')", groupAddr, groupName, devices);
     Sql_Exec(sqlCmd);
     if (isLight) {
@@ -164,6 +164,7 @@ int Db_AddGroup(const char* groupAddr, const char* groupName, const char* device
         sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue) VALUES('%s', '%s', '%s', '%s')", groupAddr, groupAddr, "23", "0");
         Sql_Exec(sqlCmd);
     }
+    free(sqlCmd);
     return 1;
 }
 
@@ -178,6 +179,13 @@ char* Db_FindDevicesInGroup(const char* groupAddr)
         strcpy(resultDeviceIds, devices);
     }
     return resultDeviceIds;
+}
+
+int Db_SaveGroupDevices(const char* groupAddr, const char* devices) {
+    char sqlCmd[100];
+    sprintf(sqlCmd, "UPDATE group_inf SET devices='%s' WHERE groupAdress = '%s'", devices, groupAddr);
+    Sql_Exec(sqlCmd);
+    return 1;
 }
 
 int Db_DeleteGroup(const char* groupAddr) {

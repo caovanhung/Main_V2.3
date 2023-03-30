@@ -71,6 +71,8 @@ int g_sceneCount = 0;
 JSON_Value *Json_Value_checkReponses;
 JSON_Value *Json_Value_InfoActionNeedReponses;
 JSON_Value *g_checkRespList;
+JSON* parseGroupLinkDevices(const char* devices);
+JSON* parseGroupNormalDevices(const char* devices);
 JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket);
 bool sendInfoDeviceFromDatabase();
 bool sendInfoSceneFromDatabase();
@@ -94,6 +96,7 @@ int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr)
 bool append_Id2ListId(char** ListId, char* Id_append);
 bool remove_Id2ListId(char** ListId, char* Id_remove);
 bool Scene_GetFullInfo(JSON* packet);
+void SyncDevicesState();
 
 bool compareSceneEntity(JSON* entity1, JSON* entity2) {
     if (entity1 && entity2) {
@@ -103,7 +106,31 @@ bool compareSceneEntity(JSON* entity1, JSON* entity2) {
         int dpId2 = JSON_GetNumber(entity2, "dpId");
         int dpValue2 = JSON_GetNumber(entity2, "dpValue");
         char* dpAddr2 = JSON_GetText(entity2, "dpAddr");
-        if (dpId1 == dpId2 && dpValue1 == dpValue2 && strcmp(dpAddr1, dpAddr2) == 0) {
+        if (dpId1 == dpId2 && dpValue1 == dpValue2 && StringCompare(dpAddr1, dpAddr2)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool compareDp(JSON* dp1, JSON* dp2) {
+    if (dp1 && dp2) {
+        char* deviceId1 = JSON_GetText(dp1, "deviceId");
+        int dpId1 = JSON_GetNumber(dp1, "dpId");
+        char* deviceId2 = JSON_GetText(dp2, "deviceId");
+        int dpId2 = JSON_GetNumber(dp2, "dpId");
+        if (dpId1 == dpId2 && StringCompare(deviceId1, deviceId2)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool compareDevice(JSON* device1, JSON* device2) {
+    if (device1 && device2) {
+        char* deviceAddr1 = JSON_GetText(device1, "deviceAddr");
+        char* deviceAddr2 = JSON_GetText(device2, "deviceAddr");
+        if (StringCompare(deviceAddr1, deviceAddr2)) {
             return true;
         }
     }
@@ -440,6 +467,8 @@ int main( int argc,char ** argv )
     }
 
     Db_LoadSceneToRam();
+    sleep(1);
+    SyncDevicesState();
     while(xRun!=0)
     {
         pthread_mutex_lock(&mutex_lock_t);
@@ -532,6 +561,21 @@ int main( int argc,char ** argv )
 
                         break;
                     }
+                    case GW_RESPONSE_ADD_GROUP_LIGHT:
+                    {
+                        char* groupAddr = JSON_GetText(payload, "groupAddr");
+                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                        if (requestIsInRespList(TYPE_ADD_GROUP_NORMAL, groupAddr)) {
+                            updateDeviceRespStatus(TYPE_ADD_GROUP_NORMAL, groupAddr, deviceAddr, 1);
+                        } else if (requestIsInRespList(TYPE_ADD_GROUP_LINK, groupAddr)) {
+                            updateDeviceRespStatus(TYPE_ADD_GROUP_LINK, groupAddr, deviceAddr, 1);
+                        }
+                        break;
+                    }
+                    case TYPE_SYNC_DEVICE_STATE: {
+                        SyncDevicesState();
+                        break;
+                    }
                 }
             } else if (isMatchString(NameService, SERVICE_AWS)) {
                 switch (reqType) {
@@ -594,9 +638,8 @@ int main( int argc,char ** argv )
                 unsigned char provider;
 
                 case TYPE_CTR_DEVICE:
-                case TYPE_CTR_GROUP_NORMAL:
-                {
-                    cJSON* originObj = cJSON_Parse(object_string);
+                case TYPE_CTR_GROUP_NORMAL: {
+                    cJSON* originObj = JSON_Parse(object_string);
                     char* senderId = JSON_GetText(originObj, "senderId");
                     cJSON* originDPs = cJSON_GetObjectItem(originObj, "dictDPs");
                     DeviceInfo deviceInfo;
@@ -607,12 +650,13 @@ int main( int argc,char ** argv )
                         foundDevices = Db_FindDevice(&deviceInfo, deviceId);
                     } else {
                         deviceId = JSON_GetText(originObj, "groupAdress");
-                        // foundDevices = Db_FindGroupByAddr(&deviceInfo, deviceId);
+                        deviceInfo.pid[0] = 0;
+                        foundDevices = 1;
                     }
 
                     if (foundDevices == 1) {
-                        cJSON* packet = cJSON_CreateObject();
-                        cJSON_AddStringToObject(packet, "pid", deviceInfo.pid);
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "pid", deviceInfo.pid);
                         JSON_SetText(packet, "senderId", senderId);
                         cJSON* dictDPs = cJSON_AddArrayToObject(packet, "dictDPs");
                         JSON_ForEach(o, originDPs) {
@@ -620,7 +664,7 @@ int main( int argc,char ** argv )
                             dp_info_t dpInfo;
                             int dpFound = Db_FindDp(&dpInfo, deviceId, dpId);
                             if (dpFound) {
-                                cJSON* dp = cJSON_CreateObject();
+                                cJSON* dp = JSON_CreateObject();
                                 JSON_SetNumber(dp, "id", dpId);
                                 JSON_SetText(dp, "addr", dpInfo.addr);
                                 JSON_SetNumber(dp, "value", o->valueint);
@@ -628,13 +672,12 @@ int main( int argc,char ** argv )
                             }
                         }
                         sendPacketTo(SERVICE_BLE, type_action_t, packet);
-                        cJSON_Delete(packet);
+                        JSON_Delete(packet);
                     }
-                    cJSON_Delete(originObj);
+                    JSON_Delete(originObj);
                     break;
                 }
-                case TYPE_CTR_SCENE:
-                {
+                case TYPE_CTR_SCENE: {
                     JSON* packet = JSON_Parse(object_string);
                     char* sceneId = JSON_GetText(packet, "sceneId");
                     int state = JSON_GetNumber(packet, "state");
@@ -671,8 +714,7 @@ int main( int argc,char ** argv )
                     cJSON_Delete(packet);
                     break;
                 }
-                case TYPE_ADD_GW:
-                {
+                case TYPE_ADD_GW: {
                     // addGateway(&db,object_string);
 
                     // get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_ADD_GW,MOSQ_ActResponse);
@@ -682,15 +724,14 @@ int main( int argc,char ** argv )
                     // if(message != NULL) free(message);
                     break;
                 }
-                case TYPE_ADD_DEVICE:
-                {
+                case TYPE_ADD_DEVICE: {
                     JSON* localPacket = ConvertToLocalPacket(type_action_t, object_string);
                     char* deviceId = JSON_GetText(localPacket, "deviceId");
                     int provider = JSON_GetNumber(localPacket, "provider");
                     logInfo("Adding device: %s", deviceId);
 
                     // Delete device from database if exist
-                    logInfo("Delete device %s from database if exist", Id);
+                    logInfo("Delete device %s from database if exist", deviceId);
                     Db_DeleteDevice(deviceId);
 
                     if (provider == HOMEGY_BLE) {
@@ -703,8 +744,7 @@ int main( int argc,char ** argv )
                     addNewDevice(&db, object_string);
                     break;
                 }
-                case TYPE_DEL_DEVICE:
-                {
+                case TYPE_DEL_DEVICE: {
                     JSON* localPacket = ConvertToLocalPacket(type_action_t, object_string);
                     char* deviceId = JSON_GetText(localPacket, "deviceId");
                     if (deviceId) {
@@ -717,8 +757,7 @@ int main( int argc,char ** argv )
                     JSON_Delete(localPacket);
                     break;
                 }
-                case TYPE_ADD_SCENE:
-                {
+                case TYPE_ADD_SCENE: {
                     JSON* packet = JSON_Parse(object_string);
                     int isLocal = JSON_GetNumber(packet, "isLocal");
                     Scene_GetFullInfo(packet);
@@ -729,8 +768,7 @@ int main( int argc,char ** argv )
                     JSON_Delete(packet);
                     break;
                 }
-                case TYPE_DEL_SCENE:
-                {
+                case TYPE_DEL_SCENE: {
                     JSON* packet = JSON_Parse(object_string);
                     char* sceneId = JSON_GetText(packet, "Id");
                     // Get sceneInfo from database to send to BLE
@@ -746,8 +784,7 @@ int main( int argc,char ** argv )
                     JSON_Delete(sceneInfo);
                     break;
                 }
-                case TYPE_UPDATE_SCENE:
-                {
+                case TYPE_UPDATE_SCENE: {
                     JSON* newScene = JSON_Parse(object_string);
                     Scene_GetFullInfo(newScene);
                     char* sceneId = JSON_GetText(newScene, "Id");
@@ -807,6 +844,7 @@ int main( int argc,char ** argv )
                                 JSON_SetObject(packet, "conditionNeedAdd", newCondition);
                             }
                             sendPacketTo(SERVICE_BLE, type_action_t, packet);
+                            JSON_Delete(packet);
                         }
                         // Save new scene to database
                         Db_DeleteScene(sceneId);
@@ -818,371 +856,88 @@ int main( int argc,char ** argv )
 
                     break;
                 }
-                case TYPE_ADD_GROUP_NORMAL:
-                {
-                    cJSON* originObj = cJSON_Parse(object_string);
-                    devices = JSON_GetText(originObj, "devices");
-                    char* groupAddr = JSON_GetText(originObj, "groupAdress");
-                    cJSON* root = cJSON_CreateObject();
-                    JSON_SetNumber(root, "reqType", type_action_t);
-                    JSON_SetText(root, "groupAddr", groupAddr);
-                    cJSON* devicesArray = cJSON_AddArrayToObject(root, "devices");
-                    list_t* splitList = String_Split(devices, "|");
-                    for (int i = 0; i < splitList->count; i++) {
-                        DeviceInfo deviceInfo;
-                        int foundDevices = Db_FindDevice(&deviceInfo, (char*)splitList->items[i]);
-                        if (foundDevices > 0) {
-                            JSON_ArrayAddText(devicesArray, deviceInfo.addr);
-                        }
+                case TYPE_ADD_GROUP_NORMAL: {
+                    // Send request to BLE
+                    JSON* localPacket = ConvertToLocalPacket(type_action_t, object_string);
+                    char* groupAddr = JSON_GetText(localPacket, "groupAddr");
+                    sendPacketTo(SERVICE_BLE, type_action_t, localPacket);
+                    JSON* devicesArray = JSON_GetObject(localPacket, "devices");
+                    JSON* srcObj = JSON_Parse(object_string);
+                    // Insert group information to database
+                    Db_AddGroup(groupAddr, JSON_GetText(srcObj, "name"), JSON_GetText(srcObj, "devices"), true);
+                    // Add this request to response list for checking response
+                    JSON_ForEach(device, devicesArray) {
+                        addDeviceToRespList(type_action_t, groupAddr, JSON_GetText(device, "deviceAddr"));
                     }
-                    sendPacketTo(SERVICE_BLE, TYPE_ADD_GROUP_NORMAL, root);
-                    List_Delete(splitList);
-                    cJSON_Delete(root);
-                    cJSON_Delete(originObj);
-                    //add inf group normal into TABLE_GROUP_INF and TABLE_DEVICES database
-                    logInfo("Insert group data to database");
-                    addNewGroupNormal(&db, object_string);
-
-                    //add info reponse
-                    pthread_mutex_lock(&mutex_lock_dataReponse_t);
-                    devices         = json_object_get_string(json_object(object),KEY_DEVICES_GROUP);
-                    groupAndress    = json_object_get_string(json_object(object),KEY_ADDRESS_GROUP);
-                    size_ = 0;
-                    name = str_split(devices,'|',&size_);
-                    for (i = 0; i < (size_ - 1); i++)
-                    {
-                        leng = 0;
-                        andressDevice = sql_getValueWithCondition(&db, &leng, KEY_UNICAST, TABLE_DEVICES_INF, KEY_DEVICE_ID, *(name+i));
-                        if(leng > 0)
-                        {
-                            addDeviceToRespList(TYPE_ADD_GROUP_NORMAL, groupAndress, andressDevice[0]);
-                            free_fields(andressDevice,leng);
-                        }
-                        else
-                        {
-                            LogError((get_localtime_now()),("Failed to get addressDevice form DeviceID\n"));
-                        }
-                    }
-                    if(size_ > 0)
-                    {
-                        free_fields(name,size_);
-                    }
-                    pthread_mutex_unlock(&mutex_lock_dataReponse_t);
-               
+                    JSON_Delete(localPacket);
+                    JSON_Delete(srcObj);
                     break;
                 }
-                case TYPE_DEL_GROUP_NORMAL:
-                {
-                    groupAndress = json_object_get_string(json_object(object),KEY_ADDRESS_GROUP);
-                    devicesIntoDB = sql_getValueWithCondition(&db, &leng, KEY_DEVICES_GROUP, TABLE_GROUP_INF, KEY_ADDRESS_GROUP, groupAndress);
-                    logInfo("Found %d devices of group %s in table %s", leng, groupAndress, TABLE_GROUP_INF);
-                    if (leng > 0)
-                    {
-                        //push message for BLE-DEVICE
-                        cJSON* originObj = cJSON_Parse(object_string);
-                        char* groupAddr = JSON_GetText(originObj, "groupAdress");
-                        char* devices = Db_FindDevicesInGroup(groupAddr);
-                        cJSON* root = cJSON_CreateObject();
-                        JSON_SetNumber(root, "reqType", type_action_t);
-                        JSON_SetText(root, "groupAddr", groupAddr);
-                        cJSON* devicesArray = cJSON_AddArrayToObject(root, "devices");
-                        list_t* splitList = String_Split(devices, "|");
-                        for (int i = 0; i < splitList->count; i++) {
-                            DeviceInfo deviceInfo;
-                            int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
-                            if (foundDevices > 0) {
-                                JSON_ArrayAddText(devicesArray, deviceInfo.addr);
-                            }
-                        }
-                        char* payload = cJSON_PrintUnformatted(root);
-                        mqttLocalPublish("DEVICE_SERVICES/Ble/0", payload);
-                        free(payload);
-                        free(devices);
-                        List_Delete(splitList);
-                        cJSON_Delete(root);
-                        cJSON_Delete(originObj);
-
-
-                        //update state of group in GROUP_INF
-                        sql_updateStateInTableWithCondition(&db,TABLE_GROUP_INF,KEY_STATE,TYPE_DEVICE_RESETED,KEY_ADDRESS_GROUP,groupAndress);
-                        //update state of group in DEVICES  
-                        sql_updateStateInTableWithCondition(&db,TABLE_DEVICES,KEY_STATE,TYPE_DEVICE_RESETED,KEY_ADDRESS,groupAndress);
-
-                        //add info reponse
-                        pthread_mutex_lock(&mutex_lock_dataReponse_t);
-                        // groupAndress    = json_object_get_string(json_object(object),KEY_ADDRESS_GROUP);
-                        size_ = 0;
-                        name = str_split(devicesIntoDB[0],'|',&size_);
-                        free_fields(devicesIntoDB,leng);
-                        LogInfo((get_localtime_now()),("name[0] = %s\n",name[0]));
-                        for(i=0;i<(size_-1);i++)
-                        {
-                            leng = 0;
-                            andressDevice = sql_getValueWithCondition(&db,&leng,KEY_UNICAST,TABLE_DEVICES_INF,KEY_DEVICE_ID,*(name+i));
-                            if(leng > 0)
-                            {
-                                LogInfo((get_localtime_now()),("andressDevice[0] = %s\n",andressDevice[0]));
-                                add_JsonValueInfoActionNeedReponses(Json_Value_InfoActionNeedReponses,TYPE_DEL_GROUP_NORMAL,andressDevice[0],TimeCreat,TYPE_DEVICE_REPONSE_ADD_FROM_APP);
-                                add_JsonValueCheckReponses(Json_Value_checkReponses,TYPE_DEL_GROUP_NORMAL,groupAndress,andressDevice[0],TimeCreat);
-                                free_fields(andressDevice,leng);                            
-                            }
-                            else
-                            {
-                                LogError((get_localtime_now()),("Failed to get addressDevice form DeviceID\n"));
-                            }
-
-                            //remove groupAddress in to GroupList of each DeviceID
-                            GroupListIntoDB = sql_getValueWithCondition(&db,&leng,KEY_GROUP_LIST,TABLE_DEVICES_INF,KEY_DEVICE_ID,*(name+i));
-                            
-                            if(leng > 0)
-                            {
-                                check_flag = remove_Id2ListId(&GroupListIntoDB[0],groupAndress);
-                                if(!check_flag)
-                                {
-                                    LogError((get_localtime_now()),("Failed to remove GroupAddress into  GroupList\n"));
-                                }
-                                else
-                                {
-                                    LogInfo((get_localtime_now()),("    GroupListIntoDB[0] after remove = %s\n",GroupListIntoDB[0]));
-                                    sql_updateValueInTableWithCondition(&db,TABLE_DEVICES_INF,KEY_GROUP_LIST,GroupListIntoDB[0],KEY_DEVICE_ID,*(name+i));
-                                }                       
-                            }
-                            else
-                            {
-                                LogError((get_localtime_now()),("Failed to get GroupList form DeviceID\n"));
-                            }
-                        }   
-                        pthread_mutex_unlock(&mutex_lock_dataReponse_t); 
-                    }
-                    else
-                    {
-                        LogError((get_localtime_now()),("TYPE_DEL_GROUP_NORMAL Failed\n"));
-                    }
+                case TYPE_DEL_GROUP_NORMAL: {
+                    // Send request to BLE
+                    JSON* localPacket = ConvertToLocalPacket(type_action_t, object_string);
+                    sendPacketTo(SERVICE_BLE, type_action_t, localPacket);
+                    // Delete group information from database
+                    char* groupAddr = JSON_GetText(localPacket, "groupAddr");
+                    Db_DeleteGroup(groupAddr);
                     break;
                 }
-                case TYPE_UPDATE_GROUP_NORMAL:
-                {
-                    groupAndress = json_object_get_string(json_object(object),KEY_ADDRESS_GROUP);
-                    if(groupAndress == NULL)
-                    {
-                        LogError((get_localtime_now()),("groupAndress is NULL\n"));
-                        break;
-                    }
-                    LogInfo((get_localtime_now()),("groupAndress = %s\n",groupAndress));
-                    devicesIntoDB   = sql_getValueWithCondition(&db,&leng,KEY_DEVICES_GROUP,TABLE_GROUP_INF,KEY_ADDRESS_GROUP,groupAndress);
-                    if(leng < 1)
-                    {
-                        LogError((get_localtime_now()),("Failed to get devices of group from Database!!!"));
-                        break;
-                    }
-                    LogInfo((get_localtime_now()),("devicesIntoDB = %s, size = %d\n",devicesIntoDB[0],leng));
-                    devices         = json_object_get_string(json_object(object),KEY_DEVICES_GROUP);
-                    dpValue = (char*)calloc(strlen(devices)+1,sizeof(char));
-                    strcpy(dpValue,devices);
-
-                    if(devices == NULL)
-                    {
-                        LogError((get_localtime_now()),("Failed to get devices of group from APP!!"));
-                        break;
-                    }
-                    LogInfo((get_localtime_now()),("devices = %s\n",devices));
-
-                    //get list device add
-                    LogWarn((get_localtime_now()),("Start get list device need add!!!\n"));
-                    size_ = 0;
-                    name = str_split(dpValue,'|',&size_);
-                    tmp = calloc(1,sizeof(char));
-                    LogInfo((get_localtime_now()),("    size_ %d\n",size_));
-                    for(i=0;i<(size_-1);i++)
-                    {
-                        LogInfo((get_localtime_now()),("    name[%d] = %s\n",i,*(name+i)));
-                        if(*(name+i) == NULL)
-                        {
-                            LogError((get_localtime_now()),("Failed to get DeviceID from list devices from APP!\n"));
-                            break;
-                        }
-                        if(!isContainString(devicesIntoDB[0],*(name+i)))// The deviceID not in the list devices from DB
-                        {
-
-                            //get list add to BLE
-                            LogInfo((get_localtime_now()),("    name[%d] = %s\n",i,*(name+i)));
-                            append_String2String(&tmp,*(name+i));
-                            append_String2String(&tmp,"|");
-
-                            //add reponse check add group normal
-                            pthread_mutex_lock(&mutex_lock_dataReponse_t);
-                            leng = 0;
-                            andressDevice = sql_getValueWithCondition(&db,&leng,KEY_UNICAST,TABLE_DEVICES_INF,KEY_DEVICE_ID,*(name+i));
-                            LogWarn((get_localtime_now()),("debug 1\n"));
-                            if(leng > 0)
-                            {
-                                LogInfo((get_localtime_now()),("andressDevice[0] = %s\n",andressDevice[0]));
-                                add_JsonValueInfoActionNeedReponses(Json_Value_InfoActionNeedReponses,TYPE_ADD_GROUP_NORMAL,andressDevice[0],TimeCreat,TYPE_DEVICE_REPONSE_ADD_FROM_APP);
-                                LogWarn((get_localtime_now()),("debug 1\n"));
-                                add_JsonValueCheckReponses(Json_Value_checkReponses,TYPE_ADD_GROUP_NORMAL,groupAndress,andressDevice[0],TimeCreat);
-                                LogWarn((get_localtime_now()),("debug 1\n"));
-                                free_fields(andressDevice,leng); 
-                                LogWarn((get_localtime_now()),("debug 1\n"));                           
-                            }
-                            else
-                            {
-                                LogError((get_localtime_now()),("Failed to get addressDevice form DeviceID\n"));
-                            }
-                            pthread_mutex_unlock(&mutex_lock_dataReponse_t);
-
-                            //add groupAddress in to GroupList of each DeviceID
-                            GroupListIntoDB = sql_getValueWithCondition(&db,&leng,KEY_GROUP_LIST,TABLE_DEVICES_INF,KEY_DEVICE_ID,*(name+i));
-                            LogInfo((get_localtime_now()),("    leng = %d\n",leng));
-                            LogInfo((get_localtime_now()),("    GroupListIntoDB[0] befor add = %s\n",GroupListIntoDB[0]));
-                            LogInfo((get_localtime_now()),("    groupAndress = %s\n",groupAndress));
-                            
-                            if(leng > 0)
-                            {
-                                check_flag = append_Id2ListId(&GroupListIntoDB[0],groupAndress);
-                                if(!check_flag)
-                                {
-                                    LogError((get_localtime_now()),("Failed to add GroupAddress into  GroupList\n"));
+                case TYPE_UPDATE_GROUP_NORMAL: {
+                    logInfo("TYPE_UPDATE_GROUP_NORMAL");
+                    JSON* srcObj = JSON_Parse(object_string);
+                    JSON* localPacket = ConvertToLocalPacket(type_action_t, object_string);
+                    char* groupAddr = JSON_GetText(localPacket, "groupAddr");
+                    char* devicesStr = Db_FindDevicesInGroup(groupAddr);
+                    if (devicesStr) {
+                        JSON* oldDevices = parseGroupNormalDevices(devicesStr);
+                        char* t1 = cJSON_PrintUnformatted(oldDevices);
+                        JSON* newDevices = JSON_GetObject(localPacket, "devices");
+                        char* t2 = cJSON_PrintUnformatted(newDevices);
+                        // Find all devices that are need to be removed
+                        JSON* dpsNeedRemove = JSON_CreateArray();
+                        JSON_ForEach(oldDevice, oldDevices) {
+                            bool found = false;
+                            JSON_ForEach(newDevice, newDevices) {
+                                if (compareDevice(oldDevice, newDevice)) {
+                                    found = true;
+                                    break;
                                 }
-                                else
-                                {
-                                    LogInfo((get_localtime_now()),("    GroupListIntoDB[0] after add %s\n",GroupListIntoDB[0]));
-                                    sql_updateValueInTableWithCondition(&db,TABLE_DEVICES_INF,KEY_GROUP_LIST,GroupListIntoDB[0],KEY_DEVICE_ID,*(name+i));
-                                }                       
                             }
-                            else
-                            {
-                                LogError((get_localtime_now()),("Failed to get GroupList form DeviceID\n"));
+                            if (!found) {
+                                cJSON_AddItemReferenceToArray(dpsNeedRemove, oldDevice);
                             }
-
                         }
-                        // free(*(name+i));
-                    }
-                    free_fields(name,size_);
-                    // free(dpValue);
-                    //push message to BLE service for add
-                    if(strlen(tmp) != 0)
-                    {
-                        LogInfo((get_localtime_now()),("    list device add = %s\n",tmp));
-                        LogInfo((get_localtime_now()),("    strlen(tmp) = %ld\n",strlen(tmp)));
-                        //push message to BLE_service
-                        replaceValuePayloadTranMOSQ(&payload, KEY_DEVICES_GROUP,tmp,object_string);
-                        LogWarn((get_localtime_now()),("payload = %s\n",payload));
-                        get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_ADD_GROUP_NORMAL,Extern);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_ADD_GROUP_NORMAL,MOSQ_ActResponse,Id,TimeCreat,payload);
-                        mqttLocalPublish(topic, message);
-                    }
-                    else
-                    {
-                        LogError((get_localtime_now()),("    list device add is empty\n"));
-                    }
-                    free(tmp);
-                    tmp = calloc(1,sizeof(char));
-                    LogWarn((get_localtime_now()),("End get list device need add!!!\n"));
 
-
-                    //get list device delete
-                    size_ = 0;
-                    name = str_split(devicesIntoDB[0],'|',&size_);
-                    // devices         = json_object_get_string(json_object(object),KEY_DEVICES_GROUP);
-                    LogWarn((get_localtime_now()),("Start get list device need delete!!!\n"));
-                    LogInfo((get_localtime_now()),("    size_ %d\n",size_));
-
-                    for(i=0;i<(size_-1);i++)
-                    {
-                        if(*(name+i) == NULL)
-                        {
-                            LogError((get_localtime_now()),("Failed to get DeviceID from list devices from APP!\n"));
-                            break;
-                        }
-                        if(!isContainString(devices,*(name+i)))// no have into DB
-                        {
-                            append_String2String(&tmp,*(name+i));
-                            append_String2String(&tmp,"|");
-
-                            //add reponse check delete group normal
-                            pthread_mutex_lock(&mutex_lock_dataReponse_t);
-                            leng = 0;
-                            andressDevice = sql_getValueWithCondition(&db,&leng,KEY_UNICAST,TABLE_DEVICES_INF,KEY_DEVICE_ID,*(name+i));
-                            if(leng > 0)
-                            {
-                                LogInfo((get_localtime_now()),("andressDevice[0] = %s\n",andressDevice[0]));
-                                add_JsonValueInfoActionNeedReponses(Json_Value_InfoActionNeedReponses,TYPE_DEL_GROUP_NORMAL,andressDevice[0],TimeCreat,TYPE_DEVICE_REPONSE_ADD_FROM_APP);
-                                add_JsonValueCheckReponses(Json_Value_checkReponses,TYPE_DEL_GROUP_NORMAL,groupAndress,andressDevice[0],TimeCreat);
-                                free_fields(andressDevice,leng);
-                            }
-                            else
-                            {
-                                LogError((get_localtime_now()),("Failed to get addressDevice form DeviceID\n"));
-                            }
-
-                            pthread_mutex_unlock(&mutex_lock_dataReponse_t);
-
-
-                            //del groupAddress in to GroupList of each DeviceID
-                            GroupListIntoDB = sql_getValueWithCondition(&db,&leng,KEY_GROUP_LIST,TABLE_DEVICES_INF,KEY_DEVICE_ID,*(name+i));
-                            LogInfo((get_localtime_now()),("    leng = %d\n",leng));
-                            LogInfo((get_localtime_now()),("    GroupListIntoDB[0] befor remove = %s\n",GroupListIntoDB[0]));
-                            LogInfo((get_localtime_now()),("    groupAndress = %s\n",groupAndress));
-                            
-                            if(leng > 0)
-                            {
-                                check_flag = remove_Id2ListId(&GroupListIntoDB[0],groupAndress);
-                                if(!check_flag)
-                                {
-                                    LogError((get_localtime_now()),("Failed to remove GroupAddress into  GroupList\n"));
+                        // Find all actions that are need to be added
+                        JSON* dpsNeedAdd = JSON_CreateArray();
+                        JSON_ForEach(newDevice, newDevices) {
+                            bool found = false;
+                            JSON_ForEach(oldDevice, oldDevices) {
+                                if (compareDevice(oldDevice, newDevice)) {
+                                    found = true;
+                                    break;
                                 }
-                                else
-                                {
-                                    LogInfo((get_localtime_now()),("    GroupListIntoDB[0] after remove %s\n",GroupListIntoDB[0]));
-                                    sql_updateValueInTableWithCondition(&db,TABLE_DEVICES_INF,KEY_GROUP_LIST,GroupListIntoDB[0],KEY_DEVICE_ID,*(name+i));
-                                }                       
                             }
-                            else
-                            {
-                                LogError((get_localtime_now()),("Failed to get GroupList form DeviceID\n"));
+                            if (!found) {
+                                cJSON_AddItemReferenceToArray(dpsNeedAdd, newDevice);
                             }
-
                         }
 
-                        // free(*(name+i));
+                        // Send updated packet to BLE
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "groupAddr", groupAddr);
+                        JSON_SetObject(packet, "dpsNeedRemove", dpsNeedRemove);
+                        JSON_SetObject(packet, "dpsNeedAdd", dpsNeedAdd);
+                        sendPacketTo(SERVICE_BLE, type_action_t, packet);
+                        JSON_Delete(packet);
+                        Db_SaveGroupDevices(groupAddr, JSON_GetText(srcObj, "devices"));
                     }
-                    free_fields(name,size_);
-                    //push message to BLE service for delete
-                    if(strlen(tmp) != 0)
-                    {
-                        LogInfo((get_localtime_now()),("    list device delete = %s\n",tmp));
-                        LogInfo((get_localtime_now()),("    strlen(tmp) = %ld\n",strlen(tmp)));
-                        //push message to BLE_service
-                        replaceValuePayloadTranMOSQ(&payload, KEY_DEVICES_GROUP,tmp,object_string);
-                        LogWarn((get_localtime_now()),("payload = %s\n",payload));
-                        get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_DEL_GROUP_NORMAL,Extern);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_DEL_GROUP_NORMAL,MOSQ_ActResponse,Id,TimeCreat,payload);
-                        mqttLocalPublish(topic, message);
-                    }
-                    else
-                    {
-                        LogError((get_localtime_now()),("    list device delete is empty\n"));
-                    }
-
-
-                    free(tmp);
-                    LogWarn((get_localtime_now()),("Stop get list device need delete!!!\n\n"));
-
-
-                    //update data devices in GROUP_INF
-                    check_flag =  sql_updateValueInTableWithCondition(&db,TABLE_GROUP_INF,KEY_DEVICES_GROUP,devices,KEY_ADDRESS_GROUP,groupAndress);
-                    if(check_flag)
-                    {
-                        LogInfo((get_localtime_now()),("Success to update devices in GROUP_INF\n"));
-                    }
-                    else
-                    {
-                        LogError((get_localtime_now()),("Failed to update devices in GROUP_INF\n"));
-                    }
+                    JSON_Delete(localPacket);
+                    JSON_Delete(srcObj);
+                    free(devicesStr);
                     break;
                 }
-                case TYPE_ADD_GROUP_LINK:
-                {
+                case TYPE_ADD_GROUP_LINK: {
                     // Send request to BLE
                     JSON* localPacket = ConvertToLocalPacket(type_action_t, object_string);
                     char* groupAddr = JSON_GetText(localPacket, "groupAddr");
@@ -1199,8 +954,7 @@ int main( int argc,char ** argv )
                     JSON_Delete(srcObj);
                     break;
                 }
-                case TYPE_DEL_GROUP_LINK:
-                {
+                case TYPE_DEL_GROUP_LINK: {
                     // Send request to BLE
                     JSON* localPacket = ConvertToLocalPacket(type_action_t, object_string);
                     sendPacketTo(SERVICE_BLE, TYPE_DEL_GROUP_LINK, localPacket);
@@ -1209,208 +963,70 @@ int main( int argc,char ** argv )
                     Db_DeleteGroup(groupAddr);
                     break;
                 }
-                case TYPE_UPDATE_GROUP_LINK:
-                {
-                    LogInfo((get_localtime_now()),("TYPE_UPDATE_GROUP_LINK \n"));
-                    //push message to BLE_service
-                    groupAndress    = json_object_get_string(json_object(object),KEY_ADDRESS_GROUP);
-                    LogInfo((get_localtime_now()),("groupAndress = %s\n",groupAndress));
-                    devices         = json_object_get_string(json_object(object),KEY_DEVICES_GROUP);
-                    LogInfo((get_localtime_now()),("devices = %s\n",devices));
-                    devicesIntoDB   = sql_getValueWithCondition(&db,&leng,KEY_DEVICES_GROUP,TABLE_GROUP_INF,KEY_ADDRESS_GROUP,groupAndress);
-                    LogInfo((get_localtime_now()),("devicesIntoDB = %s \n",devicesIntoDB[0]));
-                    dpValue = calloc(strlen(devices)|+1,sizeof(char));
-
-                    strcpy(dpValue,devices);
-
-                    //get list device add
-                    LogWarn((get_localtime_now()),("Start get list device need add!!!\n"));
-                    size_ = 0;
-                    name = str_split(dpValue,'|',&size_);
-                    tmp = calloc(1,sizeof(char));
-                    
-                    LogInfo((get_localtime_now()),("    size_ %d\n",size_));
-
-                    for(i=0;i<(size_-1);i = i + 2)
-                    {
-                        tmp_devices = calloc(LENGTH_DEVICE_ID+4,sizeof(char));
-                        LogInfo((get_localtime_now()),("    name[%d] = %s\n",i,*(name+i)));
-                        LogInfo((get_localtime_now()),("    name[%d] = %s\n",i+1,*(name+i+1)));
-                        append_String2String(&tmp_devices,*(name+i));
-                        append_String2String(&tmp_devices,"|");
-                        append_String2String(&tmp_devices,*(name+i+1));
-                        append_String2String(&tmp_devices,"|");
-
-                        LogInfo((get_localtime_now()),("    tmp_devices[%d] = %s\n",i,tmp_devices));
-                        if(tmp_devices == NULL)
-                        {
-                            LogError((get_localtime_now()),("Failed to get DeviceID from list devices from APP!\n"));
-                            break;
-                        }
-                        if(!isContainString(devicesIntoDB[0],tmp_devices))// The deviceID not in the list devices from DB
-                        {
-                            //get list add to BLE
-                            LogInfo((get_localtime_now()),("    name[%d] = %s\n",i,*(name+i)));
-                            append_String2String(&tmp,tmp_devices);
-
-                            //add reponse check add group normal
-                            pthread_mutex_lock(&mutex_lock_dataReponse_t);
-                            leng = 0;
-                            andressDevice = sql_getValueWithMultileCondition(&db,&leng,KEY_ADDRESS,TABLE_DEVICES,KEY_DEVICE_ID,*(name+i),KEY_DP_ID,*(name+i+1));
-                            LogWarn((get_localtime_now()),("debug 1\n"));
-                            if(leng > 0)
-                            {
-                                LogInfo((get_localtime_now()),("andressDevice[0] = %s\n",andressDevice[0]));
-                                add_JsonValueInfoActionNeedReponses(Json_Value_InfoActionNeedReponses,TYPE_ADD_GROUP_LINK,andressDevice[0],TimeCreat,TYPE_DEVICE_REPONSE_ADD_FROM_APP);
-                                LogWarn((get_localtime_now()),("debug 1\n"));
-                                add_JsonValueCheckReponses(Json_Value_checkReponses,TYPE_ADD_GROUP_LINK,groupAndress,andressDevice[0],TimeCreat);
-                                LogWarn((get_localtime_now()),("debug 1\n"));
-                                free_fields(andressDevice,leng); 
-                                LogWarn((get_localtime_now()),("debug 1\n"));                           
+                case TYPE_UPDATE_GROUP_LINK: {
+                    logInfo("TYPE_UPDATE_GROUP_LINK");
+                    JSON* srcObj = JSON_Parse(object_string);
+                    JSON* localPacket = ConvertToLocalPacket(type_action_t, object_string);
+                    char* groupAddr = JSON_GetText(localPacket, "groupAddr");
+                    char* devicesStr = Db_FindDevicesInGroup(groupAddr);
+                    if (devicesStr) {
+                        JSON* oldDps = parseGroupLinkDevices(devicesStr);
+                        JSON* newDps = JSON_GetObject(localPacket, "devices");
+                        // Find all dps that are need to be removed
+                        JSON* dpsNeedRemove = JSON_CreateArray();
+                        JSON_ForEach(oldDp, oldDps) {
+                            bool found = false;
+                            JSON_ForEach(newDp, newDps) {
+                                if (compareDp(oldDp, newDp)) {
+                                    found = true;
+                                    break;
+                                }
                             }
-                            else
-                            {
-                                LogError((get_localtime_now()),("Failed to get addressDevice form DeviceID\n"));
+                            if (!found) {
+                                cJSON_AddItemReferenceToArray(dpsNeedRemove, oldDp);
                             }
-                            pthread_mutex_unlock(&mutex_lock_dataReponse_t);
                         }
-                        free(tmp_devices);
-                    }
-                    
-                    //push message to BLE service for add
-                    if(strlen(tmp) != 0)
-                    {
-                        LogInfo((get_localtime_now()),("    list device add = %s\n",tmp));
-                        LogInfo((get_localtime_now()),("    strlen(tmp) = %ld\n",strlen(tmp)));
-                        //push message to BLE_service
-                        replaceValuePayloadTranMOSQ(&payload, KEY_DEVICES_GROUP,tmp,object_string);
-                        LogWarn((get_localtime_now()),("payload = %s\n",payload));
-                        get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_ADD_GROUP_LINK,Extern);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_ADD_GROUP_LINK,MOSQ_ActResponse,Id,TimeCreat,payload);
-                        mqttLocalPublish(topic, message);
-                    }
-                    else
-                    {
-                        LogError((get_localtime_now()),("    list device add is empty\n"));
-                    }
 
-                    free_fields(name,size_);
-                    free(dpValue);
-                    free(tmp);
-                    LogWarn((get_localtime_now()),("End get list device need add!!!\n"));
-
-
-                    //get list device delete
-                    size_ = 0;
-                    LogInfo((get_localtime_now()),("    devicesIntoDB[0] %s\n",devicesIntoDB[0]));
-                    tmp = calloc(1,sizeof(char));
-                    size_ = 0;
-                    name = str_split(devicesIntoDB[0],'|',&size_);
-               
-
-                    LogWarn((get_localtime_now()),("Start get list device need delete!!!\n"));
-                    LogInfo((get_localtime_now()),("    size_ %d\n",size_));
-
-                    for(i=0;i< (size_-1);i=i+2)
-                    {
-
-                        LogInfo((get_localtime_now()),("    name[%d] %s\n",i,*(name+i)));
-                        LogInfo((get_localtime_now()),("    name[%d] %s\n",i+1,*(name+i+1)));
-                        tmp_devices = calloc(LENGTH_DEVICE_ID+4,sizeof(char)); 
-                        append_String2String(&tmp_devices,*(name+i));
-                        append_String2String(&tmp_devices,"|");
-                        append_String2String(&tmp_devices,*(name+i+1));
-                        append_String2String(&tmp_devices,"|");
-                        if(tmp_devices == NULL)
-                        {
-                            LogError((get_localtime_now()),("Failed to get DeviceID from list devices from APP!\n"));
-                            break;
-                        }
-                        LogInfo((get_localtime_now()),("    devices[%d] %s\n",i,devices));
-                        LogInfo((get_localtime_now()),("    tmp_devices[%d] %s\n",i,tmp_devices));
-                        if(!isContainString(devices,tmp_devices))// no have into DB
-                        {
-                            LogInfo((get_localtime_now()),("    tmp_devices not into  devices\n"));
-                            append_String2String(&tmp,tmp_devices);
-                            LogInfo((get_localtime_now()),("    tmp[%d] %s\n",i,tmp));
-
-                            //add reponse check delete group normal
-                            pthread_mutex_lock(&mutex_lock_dataReponse_t);                           
-                            leng = 0;
-                            LogInfo((get_localtime_now()),("    name[%d] %s\n",i,*(name+i)));
-                            LogInfo((get_localtime_now()),("    dpid[%d] %s\n",i,*(name+i+1)));
-                            andressDevice = sql_getValueWithMultileCondition(&db,&leng,KEY_ADDRESS,TABLE_DEVICES,KEY_DEVICE_ID,*(name+i),KEY_DP_ID,*(name+i+1));
-                            if(leng > 0)
-                            {
-                                LogInfo((get_localtime_now()),("andressDevice[0] = %s\n",andressDevice[0]));
-                                add_JsonValueInfoActionNeedReponses(Json_Value_InfoActionNeedReponses,TYPE_DEL_GROUP_LINK,andressDevice[0],TimeCreat,TYPE_DEVICE_REPONSE_ADD_FROM_APP);
-                                add_JsonValueCheckReponses(Json_Value_checkReponses,TYPE_DEL_GROUP_LINK,groupAndress,andressDevice[0],TimeCreat);
-                                free_fields(andressDevice,leng);                            
+                        // Find all actions that are need to be added
+                        JSON* dpsNeedAdd = JSON_CreateArray();
+                        JSON_ForEach(newDp, newDps) {
+                            bool found = false;
+                            JSON_ForEach(oldDp, oldDps) {
+                                if (compareDp(oldDp, newDp)) {
+                                    found = true;
+                                    break;
+                                }
                             }
-                            else
-                            {
-                                LogError((get_localtime_now()),("Failed to get addressDevice form DeviceID\n"));
+                            if (!found) {
+                                cJSON_AddItemReferenceToArray(dpsNeedAdd, newDp);
                             }
-                            pthread_mutex_unlock(&mutex_lock_dataReponse_t);
-
-                            //remove GroupAddress into GroupList of Table DEVICES_INF in database
-
-
-
-
                         }
-                        else
-                        {
-                            LogInfo((get_localtime_now()),("    tmp_devices into  devices\n"));
-                        }
-                        free(tmp_devices);
-                    }   
-                   
-                    //push message to BLE service for delete
-                    if(strlen(tmp) != 0)
-                    {
-                        LogInfo((get_localtime_now()),("    list device delete = %s\n",tmp));
-                        LogInfo((get_localtime_now()),("    strlen(tmp) = %ld\n",strlen(tmp)));
-                        //push message to BLE_service
-                        replaceValuePayloadTranMOSQ(&payload, KEY_DEVICES_GROUP,tmp,object_string);
-                        LogWarn((get_localtime_now()),("payload = %s\n",payload));
-                        get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_DEL_GROUP_LINK,Extern);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_DEL_GROUP_LINK,MOSQ_ActResponse,Id,TimeCreat,payload);
-                        mqttLocalPublish(topic, message);
-                    }
-                    else
-                    {
-                        LogError((get_localtime_now()),("    list device delete is empty\n"));
-                    }
-                    if(size_ > 0) free_fields(name,size_);
-                    free(tmp);
-                    LogWarn((get_localtime_now()),("Stop get list device need delete!!!\n\n"));
 
-                    //update data devices in GROUP_INF
-                    sql_updateValueInTableWithCondition(&db,TABLE_GROUP_INF,KEY_DEVICES_GROUP,devices,KEY_ADDRESS_GROUP,groupAndress);
+                        // Send updated packet to BLE
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "groupAddr", groupAddr);
+                        JSON_SetObject(packet, "dpsNeedRemove", dpsNeedRemove);
+                        JSON_SetObject(packet, "dpsNeedAdd", dpsNeedAdd);
+                        sendPacketTo(SERVICE_BLE, type_action_t, packet);
+                        JSON_Delete(packet);
+                        Db_SaveGroupDevices(groupAddr, JSON_GetText(srcObj, "devices"));
+                    }
+                    JSON_Delete(localPacket);
+                    JSON_Delete(srcObj);
+                    free(devicesStr);
                     break;
                 }
-                case TYPE_MANAGER_PING_ON_OFF:
-                {
-                    get_topic(&topic,MOSQ_LayerService_Manager,MOSQ_NameService_Manager_ServieceManager,TYPE_MANAGER_PING_ON_OFF,Extern);
-                    getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_MANAGER_PING_ON_OFF,MOSQ_Reponse,Id,TimeCreat,object_string);
-                    mqttLocalPublish(topic, message);
+                case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY: {
                     break;
                 }
-                case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
-                {
-                    break;
-                }
-                case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_SUCCESS:
-                {
+                case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_SUCCESS: {
                     pthread_mutex_lock(&mutex_lock_dataReponse_t);                   
                     update_JsonValueInfoDevicesReponses(Json_Value_InfoActionNeedReponses,TYPE_ADD_DEVICE,json_object_get_string(json_object(object),KEY_DEVICE_ID),KEY_ACTIVE,TYPE_DEVICE_ADD_SUCCES_HC);
                     pthread_cond_broadcast(&UpdateReponse_Queue);
                     pthread_mutex_unlock(&mutex_lock_dataReponse_t);
                     break;                        
                 }
-                case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_UNSUCCESS:
-                {
+                case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_UNSUCCESS: {
                     pthread_mutex_lock(&mutex_lock_dataReponse_t);                   
                     update_JsonValueInfoDevicesReponses(Json_Value_InfoActionNeedReponses,TYPE_ADD_DEVICE,json_object_get_string(json_object(object),KEY_DEVICE_ID),KEY_ACTIVE,TYPE_DEVICE_ADD_UNSUCCES_HC);
                     pthread_cond_broadcast(&UpdateReponse_Queue);
@@ -1418,16 +1034,14 @@ int main( int argc,char ** argv )
                     break;                        
                 }
                 case GW_RESPONSE_SAVE_GATEWAY_RD:
-                case GW_RESPONSE_SAVE_GATEWAY_HG:
-                {
+                case GW_RESPONSE_SAVE_GATEWAY_HG: {
                     pthread_mutex_lock(&mutex_lock_dataReponse_t);
                     update_JsonValueInfoDevicesReponses(Json_Value_InfoActionNeedReponses,TYPE_ADD_DEVICE,json_object_get_string(json_object(object),KEY_DEVICE_ID),KEY_SAVE_GATEWAY,TYPE_DEVICE_ADD_SUCCES_HC);
                     pthread_cond_broadcast(&UpdateReponse_Queue);
                     pthread_mutex_unlock(&mutex_lock_dataReponse_t);
                     break;
                 }
-                case GW_RESPONSE_SCENE_LC_WRITE_INTO_DEVICE:
-                {
+                case GW_RESPONSE_SCENE_LC_WRITE_INTO_DEVICE: {
                     pthread_mutex_lock(&mutex_lock_dataReponse_t);
 
                     if(IsHaveAction_JsonValueCheckReponses(Json_Value_checkReponses,TYPE_ADD_SCENE_STRING) && !IsHaveAction_JsonValueCheckReponses(Json_Value_checkReponses,TYPE_DEL_SCENE_STRING))
@@ -1448,8 +1062,7 @@ int main( int argc,char ** argv )
                     pthread_mutex_unlock(&mutex_lock_dataReponse_t);
                     break;  
                 }
-                case GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE:
-                {
+                case GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE: {
                     pthread_mutex_lock(&mutex_lock_dataReponse_t); 
 
                     if(IsHaveAction_JsonValueCheckReponses(Json_Value_checkReponses,TYPE_ADD_SCENE_STRING) && !IsHaveAction_JsonValueCheckReponses(Json_Value_checkReponses,TYPE_DEL_SCENE_STRING))
@@ -1469,177 +1082,9 @@ int main( int argc,char ** argv )
                     pthread_mutex_unlock(&mutex_lock_dataReponse_t);
                     break;  
                 }
-                case GW_RESPONSE_DEVICE_KICKOUT:
-                {
-                    deviceID = json_object_get_string(json_object(object),KEY_DEVICE_ID);
-                    if(deviceID == NULL)
-                    {
-                        LogError((get_localtime_now()),("deviceID is empty!\n"));
-                        break;
-                    }
-                    leng   = sql_getNumberRowWithCondition(&db,TABLE_DEVICES_INF,KEY_DEVICE_ID,deviceID);
-                    LogInfo((get_localtime_now()),("    leng = %d\n",leng));
-                    if(leng == -1)
-                    {
-                        LogError((get_localtime_now()),("Get deviceID failed to database.\n"));
-                        break; 
-                    }
-                    else
-                    {
-                        //delete info device into scenes
-                        SceneList = delDeviceIntoScenes(&db,deviceID);
-                        if(strlen(SceneList) == 0)
-                        {
-                            LogError((get_localtime_now()),("Failed to delete info deviceID %s into scenes\n",deviceID));
-                        }
-                        else
-                        {
-                            //update info sceneID to AWS
-                            LogInfo((get_localtime_now()),("    SceneList need update = %s\n",SceneList));
-                            name = str_split(SceneList,'|',&size_);
-                            for(i=0;i<size_-1;i++)
-                            {
-                                //check info Scene after update  ->>> delete scene or retype scene if need
-                                LogInfo((get_localtime_now()),("    SceneID[%d]  = %s\n",i,*(name+i)));
-                                check_flag = checkTypeSceneWithInfoIntoDatabase(&db,*(name+i));
-                                if(check_flag)
-                                {
-                                    number = sql_getNumberRowWithCondition(&db,TABLE_SCENE_INF,KEY_ID_SCENE,*(name+i));
-                                    LogInfo((get_localtime_now()),("    number  = %d\n",number));
-                                    if(number == 0)
-                                    {
-                                        payload = NULL;
-                                        message = NULL;
-                                        topic = NULL;
-                                        getPayloadReponseDeleteSceneAWS(&payload,*(name+i));
-                                        get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_DEL_SCENE_HC,MOSQ_ActResponse);
-                                        getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_DEL_SCENE_HC,MOSQ_ActResponse,*(name+i),TimeCreat,payload);
-                                        LogInfo((get_localtime_now()),("    message = %s\n",message));
-                                        mqttLocalPublish(topic, message);
-                                    }
-                                    else
-                                    {
-                                        //push update AWS
-                                        getInfoSceneIdFromDatabase(&db,&dpValue,*(name+i));
-                                        LogInfo((get_localtime_now()),("    dpValue = %s\n",dpValue));
-                                        getPayloadReponseValueSceneAWS(&payload,SENDER_HC_VIA_CLOUD, TYPE_UPDATE_SCENE, dpValue);
-                                        LogInfo((get_localtime_now()),("    payload = %s\n",payload));
+                case GW_RESPONSE_DEVICE_KICKOUT: {
 
-                                        get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_UPDATE_SCENE,MOSQ_ActResponse);
-                                        getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_UPDATE_SCENE,MOSQ_ActResponse,*(name+i),TimeCreat,payload);
-                                        LogInfo((get_localtime_now()),("    message = %s\n",message));
-                                        mqttLocalPublish(topic, message);
-                                    }                               
-                                }
-                                else
-                                {
-                                    LogError((get_localtime_now()),("Failed to check info scene in database!\n"));
-                                }
-                            }
-                            free_fields(name,size_);
-                        }
-
-                        //delete info device into group
-                        GroupList =   delDeviceIntoGroups(&db,deviceID);
-                        if(strlen(GroupList) == 0)
-                        {
-                            LogError((get_localtime_now()),("Failed to delete info deviceID %s into scenes\n",deviceID));
-                        }
-                        else
-                        {
-                            //update info sceneID to AWS
-                            LogInfo((get_localtime_now()),("    GroupList need update = %s\n",GroupList));
-                            name = str_split(GroupList,'|',&size_);
-                            LogInfo((get_localtime_now()),("    size_ = %d\n",size_));
-                            for(i=0;i<size_-1;i++)
-                            {
-                                payload = NULL;
-                                //push update AWS
-
-                                devicesIntoDB = sql_getValueWithCondition(&db,&leng,KEY_DEVICES_GROUP,TABLE_GROUP_INF,KEY_ADDRESS_GROUP,*(name+i));
-
-                                if(strlen(devicesIntoDB[0]) == 0)
-                                {
-                                    //delete group
-                                    getPayloadReponseDeleteGroupAWS(&payload,*(name+i));
-                                    LogInfo((get_localtime_now()),("    payload = %s\n",payload));
-
-                                    get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_DEL_GROUP_LINK,MOSQ_ActResponse);
-                                    getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_DEL_GROUP_LINK,MOSQ_ActResponse,*(name+i),TimeCreat,payload);
-                                    LogInfo((get_localtime_now()),("    message = %s\n",message));
-                                    mqttLocalPublish(topic, message);
-                                }
-                                else
-                                {
-                                    //update info group
-                                    getPayloadReponseDevicesGroupAWS(&payload,*(name+i),devicesIntoDB[0]);
-                                    LogInfo((get_localtime_now()),("    payload = %s\n",payload));
-
-                                    get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_UPDATE_GROUP,MOSQ_ActResponse);
-                                    getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_UPDATE_GROUP,MOSQ_ActResponse,*(name+i),TimeCreat,payload);
-                                    LogInfo((get_localtime_now()),("    message = %s\n",message));
-                                    mqttLocalPublish(topic, message);
-                                }
-                            }
-                            free_fields(name,size_);
-                        }
-
-
-                        //get state Device into Database
-                        state = sql_getNumberWithCondition(&db,&leng,KEY_STATE,TABLE_DEVICES_INF,KEY_DEVICE_ID,deviceID);
-                        LogInfo((get_localtime_now()),("    state = %d\n",state));
-
-                        if(state == TYPE_DEVICE_ONLINE || state == TYPE_DEVICE_OFFLINE)
-                        {
-                            //push massege to AWS for delete device in Cloud
-                            get_topic(&topic,MOSQ_LayerService_App,SERVICE_AWS,GW_RESPONSE_DEVICE_KICKOUT,MOSQ_ActResponse);
-                            getPayloadReponseDeleteDeviceAWS(&payload,deviceID);
-                            LogInfo((get_localtime_now()),("    payload = %s\n",payload));
-                            getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,GW_RESPONSE_DEVICE_KICKOUT,MOSQ_ActResponse,deviceID,TimeCreat,payload);
-                            LogInfo((get_localtime_now()),("    message = %s\n",message));
-                            mqttLocalPublish(topic, message);
-                        }
-                        
-                        //delete device into database
-                        check_flag = delDevice(&db,deviceID);
-                        if(!check_flag)
-                        {
-                            LogError((get_localtime_now()),("Failed to delete  deviceID %s into database\n",deviceID));
-                        }
-                        sendInfoDeviceFromDatabase();
-                        //push message for Notifile
-                        topic = NULL;
-                        get_topic(&topic,MOSQ_LayerService_Support,MOSQ_NameService_Support_Notifile,type_action_t,MOSQ_Reponse);
-                        mqttLocalPublish(topic, message);
-                                        
-                        //push message to Rule
-                        topic = NULL;
-                        get_topic(&topic,MOSQ_LayerService_Support,MOSQ_NameService_Support_Rule_Schedule,TYPE_DEL_DEVICE,Extern);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_DEL_DEVICE,MOSQ_ActResponse,Id,TimeCreat,object_string);
-                        mqttLocalPublish(topic, message);
-
-                        if(topic != NULL) free(topic);
-                        if(message != NULL) free(message);
-                    }
                     break;  
-                }
-                case GW_RESPONSE_ADD_GROUP_LIGHT:
-                {
-                    deviceID = json_object_get_string(json_object(object),KEY_DEVICE_ID);
-                    char* groupAddr = json_object_get_string(json_object(object), "value");
-                    if(deviceID == NULL)
-                    {
-                        break;
-                    }
-                    pthread_mutex_lock(&mutex_lock_dataReponse_t);
-                    if (requestIsInRespList(TYPE_ADD_GROUP_NORMAL, groupAddr)) {
-                        updateDeviceRespStatus(TYPE_ADD_GROUP_NORMAL, groupAddr, deviceID, 1);
-                    } else if (requestIsInRespList(TYPE_ADD_GROUP_LINK, groupAddr)) {
-                        updateDeviceRespStatus(TYPE_ADD_GROUP_LINK, groupAddr, deviceID, 1);
-                    }
-                    pthread_cond_broadcast(&UpdateReponse_Queue);
-                    pthread_mutex_unlock(&mutex_lock_dataReponse_t);
-                    break;
                 }
             }
         } else if(size_queue == QUEUE_SIZE) {
@@ -2437,6 +1882,9 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
     JSON* srcObj = JSON_Parse(cloudPacket);
     JSON* destObj = JSON_CreateObject();
     JSON_SetNumber(destObj, "reqType", reqType);
+    if (JSON_HasObjectItem(srcObj, "provider")) {
+        JSON_SetNumber(destObj, "provider", JSON_GetNumber(srcObj, "provider"));
+    }
     if (JSON_HasObjectItem(srcObj, "deviceId")) {
         char* deviceId = JSON_GetText(srcObj, "deviceId");
         JSON_SetText(destObj, "deviceId", deviceId);
@@ -2468,7 +1916,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
             // Split deviceIds and make devices array in dest object
             list_t* splitList = String_Split(deviceIds, "|");
             JSON* devicesArray = JSON_AddArrayToObject(destObj, "devices");
-            if ((reqType == TYPE_ADD_GROUP_LINK || reqType == TYPE_DEL_GROUP_LINK) && splitList->count % 2 == 0) {
+            if ((reqType == TYPE_ADD_GROUP_LINK || reqType == TYPE_DEL_GROUP_LINK || reqType == TYPE_UPDATE_GROUP_LINK) && splitList->count % 2 == 0) {
                 JSON* arrayItem;
                 for (int i = 0; i < splitList->count; i++) {
                     if (i % 2 == 0) {
@@ -2493,7 +1941,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
                         }
                     }
                 }
-            } else if (reqType == TYPE_ADD_GROUP_NORMAL || reqType == TYPE_DEL_GROUP_NORMAL) {
+            } else if (reqType == TYPE_ADD_GROUP_NORMAL || reqType == TYPE_DEL_GROUP_NORMAL || reqType == TYPE_UPDATE_GROUP_NORMAL) {
                 for (int i = 0; i < splitList->count; i++) {
                     JSON* arrayItem = JSON_CreateObject();
                     DeviceInfo deviceInfo;
@@ -2532,3 +1980,63 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
     return destObj;
 }
 
+
+JSON* parseGroupLinkDevices(const char* devices) {
+    JSON* devicesArray = cJSON_CreateArray();
+    list_t* splitList = String_Split(devices, "|");
+    if (splitList->count % 2 == 0) {
+        JSON* arrayItem;
+        for (int i = 0; i < splitList->count; i++) {
+            if (i % 2 == 0) {
+                arrayItem = NULL;
+                DeviceInfo deviceInfo;
+                int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
+                if (foundDevices) {
+                    arrayItem = JSON_CreateObject();
+                    JSON_SetText(arrayItem, "deviceId", splitList->items[i]);
+                    JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+                }
+            } else if (arrayItem != NULL) {
+                int dpId = atoi(splitList->items[i]);
+                dp_info_t dpInfo;
+                int dpFounds = Db_FindDp(&dpInfo, JSON_GetText(arrayItem, "deviceId"), dpId);
+                if (dpFounds == 1) {
+                    JSON_SetNumber(arrayItem, "dpId", dpId);
+                    JSON_SetText(arrayItem, "dpAddr", dpInfo.addr);
+                    cJSON_AddItemToArray(devicesArray, arrayItem);
+                } else {
+                    JSON_Delete(arrayItem);
+                }
+            }
+        }
+    }
+    return devicesArray;
+}
+
+JSON* parseGroupNormalDevices(const char* devices) {
+    JSON* devicesArray = cJSON_CreateArray();
+    list_t* splitList = String_Split(devices, "|");
+    for (int i = 0; i < splitList->count; i++) {
+        JSON* arrayItem = JSON_CreateObject();
+        DeviceInfo deviceInfo;
+        int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
+        if (foundDevices) {
+            JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+        }
+        cJSON_AddItemToArray(devicesArray, arrayItem);
+    }
+    return devicesArray;
+}
+
+void SyncDevicesState() {
+    JSON* packet = JSON_CreateArray();
+    char sqlCmd[300];
+    sprintf(sqlCmd, "SELECT address FROM devices \
+                    JOIN devices_inf ON devices.deviceId = devices_inf.deviceId \
+                    WHERE instr('%s', pid) > 0 OR dpId='20';", HG_BLE);
+    Sql_Query(sqlCmd, row) {
+        char* dpAddr = sqlite3_column_text(row, 0);
+        JSON_ArrayAddText(packet, dpAddr);
+    }
+    sendPacketTo(SERVICE_BLE, TYPE_SYNC_DEVICE_STATE, packet);
+}

@@ -1,6 +1,7 @@
 #include "uart.h"
 #include "define.h"
 #include "execinfo.h"
+#include <stdbool.h>
 
 FILE *fptr;
 int UART0_Open(int fd,char* port)

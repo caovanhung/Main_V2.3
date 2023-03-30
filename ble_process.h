@@ -112,6 +112,9 @@ typedef struct
     char* value;
 }InfoDataUpdateDevice;
 
+// Send request to get the device ON/OFF state
+bool BLE_GetDeviceOnOffState(const char* dpAddr);
+
 /*
  * On/Off control
  * Models: HG_BLE_SWITCH_1, HG_BLE_SWITCH_2, HG_BLE_SWITCH_3, HG_BLE_SWITCH_4
@@ -124,7 +127,7 @@ int ble_controlOnOFF_SW(const char* dpAddr, uint8_t dpValue);
  *         RD_BLE_LIGHT_RGB (20), HG_BLE_CURTAIN_2_LAYER, HG_BLE_ROLLING_DOOR, HG_BLE_CURTAIN_NORMAL,
  *         LIGHT_GROUP (20)
  */
-int ble_controlOnOFF(int fd, const char *address_element, const char *state);
+int ble_controlOnOFF(const char *address_element, const char *state);
 
 /*
  * Control lightness and color temperature
@@ -132,24 +135,24 @@ int ble_controlOnOFF(int fd, const char *address_element, const char *state);
  *         RD_BLE_LIGHT_RGB (22,23),
  *         LIGHT_GROUP (22,23)
  */
-int ble_controlCTL(int fd, const char *address_element, int lightness, int colorTemperature);
+int ble_controlCTL(const char *address_element, int lightness, int colorTemperature);
 
 /*
  * Control HSL color of RGB light
  * Models: RD_BLE_LIGHT_RGB (24), LIGHT_GROUP (24)
  */
-int ble_controlHSL(int fd,const char *address_element, const char *HSL);
+int ble_controlHSL(const char *address_element, const char *HSL);
 
 /*
  * Control blink mode of RGB light
  * Models: RD_BLE_LIGHT_RGB (21), LIGHT_GROUP (21)
  */
-int ble_controlModeBlinkRGB(int fd, const char *address_element, const char *modeBlinkRgb);
+int ble_controlModeBlinkRGB(const char *address_element, const char *modeBlinkRgb);
 
 /*
  * Dim LED of switch
  */
-bool ble_dimLedSwitch_HOMEGY(int fd,const char *address_device, int lightness);
+bool ble_dimLedSwitch_HOMEGY(const char *address_device, int lightness);
 
 /*
  * Add/Delete a CCT light to/from a group
@@ -165,27 +168,27 @@ bool ble_addDeviceToGroupLink(const char *address_group, const char *address_dev
 /*
  * Lock agency
  */
-int ble_logDeivce(int fd, const char *address_element, int state);
+int ble_logDeivce(const char *address_element, int state);
 
 /*
  * Lock kids
  */
-int ble_logTouch(int fd, const char *address_element, char *element, int state);
+int ble_logTouch(const char *address_element, char *element, int state);
 
 /*
  * Add/delete local scene
  */
-bool ble_setSceneLocalToDeviceSwitch(int fd,const char* address_device,const char* sceneID, const char* dimLED,const char* element_count,const char* param);
-bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(int fd,const char* address_device,const char* sceneID);
-bool ble_setSceneLocalToDeviceLight_RANGDONG(int fd,const char* address_device,const char* sceneID,const char* modeBlinkRgb );
-bool ble_callSceneLocalToDevice(int fd,const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue);
-bool ble_delSceneLocalToDevice(int fd,const char* address_device,const char* sceneID);
-bool ble_setTimeForSensorPIR(int fd,const char* address_device,const char* time);
+bool ble_setSceneLocalToDeviceSwitch(const char* address_device,const char* sceneID, const char* dimLED,const char* element_count,const char* param);
+bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const char* sceneID);
+bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID,const char* modeBlinkRgb );
+bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue);
+bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID);
+bool ble_setTimeForSensorPIR(const char* address_device,const char* time);
 
 /*
  * Run a local scene
  */
-bool ble_callSceneLocalToHC(int fd, const char* address_device, const char* sceneID);
+bool ble_callSceneLocalToHC(const char* address_device, const char* sceneID);
 
 
 void BLE_PrintFrame(char* str, ble_rsp_frame_t* frame);
@@ -213,8 +216,8 @@ bool ble_getInfoProvison(provison_inf *PRV, JSON_Object *object);
 * out param:    NO
 *******************************************************************/
 bool ble_bindGateWay(provison_inf *PRV,int fd);
-bool ble_saveInforDeviceForGatewayRangDong(int fd,const char *address_t,const char *address_gateway);
-bool ble_saveInforDeviceForGatewayHomegy(int fd,const char *address_element_0,const char *address_gateway);
+bool ble_saveInforDeviceForGatewayRangDong(const char *address_t,const char *address_gateway);
+bool ble_saveInforDeviceForGatewayHomegy(const char *address_element_0,const char *address_gateway);
 bool creatFormReponseBLE(char **ResultTemplate);
 bool insertObjectReponseBLE(char **ResultTemplate, char *address,char *Id,long long TimeCreat,char *State);
 bool removeObjectReponseBLE(char **ResultTemplate,char *address);
@@ -223,14 +226,14 @@ bool  getStateReponseBLE(char **state,char *ResultTemplate,char *address);
 bool  getIdReponseBLE(char **Id,char *ResultTemplate,char *address);
 int get_count_element_of_DV(const char* pid_);
 void get_string_add_DV_write_GW(char **result,const char* address_device,const char* element_count,const char* deviceID);
-int set_inf_DV_for_GW(int fd,const char* address_device,const char* pid,const char* deviceID);
+int set_inf_DV_for_GW(const char* address_device,const char* pid,const char* deviceID);
 
 void ble_getStringControlOnOff_SW(char **result,const char* strAddress,const char* strState);
 
 void ble_getStringControlOnOff(char **result,const char* strAddress,const char* strState);
 
 
-int ble_controlOnOFF_NODELAY(int fd,const char *address_element,const char *state);
+int ble_controlOnOFF_NODELAY(const char *address_element,const char *state);
 
 
 
@@ -250,7 +253,7 @@ int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* origin
 int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame);
 
 void getStringResetDeviveSofware(char **result,const char* addressDevice);
-bool setResetDeviceSofware(int fd,const char *addressDevice);
+bool setResetDeviceSofware(const char *addressDevice);
 
 bool IsHasDeviceIntoDabase(const JSON_Value *object_devices,const char* deviceID);
 

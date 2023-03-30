@@ -84,6 +84,6 @@ char *get_localtime_now()
 	struct tm *info;
 	time( &rawtime );
 	info = localtime( &rawtime );
-	sprintf(g_currentTimeStr, "%d:%d:%d", info->tm_hour, info->tm_min, info->tm_sec);
+	sprintf(g_currentTimeStr, "%02d:%02d:%02d", info->tm_hour, info->tm_min, info->tm_sec);
 	return g_currentTimeStr;
 }

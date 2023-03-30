@@ -62,7 +62,7 @@ typedef struct
 	char *dictMeta;
 	char *dictDPs;
 	char *dictName;
-	char *senderid;
+	char *senderId;
 }Info_device;
 
 typedef struct  
@@ -111,6 +111,7 @@ typedef struct
 	const char *pid;
 	int state;
 	int provider;
+	char *senderId;
 	char *dictDPs;
 	const char *name;
 }Info_group;
@@ -134,7 +135,7 @@ typedef struct
 	int state;
 	
 	int sender;
-	char *senderid;
+	char *senderId;
 	char *object;
 	int provider;
 	int pageIndex;

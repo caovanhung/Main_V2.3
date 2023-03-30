@@ -13,6 +13,15 @@ char* StringCopy(char* dest, const char* src) {
     return NULL;
 }
 
+bool StringCompare(const char* str1, const char* str2) {
+    if (str1 && str2) {
+        if (strcmp(str1, str2) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 
 JSON_Object* JArray_FindStringValue(JSON_Array* array, const char* key, const char* value) {
     int arrayCount = json_array_get_count(array);

@@ -56,10 +56,6 @@ FILE *fptr;
 extern int fd;
 char rcv_uart_buff[MAXLINE];
 
-
-JSON_Value *Json_Value_InfoDevices = NULL;
-char *string_InfoAndress = "{}";
-
 struct mosquitto * mosq;
 struct Queue *queue_received;
 struct Queue *queue_UART;
@@ -74,29 +70,12 @@ pthread_cond_t dataUpdate_RX_Queue          = PTHREAD_COND_INITIALIZER;
 
 static char g_senderId[50] = {0};
 
-bool addSceneLC(const char* payload);
-bool delSceneLC(const char* payload);
-
-bool addDevice(const char* payload);
-
-bool addGroupNormal(const char* payload);
-bool delGroupNormal(const char* payload);
-bool updateGroupNormal(const char* payload);
-
-bool addGroupLink(const char* payload);
-bool delGroupLink(const char* payload);
-bool updateGroupLink(const char* payload);
-
+bool addSceneLC(JSON* packet);
+bool delSceneLC(JSON* packet);
 bool addSceneActions(const char* sceneId, JSON* actions);
 bool deleteSceneActions(const char* sceneId, JSON* actions);
 bool addSceneCondition(const char* sceneId, JSON* condition);
 bool deleteSceneCondition(const char* sceneId, JSON* condition);
-
-bool getInfoDeviceFromDatabase();
-char *getDeviceIDfromAddress(char *string_InfoAndress, char* address_);
-char *getDpIDfromAddress(char *string_InfoAndress, char* address_);
-char *getAndressFromDeviceID(char *string_InfoAndress, char* deviceID);
-char *getAndressDeviceFromDeviceID(JSON_Value *Json_Value_InfoDevices, char* deviceID);
 
 //Process reply UART from GW
 void* UART_RX_TASK(void* p)
@@ -202,202 +181,186 @@ void* UART_PROCESS_TASK(void* p)
             String2HexArr(recvPackage, msgHex);
             int frameCount = GW_SplitFrame(bleFrames, msgHex, strlen(recvPackage) / 2);
             logInfo("Parsing package. Found %d frames:", frameCount);
-            for (int i = 0; i < frameCount; i++)
-            {
+            for (int i = 0; i < frameCount; i++) {
                 // Print the frame information
                 char str[3000];
                 BLE_PrintFrame(str, &bleFrames[i]);
                 struct state_element *tmp = malloc(sizeof(struct state_element));
                 InfoDataUpdateDevice *InfoDataUpdateDevice_t = malloc(sizeof(InfoDataUpdateDevice));
                 int type_devices_repons = check_form_recived_from_RX(tmp, &bleFrames[i]);
-                char *deviceID  = getDeviceIDfromAddress(string_InfoAndress, tmp->address_element);
                 logInfo("Frame #%d: type: %d, %s", i, type_devices_repons, str);
-                if (deviceID || deviceID == NULL || type_devices_repons == GW_RESPONSE_SET_TIME_SENSOR_PIR ||
-                    type_devices_repons == GW_RESPONSE_ACTIVE_DEVICE_HG_RD_UNSUCCESS ||
-                    type_devices_repons == GW_RESPONSE_ACTIVE_DEVICE_HG_RD_SUCCESS ||
-                    type_devices_repons == GW_RESPONSE_SAVE_GATEWAY_HG ||
-                    type_devices_repons == GW_RESPONSE_SAVE_GATEWAY_RD) {
-                    if (type_devices_repons != GW_RESPONSE_UNKNOW)
-                    {
-                        long long TimeCreat = 0;
-                        char response = 0;
-                        char *topic;
-                        char payload[1000];
-                        char *message;
-                        char *state;
-                        char *Id;
-
-                        switch(type_devices_repons)
-                        {
-                            case GW_RESPONSE_DEVICE_STATE:
-                            {
-                                JSON* packet = JSON_CreateObject();
-                                JSON* devicesArray = JSON_AddArrayToObject(packet, "devices");
-                                JSON* arrayItem = JSON_ArrayAddObject(devicesArray);
-                                JSON_SetText(arrayItem, "deviceAddr", tmp->address_element);
-                                int onlineState = bleFrames[i].onlineState? TYPE_DEVICE_ONLINE : TYPE_DEVICE_OFFLINE;
-                                JSON_SetNumber(arrayItem, "deviceState", onlineState);
-                                if (bleFrames[i].sendAddr2 != 0) {
-                                    arrayItem = JSON_ArrayAddObject(devicesArray);
-                                    char str[5];
-                                    sprintf(str, "%04x", bleFrames[i].sendAddr2);
-                                    JSON_SetText(arrayItem, "deviceAddr", str);
-                                    onlineState = bleFrames[i].onlineState2? TYPE_DEVICE_ONLINE : TYPE_DEVICE_OFFLINE;
-                                    JSON_SetNumber(arrayItem, "deviceState", onlineState);
-                                }
-                                sendPacketTo(SERVICE_CORE, GW_RESPONSE_DEVICE_STATE, packet);
-                                JSON_Delete(packet);
-                                break;
-                            }
-
-                            case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
-                            case GW_RESPONSE_DEVICE_CONTROL: {
-                                JSON* packet = JSON_CreateObject();
-                                JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                                JSON_SetText(packet, "dpAddr", tmp->address_element);
-                                JSON_SetNumber(packet, "dpValue", tmp->dpValue);
-                                if (g_senderId[0] != 0) {
-                                    JSON_SetNumber(packet, "causeType", 1);
-                                    JSON_SetText(packet, "causeId", g_senderId);
-                                } else {
-                                    JSON_SetNumber(packet, "causeType", tmp->causeType);
-                                    JSON_SetText(packet, "causeId", tmp->causeId);
-                                }
-                                sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
-                                JSON_Delete(packet);
-                                g_senderId[0] = 0;
-                                break;
-                            }
-                            case GW_RESPONSE_SMOKE_SENSOR:
-                                logInfo("GW_RESPONSE_SMOKE_SENSOR");
-                                uint8_t hasSmoke = bleFrames[i].param[1];
-                                uint8_t battery = bleFrames[i].param[2]? 100 : 0;
-
-                                // Send smoke detection to core service
-                                JSON* packet = JSON_CreateObject();
-                                JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                                JSON_SetNumber(packet, "dpId", TYPE_DPID_SMOKE_SENSOR_DETECT);
-                                JSON_SetNumber(packet, "dpValue", hasSmoke);
-                                sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
-                                JSON_Delete(packet);
-
-                                // Send battery to core service
-                                packet = JSON_CreateObject();
-                                JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                                JSON_SetNumber(packet, "dpId", TYPE_DPID_SMOKE_SENSOR_BATTERY);
-                                JSON_SetNumber(packet, "dpValue", battery);
-                                sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
-                                JSON_Delete(packet);
-                                break;
-                            case GW_RESPONSE_SENSOR_ENVIRONMENT: {
-                                logInfo("GW_RESPONSE_SENSOR_ENVIRONMENT");
-                                uint16_t temperature = ((uint16_t)bleFrames[i].param[1] << 8) | bleFrames[i].param[2];
-                                uint16_t humidity = ((uint16_t)bleFrames[i].param[3] << 8) | bleFrames[i].param[4];
-
-                                // Send temperature to core service
-                                JSON* packet = JSON_CreateObject();
-                                JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                                JSON_SetNumber(packet, "dpId", TYPE_DPID_ENVIRONMENT_SENSOR_TEMPER);
-                                JSON_SetNumber(packet, "dpValue", (double)temperature);
-                                sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
-                                JSON_Delete(packet);
-
-                                // Send battery to core service
-                                packet = JSON_CreateObject();
-                                JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                                JSON_SetNumber(packet, "dpId", TYPE_DPID_ENVIRONMENT_SENSOR_HUMIDITY);
-                                JSON_SetNumber(packet, "dpValue", (double)humidity);
-                                sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
-                                JSON_Delete(packet);
-                                break;
-                            }
-                            case GW_RESPONSE_SENSOR_DOOR_ALARM:
-                            case GW_RESPONSE_SENSOR_DOOR_DETECT: {
-                                logInfo("GW_RESPONSE_SENSOR_DOOR");
-                                // Send information to core service
-                                JSON* packet = JSON_CreateObject();
-                                JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                                if (type_devices_repons == GW_RESPONSE_SENSOR_DOOR_ALARM) {
-                                    JSON_SetNumber(packet, "dpId", TYPE_DPID_DOOR_SENSOR_ALRM);
-                                    JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]);
-                                } else {
-                                    JSON_SetNumber(packet, "dpId", TYPE_DPID_DOOR_SENSOR_DETECT);
-                                    JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]? 0 : 1);
-                                }
-                                sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
-                                JSON_Delete(packet);
-                                break;
-                            }
-                            case GW_RESPONSE_SENSOR_BATTERY: {
-                                logInfo("GW_RESPONSE_SENSOR_BATTERY");
-                                JSON* packet = JSON_CreateObject();
-                                JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                                JSON_SetNumber(packet, "dpId", TYPE_DPID_BATTERY_SENSOR);
-                                JSON_SetNumber(packet, "dpValue", bleFrames[i].param[2]);
-                                sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
-                                JSON_Delete(packet);
-                                break;
-                            }
-                            case GW_RESPONSE_SENSOR_PIR_DETECT: {
-                                logInfo("GW_RESPONSE_SENSOR_PIR_DETECT");
-                                JSON* packet = JSON_CreateObject();
-                                JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                                JSON_SetNumber(packet, "dpId", TYPE_DPID_PIR_SENSOR_DETECT);
-                                JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]);
-                                sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
-                                JSON_Delete(packet);
-                                break;
-                            }
-                            case GW_RESPONSE_SENSOR_PIR_LIGHT: {
-                                logInfo("GW_RESPONSE_SENSOR_PIR_LIGHT");
-                                JSON* packet = JSON_CreateObject();
-                                uint16_t lightIntensity = ((uint16_t)bleFrames[i].param[1] << 8) | bleFrames[i].param[2];
-                                JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                                JSON_SetNumber(packet, "dpId", TYPE_DPID_PIR_SENSOR_LUX);
-                                JSON_SetNumber(packet, "dpValue", lightIntensity);
-                                sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
-                                JSON_Delete(packet);
-                                break;
-                            }
-                            case GW_RESPONSE_SET_TIME_SENSOR_PIR:
-                            case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_UNSUCCESS:
-                            case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_SUCCESS:
-                            case GW_RESPONSE_SAVE_GATEWAY_HG:
-                            case GW_RESPONSE_SAVE_GATEWAY_RD:
-                            {
-                                InfoDataUpdateDevice_t->type_reponse = TYPE_DATA_REPONSE_STATE;
-                                InfoDataUpdateDevice_t->deviceID = tmp->address_element;
-                                InfoDataUpdateDevice_t->value = tmp->value;
-                                InfoDataUpdateDevice_t->dpID = tmp->address_element;
-                                response = type_devices_repons;
-                                break;
-                            }
-
-                            case GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE:
-                            case GW_RESPONSE_SCENE_LC_WRITE_INTO_DEVICE:
-                            case GW_RESPONSE_DEVICE_KICKOUT:
-                            {
-                                InfoDataUpdateDevice_t->type_reponse = TYPE_DATA_REPONSE_STATE;
-                                InfoDataUpdateDevice_t->deviceID = (char *)deviceID;
-                                InfoDataUpdateDevice_t->value = tmp->value;
-                                InfoDataUpdateDevice_t->dpID = tmp->address_element;
-                                response = type_devices_repons;
-                                break;
-                            }
-                            case GW_RESPONSE_ADD_GROUP_LIGHT: {
-                                LogInfo((get_localtime_now()),("GW_RESPONSE_ADD_GROUP_LIGHT"));
-                                InfoDataUpdateDevice_t->type_reponse = TYPE_DATA_REPONSE_STATE;
-                                InfoDataUpdateDevice_t->deviceID = tmp->address_element;
-                                InfoDataUpdateDevice_t->dpID = TYPE_DPID_CTR_LIGHT;
-                                InfoDataUpdateDevice_t->value = tmp->value;
-                                response = type_devices_repons;
-                                break;
-                            }
-                            default:
-                                LogError((get_localtime_now()),("Error detect"));
-                                break;
+                switch(type_devices_repons) {
+                    case GW_RESPONSE_DEVICE_STATE: {
+                        JSON* packet = JSON_CreateObject();
+                        JSON* devicesArray = JSON_AddArrayToObject(packet, "devices");
+                        JSON* arrayItem = JSON_ArrayAddObject(devicesArray);
+                        JSON_SetText(arrayItem, "deviceAddr", tmp->address_element);
+                        int onlineState = bleFrames[i].onlineState? TYPE_DEVICE_ONLINE : TYPE_DEVICE_OFFLINE;
+                        JSON_SetNumber(arrayItem, "deviceState", onlineState);
+                        if (bleFrames[i].sendAddr2 != 0) {
+                            arrayItem = JSON_ArrayAddObject(devicesArray);
+                            char str[5];
+                            sprintf(str, "%04x", bleFrames[i].sendAddr2);
+                            JSON_SetText(arrayItem, "deviceAddr", str);
+                            onlineState = bleFrames[i].onlineState2? TYPE_DEVICE_ONLINE : TYPE_DEVICE_OFFLINE;
+                            JSON_SetNumber(arrayItem, "deviceState", onlineState);
                         }
+                        sendPacketTo(SERVICE_CORE, GW_RESPONSE_DEVICE_STATE, packet);
+                        JSON_Delete(packet);
+                        break;
                     }
+
+                    case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
+                    case GW_RESPONSE_DEVICE_CONTROL: {
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        JSON_SetText(packet, "dpAddr", tmp->address_element);
+                        JSON_SetNumber(packet, "dpValue", tmp->dpValue);
+                        if (g_senderId[0] != 0) {
+                            JSON_SetNumber(packet, "causeType", 1);
+                            JSON_SetText(packet, "causeId", g_senderId);
+                        } else {
+                            JSON_SetNumber(packet, "causeType", tmp->causeType);
+                            JSON_SetText(packet, "causeId", tmp->causeId);
+                        }
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+                        g_senderId[0] = 0;
+                        break;
+                    }
+                    case GW_RESPONSE_SMOKE_SENSOR: {
+                        logInfo("GW_RESPONSE_SMOKE_SENSOR");
+                        uint8_t hasSmoke = bleFrames[i].param[1];
+                        uint8_t battery = bleFrames[i].param[2]? 100 : 0;
+
+                        // Send smoke detection to core service
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        JSON_SetNumber(packet, "dpId", TYPE_DPID_SMOKE_SENSOR_DETECT);
+                        JSON_SetNumber(packet, "dpValue", hasSmoke);
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+
+                        // Send battery to core service
+                        packet = JSON_CreateObject();
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        JSON_SetNumber(packet, "dpId", TYPE_DPID_SMOKE_SENSOR_BATTERY);
+                        JSON_SetNumber(packet, "dpValue", battery);
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+                        break;
+                    }
+                    case GW_RESPONSE_SENSOR_ENVIRONMENT: {
+                        logInfo("GW_RESPONSE_SENSOR_ENVIRONMENT");
+                        uint16_t temperature = ((uint16_t)bleFrames[i].param[1] << 8) | bleFrames[i].param[2];
+                        uint16_t humidity = ((uint16_t)bleFrames[i].param[3] << 8) | bleFrames[i].param[4];
+
+                        // Send temperature to core service
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        JSON_SetNumber(packet, "dpId", TYPE_DPID_ENVIRONMENT_SENSOR_TEMPER);
+                        JSON_SetNumber(packet, "dpValue", (double)temperature);
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+
+                        // Send battery to core service
+                        packet = JSON_CreateObject();
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        JSON_SetNumber(packet, "dpId", TYPE_DPID_ENVIRONMENT_SENSOR_HUMIDITY);
+                        JSON_SetNumber(packet, "dpValue", (double)humidity);
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+                        break;
+                    }
+                    case GW_RESPONSE_SENSOR_DOOR_ALARM:
+                    case GW_RESPONSE_SENSOR_DOOR_DETECT: {
+                        logInfo("GW_RESPONSE_SENSOR_DOOR");
+                        // Send information to core service
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        if (type_devices_repons == GW_RESPONSE_SENSOR_DOOR_ALARM) {
+                            JSON_SetNumber(packet, "dpId", TYPE_DPID_DOOR_SENSOR_ALRM);
+                            JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]);
+                        } else {
+                            JSON_SetNumber(packet, "dpId", TYPE_DPID_DOOR_SENSOR_DETECT);
+                            JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]? 0 : 1);
+                        }
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+                        break;
+                    }
+                    case GW_RESPONSE_SENSOR_BATTERY: {
+                        logInfo("GW_RESPONSE_SENSOR_BATTERY");
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        JSON_SetNumber(packet, "dpId", TYPE_DPID_BATTERY_SENSOR);
+                        JSON_SetNumber(packet, "dpValue", bleFrames[i].param[2]);
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+                        break;
+                    }
+                    case GW_RESPONSE_SENSOR_PIR_DETECT: {
+                        logInfo("GW_RESPONSE_SENSOR_PIR_DETECT");
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        JSON_SetNumber(packet, "dpId", TYPE_DPID_PIR_SENSOR_DETECT);
+                        JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]);
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+                        break;
+                    }
+                    case GW_RESPONSE_SENSOR_PIR_LIGHT: {
+                        logInfo("GW_RESPONSE_SENSOR_PIR_LIGHT");
+                        JSON* packet = JSON_CreateObject();
+                        uint16_t lightIntensity = ((uint16_t)bleFrames[i].param[1] << 8) | bleFrames[i].param[2];
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        JSON_SetNumber(packet, "dpId", TYPE_DPID_PIR_SENSOR_LUX);
+                        JSON_SetNumber(packet, "dpValue", lightIntensity);
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+                        break;
+                    }
+                    case GW_RESPONSE_SET_TIME_SENSOR_PIR:
+                    case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_UNSUCCESS:
+                    case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_SUCCESS:
+                    case GW_RESPONSE_SAVE_GATEWAY_HG:
+                    case GW_RESPONSE_SAVE_GATEWAY_RD:
+                    {
+                        // InfoDataUpdateDevice_t->type_reponse = TYPE_DATA_REPONSE_STATE;
+                        // InfoDataUpdateDevice_t->deviceID = tmp->address_element;
+                        // InfoDataUpdateDevice_t->value = tmp->value;
+                        // InfoDataUpdateDevice_t->dpID = tmp->address_element;
+                        // response = type_devices_repons;
+                        break;
+                    }
+
+                    case GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE:
+                    case GW_RESPONSE_SCENE_LC_WRITE_INTO_DEVICE:
+                    case GW_RESPONSE_DEVICE_KICKOUT:
+                    {
+                        // InfoDataUpdateDevice_t->type_reponse = TYPE_DATA_REPONSE_STATE;
+                        // InfoDataUpdateDevice_t->deviceID = (char *)deviceID;
+                        // InfoDataUpdateDevice_t->value = tmp->value;
+                        // InfoDataUpdateDevice_t->dpID = tmp->address_element;
+                        // response = type_devices_repons;
+                        break;
+                    }
+                    case GW_RESPONSE_ADD_GROUP_LIGHT: {
+                        logInfo("GW_RESPONSE_ADD_GROUP_LIGHT");
+                        char deviceAddr[10];
+                        char groupAddr[10];
+                        sprintf(deviceAddr, "%02X%02X", bleFrames[i].param[1], bleFrames[i].param[2]);
+                        sprintf(groupAddr, "%02X%02X", bleFrames[i].param[3], bleFrames[i].param[4]);
+                        JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "deviceAddr", deviceAddr);
+                        JSON_SetText(packet, "groupAddr", groupAddr);
+                        sendPacketTo(SERVICE_CORE, type_devices_repons, packet);
+                        JSON_Delete(packet);
+                        break;
+                    }
+                    default:
+                        LogError((get_localtime_now()),("Error detect"));
+                        break;
                 }
             }
         }
@@ -467,8 +430,9 @@ int main( int argc,char ** argv )
         LogError((get_localtime_now()),("mutex init has failed"));
         return 1;
     }
-    usleep(50000);
-
+    sleep(1);
+    // Send request to CORE service to ask it sending request to sync device state
+    sendToService(SERVICE_CORE, TYPE_SYNC_DEVICE_STATE, "");
     while(xRun!=0)
     {
         pthread_mutex_lock(&mutex_lock_t);
@@ -502,11 +466,11 @@ int main( int argc,char ** argv )
                         if (isContainString(HG_BLE_SWITCH, pid)) {
                             ble_controlOnOFF_SW(dpAddr, dpValue);
                         } else if (isContainString(HG_BLE_CURTAIN, pid) || dpId == 20) {
-                            ble_controlOnOFF(fd, dpAddr, valueStr);
+                            ble_controlOnOFF(dpAddr, valueStr);
                         } else if (dpId == 24) {
-                            ble_controlHSL(fd, dpAddr, valueStr);
+                            ble_controlHSL(dpAddr, valueStr);
                         } else if (dpId == 21) {
-                            ble_controlModeBlinkRGB(fd, dpAddr, valueStr);
+                            ble_controlModeBlinkRGB(dpAddr, valueStr);
                         } else if (dpId == 22) {
                             lightness = dpValue;
                         } else if (dpId == 23) {
@@ -514,7 +478,7 @@ int main( int argc,char ** argv )
                         }
 
                         if (lightness >= 0 && colorTemperature >= 0) {
-                            ble_controlCTL(fd, dpAddr, lightness, colorTemperature);
+                            ble_controlCTL(dpAddr, lightness, colorTemperature);
                         }
                     }
                     break;
@@ -525,24 +489,40 @@ int main( int argc,char ** argv )
                     int state = JSON_GetNumber(payload, "state");
                     if (sceneType == SceneTypeManual) {
                         logInfo("Executing LC scene %s", sceneId);
-                        ble_callSceneLocalToHC(fd, "FFFF", sceneId);
+                        ble_callSceneLocalToHC("FFFF", sceneId);
                     } else {
                         // Enable/Disable scene
                     }
                     break;
                 }
                 case TYPE_ADD_GROUP_NORMAL:
-                case TYPE_DEL_GROUP_NORMAL:
-                    groupAddr = JSON_GetText(payload, "groupAddr");
-                    cJSON* devices = cJSON_GetObjectItem(payload, "devices");
-                    JSON_ForEach(o, devices) {
+                case TYPE_DEL_GROUP_NORMAL: {
+                    char* groupAddr = JSON_GetText(payload, "groupAddr");
+                    JSON* devicesArray = JSON_GetObject(payload, "devices");
+                    JSON_ForEach(device, devicesArray) {
+                        char* deviceAddr = JSON_GetText(device, "deviceAddr");
                         if (reqType == TYPE_ADD_GROUP_NORMAL) {
-                            ble_addDeviceToGroupLightCCT_HOMEGY(groupAddr, o->valuestring, o->valuestring);
+                            ble_addDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
                         } else {
-                            ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, o->valuestring, o->valuestring);
+                            ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
                         }
                     }
                     break;
+                }
+                case TYPE_UPDATE_GROUP_NORMAL: {
+                    char* groupAddr = JSON_GetText(payload, "groupAddr");
+                    JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
+                    JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
+                    JSON_ForEach(dpNeedRemove, dpsNeedRemove) {
+                        char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
+                        ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                    }
+                    JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
+                        char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
+                        ble_addDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                    }
+                    break;
+                }
                 case TYPE_DEL_GROUP_LINK:
                 case TYPE_ADD_GROUP_LINK: {
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
@@ -558,30 +538,45 @@ int main( int argc,char ** argv )
                     }
                     break;
                 }
+                case TYPE_UPDATE_GROUP_LINK: {
+                    char* groupAddr = JSON_GetText(payload, "groupAddr");
+                    JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
+                    JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
+                    JSON_ForEach(dpNeedRemove, dpsNeedRemove) {
+                        char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
+                        char* dpAddr = JSON_GetText(dpNeedRemove, "dpAddr");
+                        ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, dpAddr);
+                    }
+                    JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
+                        char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
+                        char* dpAddr = JSON_GetText(dpNeedAdd, "dpAddr");
+                        ble_addDeviceToGroupLink(groupAddr, deviceAddr, dpAddr);
+                    }
+                    break;
+                }
                 case TYPE_ADD_DEVICE: {
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                     char* devicePid = JSON_GetText(payload, "devicePid");
                     char* deviceKey = JSON_GetText(payload, "deviceKey");
-                    set_inf_DV_for_GW(fd, deviceAddr, devicePid, deviceKey);
+                    set_inf_DV_for_GW(deviceAddr, devicePid, deviceKey);
                     break;
                 }
                 case TYPE_DEL_DEVICE: {
                     char* deviceId = JSON_GetText(payload, "deviceId");
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                     if (deviceAddr) {
-                        setResetDeviceSofware(fd, "d401");
-                        setResetDeviceSofware(fd, deviceAddr);
+                        setResetDeviceSofware(deviceAddr);
                         logInfo("Deleted deviceId: %s, address: %s", deviceId, deviceAddr);
                     }
                     break;
                 }
                 case TYPE_ADD_SCENE:
                 {
-                    addSceneLC(recvMsg);
+                    addSceneLC(payload);
                     break;
                 }
                 case TYPE_DEL_SCENE: {
-                    delSceneLC(recvMsg);
+                    delSceneLC(payload);
                     break;
                 }
                 case TYPE_UPDATE_SCENE:
@@ -603,7 +598,12 @@ int main( int argc,char ** argv )
                     }
                     break;
                 }
-
+                case TYPE_SYNC_DEVICE_STATE: {
+                    JSON_ForEach(dpAddr, payload) {
+                        BLE_GetDeviceOnOffState(dpAddr->valuestring);
+                    }
+                    break;
+                }
             }
             cJSON_Delete(recvPacket);
             cJSON_Delete(payload);
@@ -700,20 +700,6 @@ int main( int argc,char ** argv )
             //         }
             //         break;
             //     }
-            //     case TYPE_UPDATE_GROUP_NORMAL:
-            //     {
-            //         updateGroupNormal(object_string);
-            //         break;
-            //     }
-            //     case TYPE_UPDATE_GROUP_LINK:
-            //     {
-            //         updateGroupLink(object_string);
-            //         break;
-            //     }
-            //     default:
-            //     {
-            //         break;
-            //     }
             // }
         }
         else if(size_queue == MAX_SIZE_NUMBER_QUEUE)
@@ -788,18 +774,18 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                     LogInfo((get_localtime_now()),("    [addSceneLC] param = %s",param));
                     LogInfo((get_localtime_now()),("    [addSceneLC] element_count = %s",element_count));
                     LogInfo((get_localtime_now()),("    [addSceneLC] deviceAddr = %s", deviceAddr));
-                    ble_setSceneLocalToDeviceSwitch(fd, deviceAddr, sceneId, "64", element_count, param);
+                    ble_setSceneLocalToDeviceSwitch(deviceAddr, sceneId, "64", element_count, param);
                     sleep(1);
                     strcat(commonDevices, deviceAddr);
                 }
             } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
-                ble_setSceneLocalToDeviceLight_RANGDONG(fd, deviceAddr, sceneId, "0x00");
+                ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x00");
                 sleep(1);
             } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
-                ble_setSceneLocalToDeviceLight_RANGDONG(fd, deviceAddr, sceneId, "0x01");
+                ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x01");
                 sleep(1);
             } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
-                ble_setSceneLocalToDeviceLightCCT_HOMEGY(fd, deviceAddr, sceneId);
+                ble_setSceneLocalToDeviceLightCCT_HOMEGY(deviceAddr, sceneId);
                 sleep(1);
             }
         }
@@ -808,20 +794,22 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
 }
 
 bool deleteSceneActions(const char* sceneId, JSON* actions) {
-    size_t actionCount = JSON_ArrayCount(actions);
-    char commonDevices[1200] = {'\0'};
-    uint8_t  i = 0;
-    for (i = 0; i < actionCount; i++) {
-        LogInfo((get_localtime_now()),("[ACTION %d]", i));
-        JSON* action     = JSON_ArrayGetObject(actions, i);
-        char* deviceAddr = JSON_GetText(action, "entityAddr");
-        LogInfo((get_localtime_now()),("    [deleteSceneActions] deviceAddr  = %s", deviceAddr));
-        LogInfo((get_localtime_now()),("    [deleteSceneActions] commonDevices = %s", commonDevices));
-        if (deviceAddr != NULL) {
-            if (!isContainString(commonDevices, deviceAddr)) {
-                ble_delSceneLocalToDevice(fd, deviceAddr, sceneId);
-                sleep(1);
-                strcat(commonDevices, deviceAddr);
+    if (sceneId && actions) {
+        size_t actionCount = JSON_ArrayCount(actions);
+        char commonDevices[1200] = {'\0'};
+        uint8_t  i = 0;
+        for (i = 0; i < actionCount; i++) {
+            LogInfo((get_localtime_now()),("[ACTION %d]", i));
+            JSON* action     = JSON_ArrayGetObject(actions, i);
+            char* deviceAddr = JSON_GetText(action, "entityAddr");
+            LogInfo((get_localtime_now()),("    [deleteSceneActions] deviceAddr  = %s", deviceAddr));
+            LogInfo((get_localtime_now()),("    [deleteSceneActions] commonDevices = %s", commonDevices));
+            if (deviceAddr != NULL) {
+                if (!isContainString(commonDevices, deviceAddr)) {
+                    ble_delSceneLocalToDevice(deviceAddr, sceneId);
+                    sleep(1);
+                    strcat(commonDevices, deviceAddr);
+                }
             }
         }
     }
@@ -829,525 +817,62 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
 }
 
 bool addSceneCondition(const char* sceneId, JSON* condition) {
-    char *pid = JSON_GetText(condition, "pid");
-    char *dpAddr = JSON_GetText(condition, "dpAddr");
-    int dpValue   = JSON_GetNumber(condition, "dpValue");
-    if (isMatchString(pid, HG_BLE_SENSOR_MOTION)) {
-        if (dpValue == 0) {
-            ble_callSceneLocalToDevice(fd, dpAddr, sceneId, "00", 0);
+    if (sceneId && condition) {
+        char *pid = JSON_GetText(condition, "pid");
+        char *dpAddr = JSON_GetText(condition, "dpAddr");
+        int dpValue   = JSON_GetNumber(condition, "dpValue");
+        if (isMatchString(pid, HG_BLE_SENSOR_MOTION)) {
+            if (dpValue == 0) {
+                ble_callSceneLocalToDevice(dpAddr, sceneId, "00", 0);
+            } else {
+                ble_callSceneLocalToDevice(dpAddr, sceneId, "01", 0);
+            }
         } else {
-            ble_callSceneLocalToDevice(fd, dpAddr, sceneId, "01", 0);
+            ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
         }
-    } else {
-        ble_callSceneLocalToDevice(fd, dpAddr, sceneId, "01", dpValue);
     }
     return true;
 }
 
 bool deleteSceneCondition(const char* sceneId, JSON* condition) {
-    char* p = cJSON_PrintUnformatted(condition);
-    char* dpAddr = JSON_GetText(condition, "dpAddr");
-    int dpValue  = JSON_GetNumber(condition, "dpValue");
-    ble_callSceneLocalToDevice(fd, dpAddr, "0000", "00", dpValue);
-    sleep(1);
+    if (sceneId && condition) {
+        char* p = cJSON_PrintUnformatted(condition);
+        char* dpAddr = JSON_GetText(condition, "dpAddr");
+        int dpValue  = JSON_GetNumber(condition, "dpValue");
+        ble_callSceneLocalToDevice(dpAddr, "0000", "00", dpValue);
+        sleep(1);
+    }
     return true;
 }
 
-bool addSceneLC(const char* payload) {
+bool addSceneLC(JSON* packet) {
     bool ret = false;
-    JSON* packet  = JSON_Parse(payload);
-    char* sceneId = JSON_GetText(packet, "id");
-    int sceneType = String2Int(JSON_GetText(packet, "sceneType"));
-    JSON* actions = JSON_GetObject(packet, "actions");
-    JSON* conditions = JSON_GetObject(packet, "conditions");
-    ret = addSceneActions(sceneId, actions);
-    if (ret && sceneType == SceneTypeOneOfConds) {
-        JSON* condition = JSON_ArrayGetObject(conditions, 0);
-        ret = addSceneCondition(sceneId, condition);
+    if (packet) {
+        char* sceneId = JSON_GetText(packet, "id");
+        int sceneType = String2Int(JSON_GetText(packet, "sceneType"));
+        JSON* actions = JSON_GetObject(packet, "actions");
+        JSON* conditions = JSON_GetObject(packet, "conditions");
+        ret = addSceneActions(sceneId, actions);
+        if (ret && sceneType == SceneTypeOneOfConds) {
+            JSON* condition = JSON_ArrayGetObject(conditions, 0);
+            ret = addSceneCondition(sceneId, condition);
+        }
     }
-
-    JSON_Delete(packet);
     return ret;
 }
 
-bool delSceneLC(const char* payload) {
+bool delSceneLC(JSON* packet) {
     bool ret = false;
-    JSON* packet = JSON_Parse(payload);
-    char* sceneId = JSON_GetText(packet, "sceneId");
-    JSON* actions = JSON_GetObject(packet, "actions");
-    JSON* conditions = JSON_GetObject(packet, "conditions");
-    logInfo("[delSceneLC] sceneId = %s", sceneId);
-    ret = deleteSceneActions(sceneId, actions);
-    if (ret) {
-        JSON* condition = JSON_ArrayGetObject(conditions, 0);
-        ret = deleteSceneCondition(sceneId, condition);
+    if (packet) {
+        char* sceneId = JSON_GetText(packet, "sceneId");
+        JSON* actions = JSON_GetObject(packet, "actions");
+        JSON* conditions = JSON_GetObject(packet, "conditions");
+        logInfo("[delSceneLC] sceneId = %s", sceneId);
+        ret = deleteSceneActions(sceneId, actions);
+        if (ret) {
+            JSON* condition = JSON_ArrayGetObject(conditions, 0);
+            ret = deleteSceneCondition(sceneId, condition);
+        }
     }
-    JSON_Delete(packet);
     return ret;
-}
-
-bool addDevice(const char* payload)
-{
-    bool check_flag = false;
-    JSON_Value *object = NULL;
-    JSON_Object *object_dictMeta = NULL;
-    JSON_Object *object_protocol_para = NULL;
-    object = json_parse_string(payload);
-    object_protocol_para = json_object_get_object(json_object(object),KEY_PROTOCOL);
-    object_dictMeta = json_object_get_object(object_protocol_para,KEY_DICT_META); 
-    const char* deviceKey_ = json_object_get_string(object_protocol_para,KEY_DEVICE_KEY);
-    const char* MAC_t = json_object_get_string(object_protocol_para,KEY_MAC);
-    const char* address_ = json_object_get_string(object_protocol_para,KEY_UNICAST);
-    const char* deviceID = json_object_get_string(json_object(object),KEY_DEVICE_ID);
-    const char* pid_ = json_object_get_string(object_protocol_para,KEY_PID);
-
-    if(isMatchString(pid_,RD_BLE_SENSOR_TEMP) || isMatchString(pid_,RD_BLE_SENSOR_DOOR))
-    {
-        LogInfo((get_localtime_now()),("RD_BLE_SENSOR_TEMP or RD_BLE_SENSOR_DOOR"));
-        set_inf_DV_for_GW(fd,address_,pid_,deviceKey_);
-    }
-    else if(isMatchString(pid_,RD_BLE_SENSOR_SMOKE)||
-            isMatchString(pid_,RD_BLE_SENSOR_MOTION)|| 
-            isContainString(RD_BLE_LIGHT_RGB,pid_)|| 
-            isMatchString(pid_,RD_BLE_LIGHT_WHITE) ||
-            isContainString(RD_BLE_LIGHT_WHITE_TEST,pid_))
-    {
-        check_flag = ble_saveInforDeviceForGatewayRangDong(fd,address_,"A000");
-        sleep(1);
-        check_flag = AES_get_code_encrypt_sensor(fd,(char*)MAC_t,(char*)address_);
-        sleep(1);
-        set_inf_DV_for_GW(fd,address_,pid_,deviceKey_);
-    }
-    else if(isContainString(HG_BLE,pid_))  //device  HOMEGY
-    {
-        LogInfo((get_localtime_now()),("ADD Devices HG"));
-
-        set_inf_DV_for_GW(fd,address_,pid_,deviceKey_);
-        sleep(1);
-        check_flag = ble_saveInforDeviceForGatewayHomegy(fd,address_,"A000");
-        if(check_flag)
-        {
-            LogInfo((get_localtime_now()),("Success to save Device %s into GW",deviceID));
-        }
-        else
-        {
-            LogWarn((get_localtime_now()),( "Failed to save Device %s into GW",deviceID));
-        }
-        sleep(1);
-        check_flag = AES_get_code_encrypt(fd,(char*)MAC_t,(char*)address_);
-        if(check_flag)
-        {
-            LogInfo((get_localtime_now()),("Success send code AES at %s",address_));
-        }
-        else
-        {
-            LogWarn((get_localtime_now()),( "Failed send code AES at %s",address_));
-        }
-    }  
-}
-
-bool addGroupNormal(const char* payload)
-{
-    logInfo("Start adding devices to a group");
-    bool check_flag = false;
-    JSON_Value *object = NULL;
-    object = json_parse_string(payload);
-    char *groupAddress_ = (char *)json_object_get_string(json_object(object), KEY_ADDRESS_GROUP);
-    char *device_inf =  (char*)json_object_get_string(json_object(object), KEY_DEVICES_GROUP);
-    char *pid =  (char*)json_object_get_string(json_object(object), KEY_PID);
-
-    int size_device_inf = 0,i=0;
-    char** str = str_split(device_inf,'|',&size_device_inf);
-
-    char index_t[2];
-    for(i=0;i<(size_device_inf-1);i++)
-    {
-        memset(index_t,'\0',sizeof(index_t));
-        Int2String(i+1,index_t);
-        char *deviceID_ =   *(str+i);
-        char *address_device = getAndressFromDeviceID(string_InfoAndress,deviceID_);
-        if (isMatchString(pid,HG_BLE_LIGHT_WHITE) || isContainString(RD_BLE_LIGHT_WHITE_TEST,pid) || isContainString(RD_BLE_LIGHT_RGB,pid)) {
-            ble_addDeviceToGroupLightCCT_HOMEGY(groupAddress_,address_device,address_device);
-        } else {
-            logInfo("Device pid is not supported to add group. PID = %s", pid);
-        }
-        usleep(DELAY_BETWEEN_ACTIONS_GROUP_NORMAL_uSECONDS);
-    }
-    logInfo("End adding devices to a group");
-    return true;
-}
-
-bool delGroupNormal(const char* payload)
-{
-    bool check_flag = false;
-    JSON_Value *object = NULL;
-    object = json_parse_string(payload);
-    char *groupAddress_ = (char *)json_object_get_string(json_object(object), KEY_ADDRESS_GROUP);
-    char *device_inf =  (char*)json_object_get_string(json_object(object), DEVICES_INF);
-
-    LogInfo((get_localtime_now()),("groupAddress_ %s",groupAddress_));
-    LogInfo((get_localtime_now()),("device_inf %s",device_inf));
-
-    int size_device_inf = 0,i=0;
-    char** str = str_split(device_inf,'|',&size_device_inf);
-    printf("size_device_inf %d\n",size_device_inf );
-
-    char index_t[2];
-    for(i=0;i<(size_device_inf-1);i++)
-    {
-        memset(index_t,'\0',sizeof(index_t));
-        Int2String(i+1,index_t);
-        LogInfo((get_localtime_now()),("index_t %s",index_t));
-        char *deviceID_ =   *(str+i);
-        LogInfo((get_localtime_now()),("deviceID_ %s",deviceID_));
-        char *address_device = getAndressFromDeviceID(string_InfoAndress,deviceID_);
-        LogInfo((get_localtime_now()),("address_device %s",address_device));
-  
-        check_flag = ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddress_,address_device,address_device);
-        if(!check_flag)
-        {
-            LogError((get_localtime_now()),("Failed to del group for light \n"));
-        }
-        usleep(DELAY_BETWEEN_ACTIONS_GROUP_NORMAL_uSECONDS);
-    }
-}
-
-bool updateGroupNormal(const char* payload)
-{
-    bool check_flag = false;
-    JSON_Value *object = NULL;
-    object = json_parse_string(payload);
-
-
-    char *groupAddress_ = (char *)json_object_get_string(json_object(object), KEY_ADDRESS_GROUP);
-    char *device_inf =  (char*)json_object_get_string(json_object(object), KEY_DEVICES_GROUP);
-    char *device_inf_compare =  (char*)json_object_get_string(json_object(object), KEY_DEVICES_COMPARE_GROUP);
-
-    LogInfo((get_localtime_now()),("groupAddress_ %s",groupAddress_));
-    LogInfo((get_localtime_now()),("device_inf %s",device_inf));
-
-    char index_t[3];
-    int size_device_inf = 0,size_device_inf_compare = 0,i=0;
-
-
-    char** str_device_inf = str_split(device_inf,'|',&size_device_inf);
-    printf("size_device_inf %d\n",size_device_inf );
-
-    char** str_device_inf_compare = str_split(device_inf_compare,'|',&size_device_inf_compare);
-    printf("size_device_inf_compare %d\n",size_device_inf_compare );
-
-
-    //del device into group
-    for(i=0;i<(size_device_inf_compare-1);i++)
-    {
-        memset(index_t,'\0',sizeof(index_t));
-        Int2String(i+1,index_t);
-        LogInfo((get_localtime_now()),("index_t %s",index_t));
-        char *deviceID_ =   *(str_device_inf_compare+i);
-        if(!isContainString(device_inf,deviceID_))
-        {
-            LogInfo((get_localtime_now()),("deviceID_ %s",deviceID_));
-            char *address_device = getAndressFromDeviceID(string_InfoAndress,deviceID_);
-            LogInfo((get_localtime_now()),("address_device %s",address_device));
-      
-            check_flag = ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddress_,address_device,address_device);
-            if(!check_flag)
-            {
-                LogError((get_localtime_now()),("Failed to del group for light \n"));
-            }
-            usleep(DELAY_BETWEEN_ACTIONS_GROUP_NORMAL_uSECONDS);
-        }
-    }
-
-
-    //add new device into group
-    for(i=0;i<(size_device_inf-1);i++)
-    {
-        memset(index_t,'\0',sizeof(index_t));
-        Int2String(i+1,index_t);
-        LogInfo((get_localtime_now()),("index_t %s",index_t));
-        char *deviceID_ =   *(str_device_inf+i);
-        if(!isContainString(device_inf_compare,deviceID_))
-        {
-            LogInfo((get_localtime_now()),("deviceID_ %s",deviceID_));
-            char *address_device = getAndressFromDeviceID(string_InfoAndress,deviceID_);
-            LogInfo((get_localtime_now()),("address_device %s",address_device));
-      
-            check_flag = ble_addDeviceToGroupLightCCT_HOMEGY(groupAddress_,address_device,address_device);
-            if(!check_flag)
-            {
-                LogError((get_localtime_now()),("Failed to add group for light \n"));
-            }
-            sleep(1);
-        }
-    }
-
-    free_fields(str_device_inf,size_device_inf);
-    free_fields(str_device_inf_compare,size_device_inf_compare);
-    return true;
-}
-
-bool addGroupLink(const char* payload)
-{
-    LogInfo((get_localtime_now()),("addGroupLink start..."));
-    bool check_flag = false;
-    JSON_Value *object = NULL;
-    object = json_parse_string(payload);
-    char *groupAddress_ = (char *)json_object_get_string(json_object(object), KEY_ADDRESS_GROUP);
-    char *device_inf =  (char*)json_object_get_string(json_object(object), DEVICES_INF);
-    char *pid =  (char*)json_object_get_string(json_object(object), KEY_PID);
-
-    LogInfo((get_localtime_now()),("groupAddress_ %s",groupAddress_));
-    LogInfo((get_localtime_now()),("device_inf %s",device_inf));
-    LogInfo((get_localtime_now()),("pid %s",pid));
-
-    int size_device_inf = 0,i=0;
-    char** str = str_split(device_inf,'|',&size_device_inf);
-
-    char index_t[2];
-    for(i=0;i<(size_device_inf-1)/2;i++)
-    {
-        memset(index_t,'\0',sizeof(index_t));
-        Int2String(i+1,index_t);
-        LogInfo((get_localtime_now()),("index_t %s",index_t));
-        char *deviceID_ =   *(str+i*2);
-        char *dpid_     =   *(str+i*2+1);
-        LogInfo((get_localtime_now()),("deviceID_ %s",deviceID_));
-        LogInfo((get_localtime_now()),("dpid_ %s",dpid_));
-        char *address_device;
-        char *address_element;
-        getAndressFromDeviceAndDpid(&address_device,Json_Value_InfoDevices,deviceID_,"1");
-        getAndressFromDeviceAndDpid(&address_element,Json_Value_InfoDevices,deviceID_,dpid_);
-        LogInfo((get_localtime_now()),("    address_device %d = %s",i,address_device));
-        LogInfo((get_localtime_now()),("    address_element %d =%s",i,address_element));
-        check_flag = ble_addDeviceToGroupLink(groupAddress_,address_device,address_element);
-        sleep(1);
-    }
-
-    LogInfo((get_localtime_now()),("addGroupLink done!"));
-    return true;
-}
-
-bool delGroupLink(const char* payload)
-{
-    bool check_flag = false;
-    JSON_Value *object = NULL;
-    object = json_parse_string(payload);
-    char *groupAddress_ = (char *)json_object_get_string(json_object(object), KEY_ADDRESS_GROUP);
-    char *device_inf =  (char*)json_object_get_string(json_object(object), DEVICES_INF);
-
-    LogInfo((get_localtime_now()),("groupAddress_ %s",groupAddress_));
-    LogInfo((get_localtime_now()),("device_inf %s",device_inf));
-
-    int size_device_inf = 0,i=0;
-    char** str = str_split(device_inf,'|',&size_device_inf);
-    printf("size_device_inf %d\n",size_device_inf );
-
-    for(i=0;i<(size_device_inf-1)/2;i++)
-    {
-        char *deviceID_ =   *(str+i*2);
-        char *dpid_     =   *(str+i*2+1);
-        LogInfo((get_localtime_now()),("    deviceID_ %s",deviceID_));
-        LogInfo((get_localtime_now()),("    dpid_ %s",dpid_));
-
-        char *address_device;
-        char *address_elemet;
-        getAndressFromDeviceAndDpid(&address_device,Json_Value_InfoDevices,deviceID_,"1");
-        getAndressFromDeviceAndDpid(&address_elemet,Json_Value_InfoDevices,deviceID_,dpid_);
-        LogInfo((get_localtime_now()),("    address_device %s",address_device));
-        LogInfo((get_localtime_now()),("    address_elemet %s",address_elemet));
-        check_flag = ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddress_,address_device,address_elemet);
-        if(!check_flag)
-        {
-            LogError((get_localtime_now()),("Failed to del group for light \n"));
-        }
-        sleep(1);
-    }
-}
-
-bool updateGroupLink(const char* payload)
-{
-    bool check_flag = false;
-    JSON_Value *object = NULL;
-    object = json_parse_string(payload);
-
-
-    char *groupAddress_ = (char *)json_object_get_string(json_object(object), KEY_ADDRESS_GROUP);
-    char *device_inf                    =  (char*)json_object_get_string(json_object(object), KEY_DEVICES_GROUP);
-    char *device_inf_compare            =  (char*)json_object_get_string(json_object(object), KEY_DEVICES_COMPARE_GROUP);
-
-    char *device_inf_process            =  (char*)calloc(strlen(device_inf)+1,sizeof(char));
-    char *device_inf_process_compare    =  (char*)calloc(strlen(device_inf_compare)+1,sizeof(char));
-
-
-    strcpy(device_inf_process,device_inf);
-    strcpy(device_inf_process_compare,device_inf_compare);
-
-    LogInfo((get_localtime_now()),("groupAddress_ %s",groupAddress_));
-    LogInfo((get_localtime_now()),("device_inf %s",device_inf));
-    LogInfo((get_localtime_now()),("device_inf_compare %s",device_inf_compare));
-    LogInfo((get_localtime_now()),("device_inf_process_compare %s",device_inf_process_compare));
-    int size_device_inf = 0,size_device_inf_compare = 0,i=0;
-
-
-    char** str_device_inf = str_split(device_inf_process,'|',&size_device_inf);
-    char** str_device_inf_compare = str_split(device_inf_process_compare,'|',&size_device_inf_compare);
-    LogInfo((get_localtime_now()),("size_device_inf %d",size_device_inf));
-    LogInfo((get_localtime_now()),("size_device_inf_compare %d",size_device_inf_compare));
-    for(i=0;i<(size_device_inf_compare-1)/2;i++)
-    {
-        LogInfo((get_localtime_now()),("deviceID_compare[%d] %s",i,str_device_inf_compare[i*2]));
-        LogInfo((get_localtime_now()),("dpid_compare[%d] %s",i,str_device_inf_compare[i*2+1]));
-    }
-    char *temp_str;
-    char *temp_compare;
-    //del device into group
-    for(i=0;i<(size_device_inf_compare-1)/2;i++)
-    {
-
-        char *deviceID_compare =   *(str_device_inf_compare+i*2);
-        char *dpid_compare     =   *(str_device_inf_compare+i*2+1);
-
-        temp_str = my_strcat(deviceID_compare,"|");
-        temp_compare = my_strcat(temp_str,dpid_compare);
-        LogInfo((get_localtime_now()),("DEL_GROUP[%d]",i));
-        LogInfo((get_localtime_now()),("    deviceID_compare %s",deviceID_compare));
-        LogInfo((get_localtime_now()),("    dpid_compare %s",dpid_compare));
-        LogInfo((get_localtime_now()),("    temp_compare %s",temp_compare));
-        LogInfo((get_localtime_now()),("    device_inf %s",device_inf));
-        if(!isContainString(device_inf,temp_compare))
-        {
-            char *address_device;
-            char *address_elemet;
-            LogInfo((get_localtime_now()),("    DEL into %d",i));
-
-            getAndressFromDeviceAndDpid(&address_device,Json_Value_InfoDevices,deviceID_compare,"1");
-            getAndressFromDeviceAndDpid(&address_elemet,Json_Value_InfoDevices,deviceID_compare,dpid_compare);
-            LogInfo((get_localtime_now()),("    address_device %s",address_device));
-            LogInfo((get_localtime_now()),("    address_elemet %s",address_elemet));
-            check_flag = ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddress_,address_device,address_elemet);
-            if(!check_flag)
-            {
-                LogError((get_localtime_now()),("Failed to add group for light \n"));
-            }
-            sleep(1);
-        }
-    }
-
-
-    //add new device into group
-    for(i=0;i<(size_device_inf-1)/2;i++)
-    {
-        
-        char *deviceID_ =   *(str_device_inf+i*2);
-        char *dpid_     =   *(str_device_inf+i*2+1);
-
-        temp_str = my_strcat(deviceID_,"|");
-        temp_compare = my_strcat(temp_str,dpid_);
-        LogInfo((get_localtime_now()),("ADD_GROUP[%d]",i));
-        LogInfo((get_localtime_now()),("    deviceID_ %s",deviceID_));
-        LogInfo((get_localtime_now()),("    dpid_ %s",dpid_));
-        LogInfo((get_localtime_now()),("    temp_compare %s",temp_compare));
-        LogInfo((get_localtime_now()),("    device_inf_compare %s",device_inf_compare));
-        if(!isContainString(device_inf_compare,temp_compare) )
-        {
-            char *address_device;
-            char *address_element;
-            getAndressFromDeviceAndDpid(&address_device,Json_Value_InfoDevices,deviceID_,"1");
-            getAndressFromDeviceAndDpid(&address_element,Json_Value_InfoDevices,deviceID_,dpid_);
-            LogInfo((get_localtime_now()),("    address_device %s",address_device));
-            LogInfo((get_localtime_now()),("    address_element %s",address_element));
-            check_flag = ble_addDeviceToGroupLink(groupAddress_,address_device,address_element);
-            if(!check_flag)
-            {
-                LogError((get_localtime_now()),("Failed to add group for light \n"));
-            }
-            
-            sleep(1);
-        }
-    }
-
-    free_fields(str_device_inf,size_device_inf);
-    free_fields(str_device_inf_compare,size_device_inf_compare);
-    return true;
-}
-
-char *getDeviceIDfromAddress(char *string_InfoAndress, char* address_)
-{
-    JSON_Value  *result_value       = json_parse_string(string_InfoAndress);
-    JSON_Object *result_object      = json_value_get_object(result_value);
-    if(json_object_has_value(result_object,address_))
-    {
-        char temp_name[50];
-        sprintf(temp_name,"%s.%s",address_,KEY_DEVICE_ID);
-        return (char *)json_object_dotget_string(result_object,temp_name);
-    }
-    else
-        return NULL;
-}
-
-char *getDpIDfromAddress(char *string_InfoAndress, char* address_)
-{
-    // LogInfo((get_localtime_now()),("string_InfoAndress = %s \n",string_InfoAndress));
-    JSON_Value  *result_value       = json_parse_string(string_InfoAndress);
-    JSON_Object *result_object      = json_value_get_object(result_value);
-    if(json_object_has_value(result_object,address_))
-    {
-        char temp_name[50];
-        sprintf(temp_name,"%s.%s",address_,KEY_DP_ID);
-        return (char *)json_object_dotget_string(result_object,temp_name);
-    }
-    else
-        return NULL;    
-}
-
-char *getAndressFromDeviceID(char *string_InfoAndress, char* deviceID)
-{
-    JSON_Value  *result_value       = json_parse_string(string_InfoAndress);
-    JSON_Object *result_object      = json_value_get_object(result_value);
-    char count_object = json_object_get_count(result_object);
-    // LogInfo((get_localtime_now()),("count_object = %d \n",count_object));
-    char i = 0;
-    for(i = 0;i<count_object;i++)
-    {
-        char temp_name[50] = {'\0'};
-        sprintf(temp_name,"%s.%s",json_object_get_name(result_object,i),KEY_DEVICE_ID);
-        // LogInfo((get_localtime_now()),("temp_name = %s \n",temp_name));
-        if(isMatchString(json_object_dotget_string(result_object,temp_name),deviceID))
-        {
-            // LogInfo((get_localtime_now()),("check ok \n"));
-            return (char *)json_object_get_name(result_object,i);
-        }
-    }
-    return NULL;    
-}
-
-char *getAndressDeviceFromDeviceID(JSON_Value *Json_Value_InfoDevices, char* deviceID)
-{
-    int i = 0;
-    JSON_Object *json_object_t      = json_value_get_object(Json_Value_InfoDevices);
-    int size_object = json_object_get_count(json_object_t);
-    char dotString[50] = {'/0'};
-    for(i = 0;i < size_object; i++)
-    {
-        const char* deviceID_compare = json_object_get_name(json_object_t,i);
-        if(isMatchString(deviceID_compare,deviceID))
-        {
-            sprintf(dotString,"%s.%s",deviceID,KEY_DICT_META);
-            JSON_Object *temp_object = json_object_dotget_object(json_object_t,dotString);
-            if(json_object_has_value(temp_object,"1"))
-            {
-                return (char *)json_object_get_string(temp_object,"1");
-            }
-            else if(json_object_has_value(temp_object,"20"))
-            {
-                return (char *)json_object_get_string(temp_object,"20");
-            }
-            else
-            {
-                return NULL;
-            }
-        }
-    }
-    return NULL;
 }

@@ -100,7 +100,7 @@ bool AWS_pre_detect_message_received(Pre_parse *var,char *mess)
 						}
 						else if(isMatchString(temp,KEY_SENDER_ID))
 						{
-							var->senderid = (char *)json_object_get_string(object,KEY_SENDER_ID);
+							var->senderId = (char *)json_object_get_string(object,KEY_SENDER_ID);
 						}
 						else if(!isMatchString(temp,KEY_TYPE) && !isMatchString(temp,KEY_SENDER) && !isMatchString(temp,KEY_SENDER_ID) && !isMatchString(temp,KEY_SETTING) && !isMatchString(temp,KEY_PAGE_INDEX) && !isMatchString(temp,"maxGroupAddress") && !isMatchString(temp,"maxSceneAddress"))
 						{
@@ -445,7 +445,7 @@ bool AWS_getInfoControlDevice(Info_device *inf_device,Pre_parse *pre_detect)
 {
 	inf_device->deviceID = pre_detect->object;
 	inf_device->provider = pre_detect->provider;
-	inf_device->senderid = pre_detect->senderid;
+	inf_device->senderId = pre_detect->senderId;
 	inf_device->dictDPs  =  (char*)json_serialize_to_string_pretty(json_object_get_value(pre_detect->JS_object, KEY_DICT_DPS));
 	return true;
 }
@@ -457,7 +457,7 @@ bool MOSQ_getTemplateControlDevice(char **result,Info_device *inf_device)
     char *serialized_string = NULL;
 
 	json_object_set_string(root_object, KEY_DEVICE_ID,inf_device->deviceID);
-	json_object_set_string(root_object, "senderId", inf_device->senderid);
+	json_object_set_string(root_object, "senderId", inf_device->senderId);
 	json_object_set_number(root_object, KEY_PROVIDER,inf_device->provider);
 	json_object_set_value(root_object, KEY_DICT_DPS,json_parse_string(inf_device->dictDPs));
 
@@ -679,6 +679,7 @@ bool AWS_getInfoControlGroupNormal(Info_group *info_group_t,Pre_parse *pre_detec
 
 	info_group_t->groupID 		= 	json_object_get_name(pre_detect->JS_object,0);
 	info_group_t->provider  	=  	pre_detect->provider;
+	info_group_t->senderId  	=  	pre_detect->senderId;
 	info_group_t->dictDPs  		=  	(char*)json_serialize_to_string_pretty(json_object_get_value(object, KEY_DICT_DPS));
 	return true;
 }
@@ -691,6 +692,7 @@ bool MOSQ_getTemplateControlGroupNormal(char **result,Info_group *info_group_t)
 
 	json_object_set_string(root_object, KEY_ADDRESS_GROUP,info_group_t->groupID);
 	json_object_set_number(root_object, KEY_PROVIDER,info_group_t->provider);
+	json_object_set_string(root_object, "senderId", info_group_t->senderId);
 	json_object_set_value(root_object, KEY_DICT_DPS,json_parse_string(info_group_t->dictDPs));
 
 

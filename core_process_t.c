@@ -16,26 +16,18 @@ char* Hex2String( char *hex,unsigned int len)
 	return buff;
 }
 
-bool isContainString(const char *string_contain,const char *string_match)
-{
-    // unsigned int len = strlen(string_contain);
-    // unsigned char i = 0;
-    if(string_contain == NULL)
-    {
-        return false;
-    }
-    else
+bool isContainString(const char *string_contain,const char *string_match) {
+    if (string_contain && string_match && string_match[0] != 0)
     {
         char *p = strstr(string_contain, string_match);
-        if(p != NULL)
-        {
+        if (p != NULL) {
             return true;
         }
-        else
-        {
+        else {
             return false;
         }
     }
+    return false;
 }
 
 
