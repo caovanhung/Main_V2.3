@@ -840,6 +840,8 @@ int ble_controlOnOFF_NODELAY(const char *address_element,const char *state)
 
 bool ble_dimLedSwitch_HOMEGY(const char *address_device,int lightness)
 {
+    ASSERT(address_device);
+
     uint8_t  *hex_address = malloc(5);
     uint8_t  *hex_lightness = malloc(5);
     char *lightness_s = malloc(5);
@@ -953,7 +955,10 @@ bool ble_addDeviceToGroupLink(const char *address_group,const char *address_devi
 
 bool ble_deleteDeviceToGroupLightCCT_HOMEGY(const char *address_group,const char *address_device,const char *address_element)
 {
-    ASSERT(address_group && address_device && address_element);
+    ASSERT(address_group);
+    ASSERT(address_device);
+    ASSERT(address_element);
+
     int check = 0,i = 0;
     uint8_t  SET_GROUP[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00   ,0x00,0x00 ,0x80,0x1c  ,0x00,0x00,0x00,0x00,  0x00,0x10};
 
@@ -992,6 +997,8 @@ bool ble_deleteDeviceToGroupLightCCT_HOMEGY(const char *address_group,const char
 
 int ble_controlCTL(const char *address_element,int lightness,int colorTemperature)
 {
+    ASSERT(address_element);
+
     char *lightness_s = malloc(5);
     char *colorTemperature_s = malloc(5);
     int lightness_ = lightness*65535/1000;
@@ -1763,6 +1770,8 @@ char *get_dpid(const char *code)
 
 int ble_logDeivce(const char *address_element,int state)
 {
+    ASSERT(address_element);
+
     int check = 0,i = 0;
     uint8_t  LOG_DEVICE[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0xE0,0x11,0x02,0x00,0x00,  0x05,0x00,   0x00};
 
@@ -1791,38 +1800,20 @@ int ble_logDeivce(const char *address_element,int state)
     return true;
 }
 
-int ble_logTouch(const char *address_element,char *element,int state)
+int ble_logTouch(const char *address_element, uint8_t dpId, int state)
 {
     int check = 0,i = 0;
     uint8_t  LOG_TOUCH[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0xE0,0x11,0x02,0x00,0x00,  0x0D,0x00,   0x00,   0x00};
 
     uint8_t  *hex_address = malloc(5);
-    uint8_t  *hex_element = malloc(3);
 
     String2HexArr((char*)address_element,hex_address);
-    String2HexArr((char*)element,hex_element);
 
-    LOG_TOUCH[8] = *hex_address;
+    LOG_TOUCH[8] = (*hex_address) + (dpId - 1);
     LOG_TOUCH[9] = *(hex_address+1);
-
-    LOG_TOUCH[17] = *hex_element;
-
-
-    if(state == 1)
-    {
-        LOG_TOUCH[18] = 0x01;
-    }
-    else
-    {
-        LOG_TOUCH[18] = 0x00;
-    }
-    printf("LOG_TOUCH : ");
-    for(i=0;i<19;i++)
-    {
-        printf("  %02X",LOG_TOUCH[i]);
-    }
-    printf("\n");
-    check = UART0_Send(fd, LOG_TOUCH, 19);
+    LOG_TOUCH[17] = state;
+    check = UART0_Send(fd, LOG_TOUCH, 18);
+    usleep(DELAY_SEND_UART_MS);
     free(hex_address);
     hex_address = NULL;
     if(check != 19)

@@ -570,8 +570,7 @@ int main( int argc,char ** argv )
                     }
                     break;
                 }
-                case TYPE_ADD_SCENE:
-                {
+                case TYPE_ADD_SCENE: {
                     addSceneLC(payload);
                     break;
                 }
@@ -579,8 +578,7 @@ int main( int argc,char ** argv )
                     delSceneLC(payload);
                     break;
                 }
-                case TYPE_UPDATE_SCENE:
-                {
+                case TYPE_UPDATE_SCENE: {
                     char* sceneId = JSON_GetText(payload, "sceneId");
                     JSON* actionsNeedRemove = JSON_GetObject(payload, "actionsNeedRemove");
                     JSON* actionsNeedAdd = JSON_GetObject(payload, "actionsNeedAdd");
@@ -604,110 +602,34 @@ int main( int argc,char ** argv )
                     }
                     break;
                 }
+                case TYPE_DIM_LED_SWITCH: {
+                    char* dpAddr = JSON_GetText(payload, "dpAddr");
+                    int value = JSON_GetNumber(payload, "value");
+                    ble_dimLedSwitch_HOMEGY(dpAddr, value);
+                }
+                case TYPE_LOCK_AGENCY: {
+                    char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                    int value = JSON_GetNumber(payload, "value");
+                    ble_logDeivce(deviceAddr, value);
+                    break;
+                }
+                case TYPE_LOCK_KIDS: {
+                    char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                    JSON* dps = JSON_GetObject(payload, "lock");
+                    JSON_ForEach(dp, dps) {
+                        if (dp->string) {
+                            ble_logTouch(deviceAddr, atoi(dp->string), dp->valueint);
+                        }
+                    }
+                    break;
+                }
             }
             cJSON_Delete(recvPacket);
             cJSON_Delete(payload);
-
-            // switch (type_action_t)
-            // {
-            //     char *topic;
-            //     char *payload;
-            //     char *message;
-            //     char *deviceID;
-            //     char *address_device;
-            //     char *dpID;
-            //     char *dpValue;
-            //     char *pid;
-            //     int delay;
-            //     int loops;
-            //     int value;
-            //     int check_tmp = 0;
-            //     case TYPE_DIM_LED_SWITCH:
-            //     {
-            //         deviceID = (char *)json_object_get_string(json_object(object),KEY_DEVICE_ID);
-            //         if(deviceID == NULL)
-            //         {
-            //             break;
-            //         }
-            //         address_device = getAndressDeviceFromDeviceID(Json_Value_InfoDevices,deviceID);
-            //         if(address_device == NULL )
-            //         {
-            //             break;
-            //         }
-            //         value = json_object_get_number(json_object(object),KEY_LED);
-            //         ble_dimLedSwitch_HOMEGY(fd,address_device,value);
-            //         break;
-            //     }
-            //     case TYPE_LOCK_AGENCY:
-            //     {
-            //         deviceID = (char *)json_object_get_string(json_object(object),KEY_DEVICE_ID);
-            //         if(deviceID == NULL)
-            //         {
-            //             break;
-            //         }
-            //         address_device = getAndressDeviceFromDeviceID(Json_Value_InfoDevices,deviceID);
-            //         if(address_device == NULL )
-            //         {
-            //             break;
-            //         }
-            //         count = json_object_get_count(json_object_get_object(json_object(object),KEY_LOCK));
-            //         if(count == 1)
-            //         {
-            //             dpID = (char *)json_object_get_name(json_object_get_object(json_object(object),KEY_LOCK),i);
-            //             dpValue_int = json_object_dotget_number(json_object_get_object(json_object(object),KEY_LOCK),dpID);
-            //         }
-            //         else
-            //         {
-            //             break;
-            //         }
-            //         ble_logDeivce(fd,address_device,dpValue_int-2);
-            //         break;
-            //     }
-            //     case TYPE_LOCK_KIDS:
-            //     {
-            //         deviceID = (char *)json_object_get_string(json_object(object),KEY_DEVICE_ID);
-            //         if(deviceID == NULL)
-            //         {
-            //             break;
-            //         }
-            //         address_device = getAndressDeviceFromDeviceID(Json_Value_InfoDevices,deviceID);
-            //         if(address_device == NULL )
-            //         {
-            //             break;
-            //         }
-            //         count = json_object_get_count(json_object_get_object(json_object(object),KEY_LOCK));
-            //         for(i=0;i<count;i++)
-            //         {
-            //             dpID = (char *)json_object_get_name(json_object_get_object(json_object(object),KEY_LOCK),i);
-            //             dpValue_int = json_object_dotget_number(json_object_get_object(json_object(object),KEY_LOCK),dpID);
-            //             if(isMatchString(dpID,"1"))
-            //             {
-            //                 ble_logTouch(fd,address_device,"00",dpValue_int);
-            //             }
-            //             else if(isMatchString(dpID,"2"))
-            //             {
-            //                 ble_logTouch(fd,address_device,"01",dpValue_int);
-            //             }
-            //             else if(isMatchString(dpID,"3"))
-            //             {
-            //                 ble_logTouch(fd,address_device,"02",dpValue_int);
-            //             }
-            //             else if(isMatchString(dpID,"4"))
-            //             {
-            //                 ble_logTouch(fd,address_device,"03",dpValue_int);
-            //             }
-            //             sleep(1);
-            //         }
-            //         break;
-            //     }
-            // }
         }
-        else if(size_queue == MAX_SIZE_NUMBER_QUEUE)
-        {
+        else if(size_queue == MAX_SIZE_NUMBER_QUEUE) {
             pthread_mutex_unlock(&mutex_lock_t);
-        }
-        else
-        {
+        } else {
             pthread_cond_wait(&dataUpdate_Queue, &mutex_lock_t);
         }
         pthread_mutex_unlock(&mutex_lock_t);

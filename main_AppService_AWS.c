@@ -1290,38 +1290,23 @@ int main( int argc,char ** argv )
                     }
                     case TYPE_DIM_LED_SWITCH:
                     {
-                        TimeCreat = timeInMilliseconds();
-
-                        AWS_getInfoDimLedDevice(inf_device,pre_detect);
-                        MOSQ_getTemplateDimLedDevice(&payload,inf_device);
-
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_DIM_LED_SWITCH,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CMD,TYPE_DIM_LED_SWITCH,MOSQ_ActResponse);
-                        mqttLocalPublish(topic, message);
+                        AWS_getInfoDimLedDevice(inf_device, pre_detect);
+                        MOSQ_getTemplateDimLedDevice(&payload, inf_device);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
                     case TYPE_LOCK_KIDS:
                     {
-                        TimeCreat = timeInMilliseconds();
-
-                        AWS_getInfoLockDevice(inf_device,pre_detect);
-                        MOSQ_getTemplateLockDevice(&payload,inf_device);
-
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_LOCK_KIDS,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CMD,TYPE_LOCK_KIDS,MOSQ_ActResponse);
-                        mqttLocalPublish(topic, message);
+                        AWS_getInfoLockDevice(inf_device, pre_detect);
+                        MOSQ_getTemplateLockDevice(&payload, inf_device);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
                     case TYPE_LOCK_AGENCY:
                     {
-                        TimeCreat = timeInMilliseconds();
-
-                        AWS_getInfoLockDevice(inf_device,pre_detect);
-                        MOSQ_getTemplateLockDevice(&payload,inf_device);
-
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_LOCK_AGENCY,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CMD,TYPE_LOCK_AGENCY,MOSQ_ActResponse);
-                        mqttLocalPublish(topic, message);
+                        AWS_getInfoLockDevice(inf_device, pre_detect);
+                        MOSQ_getTemplateLockDevice(&payload, inf_device);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
                     case TYPE_CTR_SCENE:

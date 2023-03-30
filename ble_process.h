@@ -173,7 +173,7 @@ int ble_logDeivce(const char *address_element, int state);
 /*
  * Lock kids
  */
-int ble_logTouch(const char *address_element, char *element, int state);
+int ble_logTouch(const char *address_element, uint8_t dpId, int state);
 
 /*
  * Add/delete local scene
