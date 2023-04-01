@@ -459,7 +459,6 @@ char* getPayloadReponseStateDeviceAWS(char *deviceID, int  state)
 {
     char *serialized_string = malloc(1000);
     sprintf(serialized_string,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":%d}}}}",TYPE_UPDATE_DEVICE,SENDER_HC_VIA_CLOUD,deviceID,KEY_STATE,state);
-    printf("serialized_string %s\n",serialized_string );
     int size_t = strlen(serialized_string);
     char* result = malloc(size_t+1);
     memset(result,'\0',size_t+1);

@@ -63,72 +63,26 @@
 #include "cJSON.h"
 /*-----------------------------------------------------------*/
 
-// Hung Demo 2 : 192.168.10.2
-#define MQTT_SUB_TOPIC_DEVICES             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/d_100323457_1/update/accepted"
-#define MQTT_SUB_TOPIC_DEVICES_LENGTH       ( ( uint16_t ) ( sizeof( MQTT_SUB_TOPIC_DEVICES ) - 1 ) )
 
-#define MQTT_TOPIC_SCENE                    "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/s_100323457_1/update/accepted"
-#define MQTT_TOPIC_SCENE_LENGTH             (( uint16_t ) ( sizeof(MQTT_TOPIC_SCENE) - 1))
-
-#define MQTT_SUB_TOPIC_INF                  "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/100323457/update/accepted"
-#define MQTT_SUB_TOPIC_INF_LENGTH           (( uint16_t ) ( sizeof( MQTT_SUB_TOPIC_INF ) - 1))
-
-
-#define MQTT_SUB_TOPIC_NOTIFY                   "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/100323457/notify"
-#define MQTT_SUB_TOPIC_NOTIFY_LENGTH            (( uint16_t ) ( sizeof( MQTT_SUB_TOPIC_NOTIFY ) - 1))
-
-//recive infor home
-#define MQTT_SUB_TOPIC_GET_INF                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/100323457/get/accepted"
-#define MQTT_SUB_TOPIC_GET_INF_LENGTH          ( ( uint16_t ) ( sizeof( MQTT_SUB_TOPIC_GET_INF ) - 1 ) )
-
-#define MQTT_PUB_TOPIC_GET_INF                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/100323457/get"
-#define MQTT_PUB_TOPIC_GET_INF_LENGTH          ( ( uint16_t ) ( sizeof( MQTT_PUB_TOPIC_GET_INF ) - 1 ) )
-
-#define MQTT_PUB_TOPIC_DEVICES             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/d_100323457_1/update"
-#define MQTT_PUB_TOPIC_DEVICES_LENGTH       ( ( uint16_t ) ( sizeof( MQTT_PUB_TOPIC_DEVICES ) - 1 ) )
-
-#define MQTT_PUB_TOPIC_SCENE                    "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/s_100323457_1/update"
-#define MQTT_PUB_TOPIC_SCENE_LENGTH             (( uint16_t ) ( sizeof(MQTT_PUB_TOPIC_SCENE) - 1 ) )
-
-#define MQTT_PUB_TOPIC_GROUP                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/100323457/update"
-#define MQTT_PUB_TOPIC_GROUP_LENGTH          (( uint16_t ) ( sizeof( MQTT_PUB_TOPIC_GROUP ) - 1 ) )
-
-
-
-//HUNG_DEMO : 192.168.10.3
-// #define MQTT_SUB_TOPIC_DEVICES                  "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/d_87329695_1/update/accepted"
-// #define MQTT_SUB_TOPIC_DEVICES_LENGTH           ( ( uint16_t ) ( sizeof( MQTT_SUB_TOPIC_DEVICES ) - 1 ) )
-
-// #define MQTT_TOPIC_SCENE                        "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/s_87329695_1/update/accepted"
-// #define MQTT_TOPIC_SCENE_LENGTH                 (( uint16_t ) ( sizeof(MQTT_TOPIC_SCENE) - 1))
-
-// #define MQTT_SUB_TOPIC_INF                      "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/87329695/update/accepted"
-// #define MQTT_SUB_TOPIC_INF_LENGTH               (( uint16_t ) ( sizeof( MQTT_SUB_TOPIC_INF ) - 1))
-
-// #define MQTT_SUB_TOPIC_NOTIFY                   "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/87329695/notify"
-// #define MQTT_SUB_TOPIC_NOTIFY_LENGTH            (( uint16_t ) ( sizeof( MQTT_SUB_TOPIC_NOTIFY ) - 1))
-
-// //recive infor home
-// #define MQTT_SUB_TOPIC_GET_INF                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/87329695/get/accepted"
-// #define MQTT_SUB_TOPIC_GET_INF_LENGTH          (( uint16_t ) ( sizeof( MQTT_SUB_TOPIC_GET_INF ) - 1 ) )
-
-// #define MQTT_PUB_TOPIC_GET_INF                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/87329695/get"
-// #define MQTT_PUB_TOPIC_GET_INF_LENGTH          (( uint16_t ) ( sizeof( MQTT_PUB_TOPIC_GET_INF ) - 1 ) )
-
-// #define MQTT_PUB_TOPIC_DEVICES                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/d_87329695_1/update"
-// #define MQTT_PUB_TOPIC_DEVICES_LENGTH          (( uint16_t ) ( sizeof( MQTT_PUB_TOPIC_DEVICES ) - 1 ) )
-
-// #define MQTT_PUB_TOPIC_SCENE                    "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/s_87329695_1/update"
-// #define MQTT_PUB_TOPIC_SCENE_LENGTH             (( uint16_t ) ( sizeof(MQTT_PUB_TOPIC_SCENE) - 1 ) )
-
-// #define MQTT_PUB_TOPIC_GROUP                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/87329695/update"
-// #define MQTT_PUB_TOPIC_GROUP_LENGTH          (( uint16_t ) ( sizeof( MQTT_PUB_TOPIC_GROUP ) - 1 ) )
+#define MQTT_SUB_TOPIC_DEVICES             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/d_%s_1/update/accepted"
+#define MQTT_SUB_TOPIC_SCENE               "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/s_%s_1/update/accepted"
+#define MQTT_SUB_TOPIC_INF                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/update/accepted"
+#define MQTT_SUB_TOPIC_NOTIFY              "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/notify"
+#define MQTT_SUB_TOPIC_GET_INF             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/get/accepted"
+#define MQTT_PUB_TOPIC_GET_INF             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/get"
+#define MQTT_PUB_TOPIC_DEVICES             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/d_%s_1/update"
+#define MQTT_PUB_TOPIC_SCENE               "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/s_%s_1/update"
+#define MQTT_PUB_TOPIC_GROUP               "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/update"
 
 const char* SERVICE_NAME = SERVICE_AWS;
 FILE *fptr;
 int rc;
 struct mosquitto * mosq;
 struct Queue *queue_received_aws,*queue_mos_sub;
+MQTTFixedBuffer_t networkBuffer;
+TransportInterface_t transport;
+NetworkContext_t networkContext;
+OpensslParams_t opensslParams;
 
 pthread_mutex_t mutex_lock_t            = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t dataUpdate_Queue         = PTHREAD_COND_INITIALIZER;
@@ -136,6 +90,11 @@ pthread_cond_t dataUpdate_Queue         = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex_lock_mosq_t       = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t dataUpdate_MosqQueue     = PTHREAD_COND_INITIALIZER;
 
+static bool g_awsIsConnected = false;
+static bool g_mosqIsConnected = false;
+static char g_homeId[30] = {0};
+static char g_cloudSubTopicDevice[100], g_cloudSubTopicScene[100], g_cloudSubTopicInfo[100], g_cloudSubTopicNotify[100];
+static char g_cloudPubTopicDevice[100], g_cloudPubTopicScene[100], g_cloudPubTopicGroup[100];
 
 typedef struct PublishPackets
 {
@@ -145,7 +104,6 @@ typedef struct PublishPackets
 
 struct NetworkContext
 {
-
     OpensslParams_t *pParams;
 };
 
@@ -177,6 +135,24 @@ int handlePublishResend( MQTTContext_t * pMqttContext );
 void updateSubAckStatus( MQTTPacketInfo_t * pPacketInfo );
 int handleResubscribe( MQTTContext_t * pMqttContext );
 int publishToTopicAndProcessIncomingMessage( MQTTContext_t * pMqttContext,const char * pTopic,uint16_t topicLength,const char * pMessage );
+
+void getHcInformation() {
+    logInfo("Getting HC parameters");
+    FILE* f = fopen("app.json", "r");
+    char buff[1000];
+    fread(buff, sizeof(char), 1000, f);
+    fclose(f);
+    JSON* setting = JSON_Parse(buff);
+    StringCopy(g_homeId, JSON_GetText(setting, "homeId"));
+    logInfo("HomeId: %s", g_homeId);
+    sprintf(g_cloudSubTopicDevice, MQTT_SUB_TOPIC_DEVICES, g_homeId);
+    sprintf(g_cloudSubTopicScene, MQTT_SUB_TOPIC_SCENE, g_homeId);
+    sprintf(g_cloudSubTopicInfo, MQTT_SUB_TOPIC_INF, g_homeId);
+    sprintf(g_cloudSubTopicNotify, MQTT_SUB_TOPIC_NOTIFY, g_homeId);
+    sprintf(g_cloudPubTopicDevice, MQTT_PUB_TOPIC_DEVICES, g_homeId);
+    sprintf(g_cloudPubTopicScene, MQTT_PUB_TOPIC_SCENE, g_homeId);
+    sprintf(g_cloudPubTopicGroup, MQTT_PUB_TOPIC_GROUP, g_homeId);
+}
 
 uint32_t generateRandomNumber()
 {
@@ -595,7 +571,9 @@ void eventCallback( MQTTContext_t * pMqttContext,MQTTPacketInfo_t * pPacketInfo,
                 }
 
                 /* Make sure ACK packet identifier matches with Request packet identifier. */
-                assert( globalSubscribePacketIdentifier == packetIdentifier );
+                if ( globalSubscribePacketIdentifier != packetIdentifier ) {
+                    logError("globalSubscribePacketIdentifier = %d, packetIdentifier = %d", globalSubscribePacketIdentifier, packetIdentifier);
+                }
                 break;
 
             case MQTT_PACKET_TYPE_UNSUBACK:
@@ -707,27 +685,22 @@ int subscribeToTopic( MQTTContext_t * pMqttContext )
     ( void ) memset( ( void * ) pGlobalSubscriptionList, 0x00, sizeof( pGlobalSubscriptionList ) );
 
     /* This example subscribes to only one topic and uses QOS1. */
-    pGlobalSubscriptionList[ 0 ].qos = MQTTQoS1;
-    pGlobalSubscriptionList[ 0 ].pTopicFilter = MQTT_SUB_TOPIC_DEVICES;
-    pGlobalSubscriptionList[ 0 ].topicFilterLength = MQTT_SUB_TOPIC_DEVICES_LENGTH;
+    pGlobalSubscriptionList[ 0 ].qos = MQTTQoS0;
+    pGlobalSubscriptionList[ 0 ].pTopicFilter = g_cloudSubTopicDevice;
+    pGlobalSubscriptionList[ 0 ].topicFilterLength = strlen(g_cloudSubTopicDevice);
 
 
-    pGlobalSubscriptionList[ 1 ].qos = MQTTQoS1;
-    pGlobalSubscriptionList[ 1 ].pTopicFilter = MQTT_TOPIC_SCENE;
-    pGlobalSubscriptionList[ 1 ].topicFilterLength = MQTT_TOPIC_SCENE_LENGTH;
+    pGlobalSubscriptionList[ 1 ].qos = MQTTQoS0;
+    pGlobalSubscriptionList[ 1 ].pTopicFilter = g_cloudSubTopicScene;
+    pGlobalSubscriptionList[ 1 ].topicFilterLength = strlen(g_cloudSubTopicScene);
 
-    pGlobalSubscriptionList[ 2 ].qos = MQTTQoS1;
-    pGlobalSubscriptionList[ 2 ].pTopicFilter = MQTT_SUB_TOPIC_INF;
-    pGlobalSubscriptionList[ 2 ].topicFilterLength = MQTT_SUB_TOPIC_INF_LENGTH;
+    pGlobalSubscriptionList[ 2 ].qos = MQTTQoS0;
+    pGlobalSubscriptionList[ 2 ].pTopicFilter = g_cloudSubTopicInfo;
+    pGlobalSubscriptionList[ 2 ].topicFilterLength = strlen(g_cloudSubTopicInfo);
 
-    pGlobalSubscriptionList[ 3 ].qos = MQTTQoS1;
-    pGlobalSubscriptionList[ 3 ].pTopicFilter = MQTT_SUB_TOPIC_NOTIFY;
-    pGlobalSubscriptionList[ 3 ].topicFilterLength = MQTT_SUB_TOPIC_NOTIFY_LENGTH;
-
-
-    // pGlobalSubscriptionList[ 4 ].qos = MQTTQoS1;
-    // pGlobalSubscriptionList[ 4 ].pTopicFilter = MQTT_SUB_TOPIC_CAMERA_HINET;
-    // pGlobalSubscriptionList[ 4 ].topicFilterLength = MQTT_SUB_TOPIC_CAMERA_HINET_LENGTH;
+    pGlobalSubscriptionList[ 3 ].qos = MQTTQoS0;
+    pGlobalSubscriptionList[ 3 ].pTopicFilter = g_cloudSubTopicNotify;
+    pGlobalSubscriptionList[ 3 ].topicFilterLength = strlen(g_cloudSubTopicNotify);
 
     /* Generate packet identifier for the SUBSCRIBE packet. */
     globalSubscribePacketIdentifier = MQTT_GetPacketId( pMqttContext );
@@ -767,18 +740,14 @@ int unsubscribeFromTopic( MQTTContext_t * pMqttContext )
 
     /* This example subscribes to and unsubscribes from only one topic
      * and uses QOS1. */
-    pGlobalSubscriptionList[ 0 ].qos = MQTTQoS1;
-    pGlobalSubscriptionList[ 0 ].pTopicFilter = MQTT_SUB_TOPIC_DEVICES;
-    pGlobalSubscriptionList[ 0 ].topicFilterLength = MQTT_SUB_TOPIC_DEVICES_LENGTH;
+    pGlobalSubscriptionList[ 0 ].qos = MQTTQoS0;
+    pGlobalSubscriptionList[ 0 ].pTopicFilter = g_cloudSubTopicDevice;
+    pGlobalSubscriptionList[ 0 ].topicFilterLength = strlen(g_cloudSubTopicDevice);
 
 
-    pGlobalSubscriptionList[ 1 ].qos = MQTTQoS1;
-    pGlobalSubscriptionList[ 1 ].pTopicFilter = MQTT_TOPIC_SCENE;
-    pGlobalSubscriptionList[ 1 ].topicFilterLength = MQTT_TOPIC_SCENE_LENGTH;
-
-    // pGlobalSubscriptionList[ 2 ].qos = MQTTQoS1;
-    // pGlobalSubscriptionList[ 2 ].pTopicFilter = MQTT_SUB_TOPIC_INF;
-    // pGlobalSubscriptionList[ 2 ].topicFilterLength = MQTT_SUB_TOPIC_INF_LENGTH;
+    pGlobalSubscriptionList[ 1 ].qos = MQTTQoS0;
+    pGlobalSubscriptionList[ 1 ].pTopicFilter = g_cloudSubTopicScene;
+    pGlobalSubscriptionList[ 1 ].topicFilterLength = strlen(g_cloudSubTopicScene);
 
     /* Generate packet identifier for the UNSUBSCRIBE packet. */
     globalUnsubscribePacketIdentifier = MQTT_GetPacketId( pMqttContext );
@@ -809,8 +778,6 @@ int initializeMqtt( MQTTContext_t * pMqttContext,NetworkContext_t * pNetworkCont
 {
     int returnStatus = EXIT_SUCCESS;
     MQTTStatus_t mqttStatus;
-    MQTTFixedBuffer_t networkBuffer;
-    TransportInterface_t transport;
 
     assert( pMqttContext != NULL );
     assert( pNetworkContext != NULL );
@@ -867,7 +834,7 @@ int initializeMqtt( MQTTContext_t * pMqttContext,NetworkContext_t * pNetworkCont
     }
     else
     {
-        outgoingPublishPackets[ publishIndex ].pubInfo.qos = MQTTQoS1;
+        outgoingPublishPackets[ publishIndex ].pubInfo.qos = MQTTQoS0;
         outgoingPublishPackets[ publishIndex ].pubInfo.pTopicName = pTopic;
         outgoingPublishPackets[ publishIndex ].pubInfo.topicNameLength = strlen(pTopic);
         outgoingPublishPackets[ publishIndex ].pubInfo.pPayload = pMessage;
@@ -970,64 +937,46 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
     }
 }
 
-void* RUN_MQTT_AWS(void* p)
-{
+
+
+void Aws_Init() {
     int returnStatus = EXIT_SUCCESS;
-    NetworkContext_t networkContext = { 0 };
-    OpensslParams_t opensslParams = { 0 };
-    bool clientSessionPresent = false, brokerSessionPresent = false;
     networkContext.pParams = &opensslParams;
     returnStatus = initializeMqtt( &mqttContext, &networkContext );
-
-    if( returnStatus == EXIT_SUCCESS )
-    {
-        MQTTStatus_t mqttStatus = MQTTSuccess;
-        for( ; ; )
-        {
-            returnStatus = connectToServerWithBackoffRetries( &networkContext, &mqttContext, &clientSessionPresent, &brokerSessionPresent );
-            if( returnStatus == EXIT_FAILURE )
-            {
-                    LogError( (get_localtime_now()),( "Failed to connect to MQTT broker %.*s.",AWS_IOT_ENDPOINT_LENGTH,AWS_IOT_ENDPOINT ) );
-            }
-            else
-            {
-                clientSessionPresent = true;
-                if( brokerSessionPresent == true )
-                {
-                    returnStatus = handlePublishResend( &mqttContext );
-                }
-                else
-                {
-                    cleanupOutgoingPublishes();
-                }
-                returnStatus = subscribeToTopic( &mqttContext );
-                while( returnStatus == EXIT_SUCCESS )
-                {
-                    mqttStatus = MQTT_ProcessLoop( &mqttContext, MQTT_PROCESS_LOOP_TIMEOUT_MS );
-                    if( mqttStatus != MQTTSuccess )
-                    {
-                        returnStatus = EXIT_FAILURE;
-                        LogError( (get_localtime_now()),( "MQTT_ProcessLoop returned with status = %s.",MQTT_Status_strerror( mqttStatus ) ) );
-                    }
-                    usleep(5000);
-                }
-                (void) Openssl_Disconnect( &networkContext );
-            }
-            usleep(MQTT_SUBPUB_LOOP_DELAY_MSECONDS);
-        }
-    }
-    return p;
 }
 
-void* RUN_MQTT_LOCAL(void* p)
-{
+void Aws_ProcessLoop() {
+    MQTTStatus_t mqttStatus;
+    bool clientSessionPresent = false;
+    bool brokerSessionPresent = false;
+    int returnStatus;
+    if (g_awsIsConnected == false) {
+        returnStatus = connectToServerWithBackoffRetries( &networkContext, &mqttContext, &clientSessionPresent, &brokerSessionPresent );
+        if (returnStatus == EXIT_SUCCESS) {
+            returnStatus = subscribeToTopic( &mqttContext );
+            if (returnStatus == EXIT_SUCCESS) {
+                g_awsIsConnected = true;
+            }
+        }
+    } else {
+        mqttStatus = MQTT_ProcessLoop( &mqttContext, 5 );
+        if (mqttStatus != MQTTSuccess ) {
+            returnStatus = EXIT_FAILURE;
+            g_awsIsConnected = false;
+            (void) Openssl_Disconnect( &networkContext );
+            LogError( (get_localtime_now()),( "MQTT_ProcessLoop returned with status = %s.",MQTT_Status_strerror( mqttStatus ) ) );
+        }
+    }
+}
 
+void Mosq_Init() {
     mosquitto_lib_init();
     mosq = mosquitto_new(MQTT_MOSQUITTO_CIENT_ID, true, NULL);
     rc = mosquitto_username_pw_set(mosq, "MqttLocalHomegy", "Homegysmart");
     if(rc != 0)
     {
         LogInfo((get_localtime_now()),("mosquitto_username_pw_set! Error Code: %d\n", rc));
+        return;
     }
     mosquitto_connect_callback_set(mosq, on_connect);
     mosquitto_message_callback_set(mosq, on_message);
@@ -1036,220 +985,184 @@ void* RUN_MQTT_LOCAL(void* p)
     {
         LogInfo((get_localtime_now()),("Client could not connect to broker! Error Code: %d\n", rc));
         mosquitto_destroy(mosq);
+        return;
     }
-    LogInfo((get_localtime_now()),("We are now connected to the broker!"));
-
-
-    while(1)
-    {
-        rc = mosquitto_loop(mosq, -1, 1);
-        if(rc != 0)
-        {
-            LogError((get_localtime_now()), ( "rc %d.",rc ) );
-            fptr = fopen("/usr/bin/log.txt","a");
-            fprintf(fptr,"[%s]AWS  error connected mosquitto\n",get_localtime_now());
-            fclose(fptr);
-
-            // break;
-        }
-        usleep(100);
-    }
-    return p;
+    logInfo("Mosq_Init done");
+    g_mosqIsConnected = true;
 }
 
-void* MOSQ_SUB_TASK(void* p)
-{
-    // bool check_flag = false;
-    int size_queue = 0;
-    while (1)
-    {
-        pthread_mutex_lock(&mutex_lock_mosq_t);
-        size_queue = get_sizeQueue(queue_mos_sub);
-        if(size_queue > 0)
-        {   
-            char *val_input = (char*)malloc(10000);
-            strcpy(val_input,(char *)dequeue(queue_mos_sub)); 
-            logInfo("Received msg from MQTT local: %s", val_input);
+void Mosq_ProcessLoop() {
+    if (g_mosqIsConnected) {
+        int rc = mosquitto_loop(mosq, 5, 1);
+        if (rc != 0) {
+            logError("mosquitto_loop error: %d.", rc);
+            g_mosqIsConnected = false;
+        }
+    } else {
+        mosquitto_destroy(mosq);
+        Mosq_Init();
+    }
+}
 
-            JSON_Value *schema = NULL;
-            JSON_Value *object = NULL;
-            schema = json_parse_string(val_input);
-            // const char *LayerService    = json_object_get_string(json_object(schema),MOSQ_LayerService);
-            // const char *NameService     = json_object_get_string(json_object(schema),MOSQ_NameService);
-            int type_action_t           = json_object_get_number(json_object(schema),MOSQ_ActionType);
-            long long int TimeCreat     = json_object_get_number(json_object(schema),MOSQ_TimeCreat);
-            const char *Id              = json_object_get_string(json_object(schema),MOSQ_Id);
-            const char *Extern          = json_object_get_string(json_object(schema),MOSQ_Extend);
-            const char *object_string   = json_object_get_string(json_object(schema),MOSQ_Payload);
-            long long int TimeCreat_end = 0;
 
-            char *message;
-            JSON* recvPacket = JSON_Parse(val_input);
-            int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
-            JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
-            switch (reqType) {
-                case TYPE_GET_DEVICE_HISTORY: {
-                    mqttCloudPublish(MQTT_SUB_TOPIC_NOTIFY, val_input);
-                    break;
-                }
-                case GW_RESPONSE_DEVICE_CONTROL: {
-                    JSON* cloudPacket = Aws_CreateCloudPacket(payload);
-                    sendPacketToCloud(MQTT_PUB_TOPIC_DEVICES, cloudPacket);
-                    JSON_Delete(cloudPacket);
-                    break;
-                }
-                case GW_RESPONSE_DEVICE_STATE: {
-                    JSON* devicesArray = JSON_GetObject(payload, "devices");
-                    JSON_ForEach(arrayItem, devicesArray) {
-                        char* deviceId = JSON_GetText(arrayItem, "deviceId");
+void Mosq_ProcessMessage() {
+    int size_queue = get_sizeQueue(queue_mos_sub);
+    if (size_queue > 0) {
+        char *val_input = (char*)malloc(10000);
+        strcpy(val_input,(char *)dequeue(queue_mos_sub));
+        logInfo("Received msg from MQTT local: %s", val_input);
+
+        JSON_Value *schema = NULL;
+        JSON_Value *object = NULL;
+        schema = json_parse_string(val_input);
+        // const char *LayerService    = json_object_get_string(json_object(schema),MOSQ_LayerService);
+        // const char *NameService     = json_object_get_string(json_object(schema),MOSQ_NameService);
+        int type_action_t           = json_object_get_number(json_object(schema),MOSQ_ActionType);
+        long long int TimeCreat     = json_object_get_number(json_object(schema),MOSQ_TimeCreat);
+        const char *Id              = json_object_get_string(json_object(schema),MOSQ_Id);
+        const char *Extern          = json_object_get_string(json_object(schema),MOSQ_Extend);
+        const char *object_string   = json_object_get_string(json_object(schema),MOSQ_Payload);
+        long long int TimeCreat_end = 0;
+
+        char *message;
+        JSON* recvPacket = JSON_Parse(val_input);
+        int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
+        JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
+        switch (reqType) {
+            case TYPE_GET_DEVICE_HISTORY: {
+                mqttCloudPublish(g_cloudSubTopicNotify, val_input);
+                break;
+            }
+            case GW_RESPONSE_DEVICE_CONTROL: {
+                JSON* cloudPacket = Aws_CreateCloudPacket(payload);
+                sendPacketToCloud(g_cloudPubTopicDevice, cloudPacket);
+                JSON_Delete(cloudPacket);
+                break;
+            }
+            case GW_RESPONSE_DEVICE_STATE: {
+                JSON* devicesArray = JSON_GetObject(payload, "devices");
+                JSON_ForEach(arrayItem, devicesArray) {
+                    char* deviceId = JSON_GetText(arrayItem, "deviceId");
+                    if (deviceId) {
                         int deviceState = JSON_GetNumber(arrayItem, "deviceState");
                         char* payload = getPayloadReponseStateDeviceAWS(deviceId, deviceState);
-                        mqttCloudPublish(MQTT_PUB_TOPIC_DEVICES, payload);
+                        mqttCloudPublish(g_cloudPubTopicDevice, payload);
                         free(payload);
                     }
                 }
-                case GW_RESPONSE_SENSOR_BATTERY:
-                case GW_RESPONSE_SMOKE_SENSOR:
-                case GW_RESPONSE_SENSOR_PIR_DETECT:
-                case GW_RESPONSE_SENSOR_PIR_LIGHT:
-                case GW_RESPONSE_SENSOR_ENVIRONMENT:
-                case GW_RESPONSE_SENSOR_DOOR_DETECT:
-                case GW_RESPONSE_SENSOR_DOOR_ALARM: {
-                    JSON* cloudPacket = Aws_CreateCloudPacket(payload);
-                    sendPacketToCloud(MQTT_PUB_TOPIC_DEVICES, cloudPacket);
-                    JSON_Delete(cloudPacket);
+                break;
+            }
+            case GW_RESPONSE_SENSOR_BATTERY:
+            case GW_RESPONSE_SMOKE_SENSOR:
+            case GW_RESPONSE_SENSOR_PIR_DETECT:
+            case GW_RESPONSE_SENSOR_PIR_LIGHT:
+            case GW_RESPONSE_SENSOR_ENVIRONMENT:
+            case GW_RESPONSE_SENSOR_DOOR_DETECT:
+            case GW_RESPONSE_SENSOR_DOOR_ALARM: {
+                JSON* cloudPacket = Aws_CreateCloudPacket(payload);
+                sendPacketToCloud(g_cloudPubTopicDevice, cloudPacket);
+                JSON_Delete(cloudPacket);
+                break;
+            }
+        }
+        JSON_Delete(recvPacket);
+        JSON_Delete(payload);
+
+        object = json_parse_string(object_string);
+        if(object != NULL)
+        {
+            int TypeReponse_t           = json_object_get_number(json_object(object),TYPE_REPONSE);
+            switch(type_action_t)
+            {
+                char *message;
+                char *topic;
+                // char *homeID;
+                // char *accoundID;
+                // char *ssid;
+                // char *passwd;
+
+                case TYPE_FEEDBACK_GATEWAY:
+                {
+                    break;
+                }
+
+                case TYPE_APP_SEND_INFO_INIT:
+                {
+                    break;
+                }
+                case TYPE_APP_SEND_INFO_MESH_NETWORK:
+                {
+                    LogInfo((get_localtime_now()),("TYPE_APP_SEND_INFO_MESH_NETWORK"));
+                    break;
+                }
+                case TYPE_MANAGER_PING_ON_OFF:
+                {
+                    get_topic(&topic,MOSQ_LayerService_Manager,MOSQ_NameService_Manager_ServieceManager,TYPE_MANAGER_PING_ON_OFF,Extern);
+                    getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_MANAGER_PING_ON_OFF,MOSQ_Reponse,Id,TimeCreat,object_string);
+                    mqttLocalPublish(topic, message);
+                    break;
+                }
+
+                case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
+                    break;
+
+                case TYPE_NOTIFI_REPONSE:
+                {
+                    mqttCloudPublish(g_cloudSubTopicNotify, object_string);
+                    break;
+                }
+
+                case GW_RESPONSE_DEVICE_KICKOUT:
+                case GW_RESPONSE_ADD_DEVICE:
+                {
+                    mqttCloudPublish(g_cloudPubTopicDevice, object_string);
+                    break;
+                }
+
+                case GW_RESPONSE_UPDATE_GROUP:
+                case GW_RESPONSE_ADD_GROUP_LINK:
+                case GW_RESPONSE_DEL_GROUP_LINK:
+                case GW_RESPONSE_DEL_GROUP_NORMAL:
+                case GW_RESPONSE_ADD_GROUP_NORMAL:
+                {
+                    mqttCloudPublish(g_cloudPubTopicGroup, object_string);
+                    break;
+                }
+
+                case GW_RESPONSE_ADD_SCENE_HC:
+                case GW_RESPONSE_UPDATE_SCENE:
+                case GW_RESPONSE_ADD_SCENE_LC:
+                case GW_RESPONSE_DEL_SCENE_HC:
+                {
+                    mqttCloudPublish(g_cloudPubTopicScene, object_string);
                     break;
                 }
             }
-            JSON_Delete(recvPacket);
-            JSON_Delete(payload);
-
-            object = json_parse_string(object_string);
-            if(object != NULL)
-            {
-                int TypeReponse_t           = json_object_get_number(json_object(object),TYPE_REPONSE);
-                switch(type_action_t)
-                {
-                    char *message;
-                    char *topic;
-                    // char *homeID;
-                    // char *accoundID;
-                    // char *ssid;
-                    // char *passwd;
-
-                    case TYPE_FEEDBACK_GATEWAY:
-                    {
-                        // AWS_getTemplateFeedbackAddGateway(&message,Id,"A000",json_object_get_number(json_object(object),MOSQ_ResponseState));
-                        // publishToTopicAndProcessIncomingMessage(&mqttContext,MQTT_PUB_TOPIC_DEVICES,MQTT_PUB_TOPIC_DEVICES_LENGTH,message);
-                        // free(message);
-                        break;
-                    }
-
-                    case TYPE_APP_SEND_INFO_INIT:
-                    {
-                        break;
-                    }
-                    case TYPE_APP_SEND_INFO_MESH_NETWORK:
-                    {
-                        LogInfo((get_localtime_now()),("TYPE_APP_SEND_INFO_MESH_NETWORK"));
-                        break;
-                    }
-                    case TYPE_MANAGER_PING_ON_OFF:
-                    {
-                        get_topic(&topic,MOSQ_LayerService_Manager,MOSQ_NameService_Manager_ServieceManager,TYPE_MANAGER_PING_ON_OFF,Extern);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_MANAGER_PING_ON_OFF,MOSQ_Reponse,Id,TimeCreat,object_string);
-                        mqttLocalPublish(topic, message);
-                        break;
-                    }
-
-                    case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
-                        break;
-
-                    case TYPE_NOTIFI_REPONSE:
-                    {
-                        mqttCloudPublish(MQTT_SUB_TOPIC_NOTIFY, object_string);
-                        break;
-                    }
-
-                    case GW_RESPONSE_DEVICE_KICKOUT:
-                    case GW_RESPONSE_ADD_DEVICE:
-                    {
-                        mqttCloudPublish(MQTT_PUB_TOPIC_DEVICES, object_string);
-                        break;
-                    }
-                    
-                    case GW_RESPONSE_UPDATE_GROUP:
-                    case GW_RESPONSE_ADD_GROUP_LINK:
-                    case GW_RESPONSE_DEL_GROUP_LINK:                    
-                    case GW_RESPONSE_DEL_GROUP_NORMAL:
-                    case GW_RESPONSE_ADD_GROUP_NORMAL:
-                    {
-                        mqttCloudPublish(MQTT_PUB_TOPIC_GROUP, object_string);
-                        break;
-                    }
-
-                    case GW_RESPONSE_ADD_SCENE_HC:
-                    case GW_RESPONSE_UPDATE_SCENE:
-                    case GW_RESPONSE_ADD_SCENE_LC:
-                    case GW_RESPONSE_DEL_SCENE_HC:
-                    {
-                        mqttCloudPublish(MQTT_PUB_TOPIC_SCENE, object_string);
-                        break;
-                    }
-                }
-                free(val_input);
-            }
+            free(val_input);
         }
-        else if(size_queue == QUEUE_SIZE)
-        {
-            pthread_mutex_unlock(&mutex_lock_mosq_t);
-        }
-        else
-        {
-            pthread_cond_wait(&dataUpdate_MosqQueue, &mutex_lock_mosq_t);
-        }
-        pthread_mutex_unlock(&mutex_lock_mosq_t);
-        usleep(100);
     }
-    return p;
 }
 
-int main( int argc,char ** argv )
-{
-    fptr = fopen("/usr/bin/log.txt","a");
-    fprintf(fptr,"[%s]AWS Start\n",get_localtime_now());
-    fclose(fptr);
+int main( int argc,char ** argv ) {
     pthread_t thr[3];
     int xRun = 1;
-    // int rc[3];
 
     queue_received_aws = newQueue(QUEUE_SIZE);
     queue_mos_sub = newQueue(QUEUE_SIZE);
 
-    pthread_create(&thr[0],NULL,RUN_MQTT_LOCAL,NULL);
-    usleep(50000);
-    pthread_create(&thr[1],NULL,MOSQ_SUB_TASK,NULL);
-    usleep(50000);
-    pthread_create(&thr[2],NULL,RUN_MQTT_AWS,NULL);
-    usleep(50000);
-
-    if (pthread_mutex_init(&mutex_lock_t, NULL) != 0) {
-            // LogError(("mutex init has failed"));
-            return 1;
-    }
-    if (pthread_mutex_init(&mutex_lock_mosq_t, NULL) != 0) {
-            // LogError(("mutex init has failed"));
-            return 1;
-    }
+    getHcInformation();
+    Aws_Init();
+    Mosq_Init();
 
     int size_queue = 0;
     bool check_flag = false;
-    while(xRun!=0)
-    {
-        pthread_mutex_lock(&mutex_lock_t);
+    while (xRun!=0) {
+        Aws_ProcessLoop();
+        Mosq_ProcessLoop();
+        Mosq_ProcessMessage();
+
         size_queue = get_sizeQueue(queue_received_aws);
-        if(size_queue > 0)
-        {
+        if (size_queue > 0) {
             int reponse = 0;
             long long TimeCreat = 0;
 
@@ -1265,7 +1178,7 @@ int main( int argc,char ** argv )
             char *val_input = (char*)malloc(10000);
             strcpy(val_input,(char *)dequeue(queue_received_aws));
             check_flag = AWS_pre_detect_message_received(pre_detect,val_input);
-            if(check_flag && (pre_detect->sender == SENDER_APP_VIA_LOCAL || pre_detect->sender == SENDER_APP_VIA_CLOUD ))
+            if (check_flag && (pre_detect->sender == SENDER_APP_VIA_LOCAL || pre_detect->sender == SENDER_APP_VIA_CLOUD ))
             {
                 printf("\n\r");
                 logInfo("Received msg from MQTT cloud: %s", val_input);
@@ -1434,13 +1347,9 @@ int main( int argc,char ** argv )
                     }
                     case TYPE_ADD_GW:
                     {
-                        TimeCreat = timeInMilliseconds();
-                        get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_ADD_GW,MOSQ_ActResponse);
-
-                        AWS_getInfoGateway(InfoProvisonGateway_t,pre_detect);
-                        MOSQ_getTemplateAddGateway(&payload,InfoProvisonGateway_t);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_ADD_GW,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        mqttLocalPublish(topic, message);
+                        AWS_getInfoGateway(InfoProvisonGateway_t, pre_detect);
+                        MOSQ_getTemplateAddGateway(&payload, InfoProvisonGateway_t);
+                        sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
                     case TYPE_UPDATE_SERVICE:
@@ -1455,8 +1364,8 @@ int main( int argc,char ** argv )
                     }
                     default:
                     {
-                        LogError((get_localtime_now()),("Error detect"));
-                        break;                            
+                        LogError((get_localtime_now()),("Error detect: %d", pre_detect->type));
+                        break;
                     }
                 }
                 free(val_input);
@@ -1491,15 +1400,6 @@ int main( int argc,char ** argv )
 
 
         }
-        else if(size_queue == QUEUE_SIZE)
-        {
-            pthread_mutex_unlock(&mutex_lock_t);
-        }
-        else
-        {
-            pthread_cond_wait(&dataUpdate_Queue, &mutex_lock_t);
-        }
-        pthread_mutex_unlock(&mutex_lock_t);
         usleep(100);
     }
     return 0;

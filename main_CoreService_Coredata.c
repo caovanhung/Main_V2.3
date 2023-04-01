@@ -44,6 +44,7 @@ pthread_mutex_t mutex_lock_t            = PTHREAD_MUTEX_INITIALIZER;
 Scene* g_sceneList;
 int g_sceneCount = 0;
 JSON_Value *g_checkRespList;
+static bool g_mosqIsConnected = false;
 
 JSON* parseGroupLinkDevices(const char* devices);
 JSON* parseGroupNormalDevices(const char* devices);
@@ -127,8 +128,7 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
     }
 }
 
-void* RUN_MQTT_LOCAL(void* p)
-{
+void Mosq_Init() {
     int rc = 0;
     mosquitto_lib_init();
     mosq = mosquitto_new(MQTT_MOSQUITTO_CIENT_ID, true, NULL);
@@ -140,21 +140,22 @@ void* RUN_MQTT_LOCAL(void* p)
     {
         LogInfo((get_localtime_now()),("Client could not connect to broker! Error Code: %d\n", rc));
         mosquitto_destroy(mosq);
+        return;
     }
-    LogInfo((get_localtime_now()),("We are now connected to the broker!"));
-    while(1)
-    {
-        rc = mosquitto_loop(mosq, -1, 1);
-        //LogInfo( (get_localtime_now()),( "rc %d.",rc ) );
-        if(rc != 0)
-        {
-            LogError( (get_localtime_now()),( "rc %d.",rc ) );
-            fptr = fopen("/usr/bin/log.txt","a");
-            fprintf(fptr,"[%s]CORE  error %d connected mosquitto\n",get_localtime_now(),rc);
-            fclose(fptr);
-            // break;
+    logInfo("Mosq_Init() done");
+    g_mosqIsConnected = true;
+}
+
+void Mosq_ProcessLoop() {
+    if (g_mosqIsConnected) {
+        int rc = mosquitto_loop(mosq, 5, 1);
+        if (rc != 0) {
+            logError("mosquitto_loop error: %d.", rc);
+            g_mosqIsConnected = false;
         }
-        usleep(100);
+    } else {
+        mosquitto_destroy(mosq);
+        Mosq_Init();
     }
 }
 
@@ -176,7 +177,8 @@ void CHECK_REPONSE_RESULT()
         strcpy(reqId, json_object_get_string(respItem, "reqType"));   // reqId = reqType.itemId
         int reqType  = atoi(strtok(reqId, "."));
         char* itemId = strtok(NULL, ".");
-        if (currentTime - createdTime < TIMEOUT_ADD_GROUP_MS) {
+        int addgroupTimeout = deviceCount * 1000;
+        if (currentTime - createdTime < addgroupTimeout) {
             // Check status of all devices in the response object
             int successCount = 0;
             char* deviceAddr;
@@ -416,18 +418,15 @@ int main( int argc,char ** argv )
         LogInfo((get_localtime_now()),("sqlite3_open is success."));
     }
 
-    rc[0]=pthread_create(&thr[0],NULL,RUN_MQTT_LOCAL,NULL);
-    usleep(50000);
-    if (pthread_mutex_init(&mutex_lock_t, NULL) != 0) {
-            LogError((get_localtime_now()),("mutex init has failed"));
-            return 1;
-    }
-
+    Mosq_Init();
     Db_LoadSceneToRam();
     sleep(1);
     SyncDevicesState();
     while(xRun!=0) {
-        pthread_mutex_lock(&mutex_lock_t);
+        Mosq_ProcessLoop();
+        CHECK_REPONSE_RESULT();
+        executeScenes();
+
         size_queue = get_sizeQueue(queue_received);
         if (size_queue > 0) {
             int reponse = 0;int leng =  0,number = 0, size_ = 0,i=0;
@@ -452,7 +451,10 @@ int main( int argc,char ** argv )
             JSON* recvPacket = JSON_Parse(val_input);
             JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
             int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
-            if (isMatchString(NameService, SERVICE_BLE)) {
+            if (payload == NULL) {
+                logError("Payload is NULL");
+            }
+            if (isMatchString(NameService, SERVICE_BLE) && payload) {
                 switch (reqType) {
                     case GW_RESPONSE_DEVICE_CONTROL: {
                         char* dpAddr = JSON_GetText(payload, "dpAddr");
@@ -528,7 +530,7 @@ int main( int argc,char ** argv )
                         break;
                     }
                 }
-            } else if (isMatchString(NameService, SERVICE_AWS)) {
+            } else if (isMatchString(NameService, SERVICE_AWS) && payload) {
                 switch (reqType) {
                     case TYPE_GET_DEVICE_HISTORY: {
                         long long currentTime = timeInMilliseconds();
@@ -649,16 +651,10 @@ int main( int argc,char ** argv )
                         break;
                     }
                     case TYPE_ADD_GW: {
-                        // addGateway(&db,object_string);
-
-                        // get_topic(&topic,MOSQ_LayerService_Device,SERVICE_BLE,TYPE_ADD_GW,MOSQ_ActResponse);
-                        // replaceInfoFormTranMOSQ(&message,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_ADD_GW,MOSQ_ActResponse,val_input);
-                        // mqttLocalPublish(topic, message);
-                        // if(topic != NULL) free(topic);
-                        // if(message != NULL) free(message);
+                        Db_AddGateway(payload);
+                        sendPacketTo(SERVICE_BLE, type_action_t, payload);
                         break;
                     }
-
                     case TYPE_ADD_SCENE: {
                         int isLocal = JSON_GetNumber(payload, "isLocal");
                         Scene_GetFullInfo(payload);
@@ -745,6 +741,7 @@ int main( int argc,char ** argv )
                             }
                             // Save new scene to database
                             Db_DeleteScene(sceneId);
+                            Db_AddScene(newScene);
                             sendNotiToUser("Cập nhật kịch bản thành công");
                         } else {
                             logInfo("Scene %s is not found", sceneId);
@@ -951,13 +948,8 @@ int main( int argc,char ** argv )
 
             JSON_Delete(recvPacket);
             JSON_Delete(payload);
-        } else if(size_queue == QUEUE_SIZE) {
-            pthread_mutex_unlock(&mutex_lock_t);
         }
-        pthread_mutex_unlock(&mutex_lock_t);
-        CHECK_REPONSE_RESULT();
-        executeScenes();
-        usleep(1000);
+        usleep(100);
     }
     return 0;
 }

@@ -103,6 +103,8 @@ extern int g_sceneCount;
 #define Sql_Query(sqlCmd, row)    int rc = 0; sqlite3_stmt *row; rc = sqlite3_prepare_v2(db, sqlCmd, -1, &row, NULL); while (sqlite3_step(row) == SQLITE_ROW)
 #define Sql_Exec(sqlCmd)    { char *err_msg; if (sqlite3_exec(db, sqlCmd, 0, 0, &err_msg) != SQLITE_OK) { myLogError("SQL Error: %s, %s", sqlCmd, err_msg); sqlite3_free(err_msg); return 0; }}
 
+int Db_AddGateway(JSON* gatewayInfo);
+
 int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand);
 int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId);
 int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr);

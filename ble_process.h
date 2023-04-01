@@ -26,6 +26,7 @@
 #include "ble_common.h"
 #include "error.h"
 #include "define.h"
+#include "cJSON.h"
 
 typedef struct  
 {
@@ -204,7 +205,7 @@ void BLE_PrintFrame(char* str, ble_rsp_frame_t* frame);
 *               
 * out param:    return 0 if success, or 1 if fail
 *******************************************************************/
-bool ble_getInfoProvison(provison_inf *PRV, JSON_Object *object);
+bool ble_getInfoProvison(provison_inf *PRV, JSON* packet);
 
 
 
@@ -215,7 +216,7 @@ bool ble_getInfoProvison(provison_inf *PRV, JSON_Object *object);
                 PRV: the struct data for provision
 * out param:    NO
 *******************************************************************/
-bool ble_bindGateWay(provison_inf *PRV,int fd);
+bool ble_bindGateWay(provison_inf *PRV);
 bool ble_saveInforDeviceForGatewayRangDong(const char *address_t,const char *address_gateway);
 bool ble_saveInforDeviceForGatewayHomegy(const char *address_element_0,const char *address_gateway);
 bool creatFormReponseBLE(char **ResultTemplate);

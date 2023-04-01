@@ -61,7 +61,7 @@ extern int g_dbgLineNumber;
 
 
 //define for value of JSON data
-#define TYPE_ADD_GW                     (0U)
+#define TYPE_ADD_GW                     (26U)
 #define TYPE_FEEDBACK_GATEWAY           (1U)
 #define TYPE_ADD_DEVICE                 (2U)
 #define TYPE_DEL_DEVICE                 (3U)
@@ -94,7 +94,7 @@ extern int g_dbgLineNumber;
 #define GW_RESPONSE_UNKNOW               ( -1 )
 #define GW_RESPONSE_DEVICE_CONTROL       ( 50U )
 #define GW_RESPONSE_DEVICE_KICKOUT       ( 51U )
-#define GW_RESPONSE_SMOKE_SENSOR           ( 52U )
+#define GW_RESPONSE_SMOKE_SENSOR         ( 52U )
 #define GW_RESPONSE_SENSOR_ENVIRONMENT   ( 53U )
 #define GW_RESPONSE_DEVICE_STATE         ( 54U )
 #define GW_RESPONSE_SENSOR_BATTERY       ( 55U )
@@ -174,7 +174,7 @@ extern int g_dbgLineNumber;
 
 #define TIMEOUT_ADD_DEVICE_MS           (10000U)
 #define TIMEOUT_ADD_SCENE_MS            (10000U)
-#define TIMEOUT_ADD_GROUP_MS            (5000U)
+#define TIMEOUT_ADD_GROUP_MS            (10000U)
 #define TIMEOUT_CTL_MS                  (5000U)
 #define TIMEOUT_DEL_MS                  (5000U)
 

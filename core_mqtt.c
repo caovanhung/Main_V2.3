@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include "core_mqtt.h"
 #include "core_mqtt_state.h"
+#include "define.h"
 
 /*-----------------------------------------------------------*/
 
@@ -1053,6 +1054,10 @@ static MQTTStatus_t handleIncomingPublish( MQTTContext_t * pContext,
     // LogInfo( ( "De-serialized incoming PUBLISH packet: DeserializerResult=%s.",
     //            MQTT_Status_strerror( status ) ) );
 
+    if (status == MQTTBadResponse) {
+        int a = 1;
+    }
+
     if( status == MQTTSuccess )
     {
         status = MQTT_UpdateStatePublish( pContext,
@@ -1060,6 +1065,9 @@ static MQTTStatus_t handleIncomingPublish( MQTTContext_t * pContext,
                                           MQTT_RECEIVE,
                                           publishInfo.qos,
                                           &publishRecordState );
+        if (status == MQTTBadResponse) {
+            int a = 1;
+        }
 
         if( status == MQTTSuccess )
         {
@@ -1142,6 +1150,9 @@ static MQTTStatus_t handleIncomingPublish( MQTTContext_t * pContext,
         status = sendPublishAcks( pContext,
                                   packetIdentifier,
                                   publishRecordState );
+        if (status == MQTTBadResponse) {
+            int a = 1;
+        }
     }
 
     return status;
@@ -1238,7 +1249,7 @@ static MQTTStatus_t handleIncomingAck( MQTTContext_t * pContext,
 
     // LogDebug( ( "Received packet of type %02x.",
     //             ( unsigned int ) pIncomingPacket->type ) );
-
+    // printf("========= packet type from server: PacketType=%02x.", ( unsigned int ) pIncomingPacket->type );
     switch( pIncomingPacket->type )
     {
         case MQTT_PACKET_TYPE_PUBACK:
@@ -1271,8 +1282,7 @@ static MQTTStatus_t handleIncomingAck( MQTTContext_t * pContext,
 
         default:
             // /* Bad response from the server. */
-            // LogError( ( "Unexpected packet type from server: PacketType=%02x.",
-            //             ( unsigned int ) pIncomingPacket->type ) );
+
             status = MQTTBadResponse;
             break;
     }
@@ -1307,6 +1317,9 @@ static MQTTStatus_t receiveSingleIteration( MQTTContext_t * pContext,
                                                   pContext->transportInterface.pNetworkContext,
                                                   &incomingPacket );
 
+    if (status == MQTTBadResponse) {
+        int a = 1;
+    }
     if( status == MQTTNoDataAvailable )
     {
         if( manageKeepAlive == true )
@@ -1333,6 +1346,9 @@ static MQTTStatus_t receiveSingleIteration( MQTTContext_t * pContext,
         /* Receive packet. Remaining time is recalculated before calling this
          * function. */
         status = receivePacket( pContext, incomingPacket, remainingTimeMs );
+        if (status == MQTTBadResponse) {
+            int a = 1;
+        }
     }
 
     /* Handle received packet. If no data was read then this will not execute. */
@@ -1345,10 +1361,16 @@ static MQTTStatus_t receiveSingleIteration( MQTTContext_t * pContext,
         if( ( incomingPacket.type & 0xF0U ) == MQTT_PACKET_TYPE_PUBLISH )
         {
             status = handleIncomingPublish( pContext, &incomingPacket );
+            if (status == MQTTBadResponse) {
+                int a = 1;
+            }
         }
         else
         {
             status = handleIncomingAck( pContext, &incomingPacket, manageKeepAlive );
+            if (status == MQTTBadResponse) {
+                int a = 1;
+            }
         }
     }
 

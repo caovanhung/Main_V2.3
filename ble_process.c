@@ -36,15 +36,17 @@ void BLE_PrintFrame(char* str, ble_rsp_frame_t* frame) {
     sprintf(str, "sendAddr: %04x, recv: %4x, opcode: %4x, param: %s", frame->sendAddr, frame->recvAddr, frame->opcode, paramStr);
 }
 
-bool ble_getInfoProvison(provison_inf *PRV, JSON_Object *object)
+bool ble_getInfoProvison(provison_inf *PRV, JSON* packet)
 {
-    PRV->appkey = json_object_get_string(object, KEY_APP_KEY);
-    PRV->ivIndex = json_object_get_string(object, KEY_IV_INDEX);
-    PRV->netkeyIndex = json_object_get_string(object, KEY_NETKEY_INDEX);
-    PRV->netkey = json_object_get_string(object, KEY_NETKEY);
-    PRV->appkeyIndex = json_object_get_string(object, KEY_APP_KEY_INDEX);
-    PRV->deviceKey = json_object_get_string(object, KEY_DEVICE_KEY);
-    PRV->address = json_object_get_string(object, KEY_ADDRESS);
+    ASSERT(PRV);
+    ASSERT(packet);
+    PRV->appkey = JSON_GetText(packet, KEY_APP_KEY);
+    PRV->ivIndex = JSON_GetText(packet, KEY_IV_INDEX);
+    PRV->netkeyIndex = JSON_GetText(packet, KEY_NETKEY_INDEX);
+    PRV->netkey = JSON_GetText(packet, KEY_NETKEY);
+    PRV->appkeyIndex = JSON_GetText(packet, KEY_APP_KEY_INDEX);
+    PRV->deviceKey = JSON_GetText(packet, KEY_DEVICE_KEY);
+    PRV->address = JSON_GetText(packet, KEY_ADDRESS);
     return true;
 }
 
@@ -62,7 +64,7 @@ bool BLE_GetDeviceOnOffState(const char* dpAddr) {
     return true;
 }
 
-bool ble_bindGateWay(provison_inf *PRV,int fd)
+bool ble_bindGateWay(provison_inf *PRV)
 {
 
     int i = 0;
@@ -902,9 +904,8 @@ bool ble_addDeviceToGroupLightCCT_HOMEGY(const char *address_group,const char *a
     SET_GROUP[15] = *(hex_address_group+1);
 
     check = UART0_Send(fd, SET_GROUP, 18);
-    usleep(1000000);
-    if(check != 18)
-    {
+    usleep(DELAY_SEND_UART_MS);
+    if (check != 18) {
         return false;
     }
     return true;
@@ -1717,7 +1718,7 @@ bool ble_callSceneLocalToHC(const char* address_device,const char* sceneID)
         printf("  %02X",CallSceneLocalToHC[i]);
     }
     printf("\n\n");
-    check = UART0_Send(fd,CallSceneLocalToHC,17);
+    check = UART0_Send(fd,CallSceneLocalToHC,14);
     free(hex_address_device);
     free(hex_sceneID);
     hex_address_device = NULL;

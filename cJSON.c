@@ -3130,13 +3130,16 @@ char* JSON_GetText(cJSON* obj, const char* name) {
 }
 
 double JSON_GetNumber(cJSON* obj, const char* name) {
-    cJSON* c = cJSON_GetObjectItem(obj, name);
-    if (cJSON_IsBool(c)) {
-        return c->valueint;
-    } else if  (cJSON_IsNumber(c)) {
-        return cJSON_GetNumberValue(c);
+    if (obj) {
+        cJSON* c = cJSON_GetObjectItem(obj, name);
+        if (cJSON_IsBool(c)) {
+            return c->valueint;
+        } else if  (cJSON_IsNumber(c)) {
+            return cJSON_GetNumberValue(c);
+        }
+        myLogError("JSON Object %s of %s is not NUMBER or BOOLEAN or NOT exist", name, obj->string);
     }
-    myLogError("JSON Object %s of %s is not NUMBER or BOOLEAN or NOT exist", name, obj->string);
+
     return 0;
 }
 

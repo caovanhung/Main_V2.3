@@ -790,7 +790,7 @@ static bool incomingPacketValid( uint8_t packetType )
 
         /* Any other packet type is invalid. */
         default:
-            printf("Incoming packet invalid: Packet type=%u.",( unsigned int ) packetType);
+            // printf("Incoming packet invalid: Packet type=%u.",( unsigned int ) packetType);
             // LogWarn( ( "Incoming packet invalid: Packet type=%u.",
             //            ( unsigned int ) packetType ) );
             break;
@@ -1255,6 +1255,9 @@ static MQTTStatus_t deserializePublish( const MQTTPacketInfo_t * pIncomingPacket
     pVariableHeader = pIncomingPacket->pRemainingData;
     /* The flags are the lower 4 bits of the first byte in PUBLISH. */
     status = processPublishFlags( ( pIncomingPacket->type & 0x0FU ), pPublishInfo );
+    if (status == MQTTBadResponse) {
+        int a = 1;
+    }
 
     if( status == MQTTSuccess )
     {
@@ -1266,6 +1269,9 @@ static MQTTStatus_t deserializePublish( const MQTTPacketInfo_t * pIncomingPacket
         status = checkPublishRemainingLength( pIncomingPacket->remainingLength,
                                               pPublishInfo->qos,
                                               MQTT_MIN_PUBLISH_REMAINING_LENGTH_QOS0 );
+        if (status == MQTTBadResponse) {
+            int a = 1;
+        }
     }
 
     if( status == MQTTSuccess )
@@ -1279,6 +1285,9 @@ static MQTTStatus_t deserializePublish( const MQTTPacketInfo_t * pIncomingPacket
         status = checkPublishRemainingLength( pIncomingPacket->remainingLength,
                                               pPublishInfo->qos,
                                               pPublishInfo->topicNameLength + sizeof( uint16_t ) );
+        if (status == MQTTBadResponse) {
+            int a = 1;
+        }
     }
 
     if( status == MQTTSuccess )
@@ -2267,6 +2276,9 @@ MQTTStatus_t MQTT_DeserializePublish( const MQTTPacketInfo_t * pIncomingPacket,
     else
     {
         status = deserializePublish( pIncomingPacket, pPacketId, pPublishInfo );
+        if (status == MQTTBadResponse) {
+            int a = 1;
+        }
     }
 
     return status;

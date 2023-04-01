@@ -100,6 +100,21 @@ void print_database(sqlite3 **db)
     printf("\n\n\n");
 }
 
+int Db_AddGateway(JSON* gatewayInfo) {
+    creat_table_database(&db);
+    char sqlCmd[500];
+    char* address = JSON_GetText(gatewayInfo, KEY_ADDRESS);
+    char* appkey = JSON_GetText(gatewayInfo, KEY_APP_KEY);
+    char* ivIndex = JSON_GetText(gatewayInfo, KEY_IV_INDEX);
+    char* netkeyIndex = JSON_GetText(gatewayInfo, KEY_NETKEY_INDEX);
+    char* netkey = JSON_GetText(gatewayInfo, KEY_NETKEY);
+    char* appkeyIndex = JSON_GetText(gatewayInfo, KEY_APP_KEY_INDEX);
+    char* deviceKey = JSON_GetText(gatewayInfo, KEY_DEVICE_KEY);
+    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES('%s','%s','%s','%s','%s','%s','%s')", address, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey);
+    Sql_Exec(sqlCmd);
+    return 1;
+}
+
 int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand)
 {
     int rc = 0, rowCount = 0;

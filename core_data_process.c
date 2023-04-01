@@ -710,25 +710,6 @@ bool deleteSceneListOfDeviceFromSceneID(sqlite3 **db,const char *sceneID)
     return true;
 }
 
-
-
-bool addGateway(sqlite3 **db,const char *object_)
-{
-    bool check_flag     = false;
-    JSON_Value *object  = NULL;
-    object              = json_parse_string(object_);
-    check_flag          = creat_table_database(db);
-    check_flag          = sql_insertDataTableGateway(db,json_object_get_string(json_object(object), KEY_ADDRESS),
-                                                        json_object_get_string(json_object(object), KEY_APP_KEY),
-                                                        json_object_get_string(json_object(object), KEY_IV_INDEX),
-                                                        json_object_get_string(json_object(object), KEY_NETKEY_INDEX),
-                                                        json_object_get_string(json_object(object), KEY_NETKEY),
-                                                        json_object_get_string(json_object(object), KEY_APP_KEY_INDEX),
-                                                        json_object_get_string(json_object(object), KEY_DEVICE_KEY));
-    print_database(db);
-    return true;
-}
-
 bool addNewGroupNormal(sqlite3 **db,const char *object_)
 {
     bool check_flag = false,check_flag_update = false;
