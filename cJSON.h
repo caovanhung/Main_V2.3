@@ -298,24 +298,28 @@ typedef struct cJSON JSON;
 #define JSON_Parse(str)                     cJSON_Parse(str)
 #define JSON_CreateObject()                 cJSON_CreateObject()
 #define JSON_CreateArray()                  cJSON_CreateArray()
-#define JSON_Delete(obj)                    cJSON_Delete(obj)
-#define JSON_HasObjectItem(obj, name)       cJSON_HasObjectItem(obj, name)
-#define JSON_AddArrayToObject(obj, name)    cJSON_AddArrayToObject(obj, name)
-#define JSON_GetObject(obj, name)           cJSON_GetObjectItem(obj, name)
-#define JSON_ArrayGetObject(arr, index)     cJSON_GetArrayItem(arr, index)
-#define JSON_SetObject(obj, name, item)     cJSON_AddItemToObject(obj, name, item)
 
-char* JSON_GetText(cJSON* obj, const char* name);
-double JSON_GetNumber(cJSON* obj, const char* name);
-cJSON* JSON_SetText(cJSON* obj, const char* name, const char* value);
-cJSON* JSON_SetNumber(cJSON* obj, const char* name, double value);
-size_t JSON_ArrayCount(cJSON* arr);
-char* JSON_ArrayGetText(cJSON* arr, int index);
-double JSON_ArrayGetNumber(cJSON* arr, int index);
-cJSON* JSON_ArrayAddText(cJSON* arr, const char* value);
-cJSON* JSON_ArrayAddObject(cJSON* arr);
+char*   JSON_GetText(JSON* obj, const char* name);
+double  JSON_GetNumber(JSON* obj, const char* name);
+#define JSON_GetObject(obj, key)            cJSON_GetObjectItem(obj, key)
+JSON*   JSON_SetText(JSON* obj, const char* name, const char* value);
+JSON*   JSON_SetNumber(JSON* obj, const char* name, double value);
+#define JSON_SetObject(obj, name, item)     cJSON_AddItemToObject(obj, name, item)
+#define JSON_HasKey(obj, key)               cJSON_HasObjectItem(obj, key)
+#define JSON_RemoveKey(obj, key)            cJSON_DeleteItemFromObject(obj, key)
+#define JSON_AddArray(obj, key)             cJSON_AddArrayToObject(obj, key)
+
+size_t  JArr_Count(JSON* arr);
+char*   JArr_GetText(JSON* arr, int index);
+double  JArr_GetNumber(JSON* arr, int index);
+#define JArr_GetObject(arr, index)          cJSON_GetArrayItem(arr, index)
+JSON*   JArr_AddText(JSON* arr, const char* value);
+JSON*   JArr_AddObject(JSON* arr);
+#define JArr_RemoveIndex(arr, index)        cJSON_DeleteItemFromArray(arr, index)
+JSON*   JArr_FindByText(JSON* array, const char* key, const char* value);
 
 #define JSON_ForEach(element, obj) for(cJSON* element = (obj != NULL) ? (obj)->child : NULL; element != NULL; element = element->next)
+#define JSON_Delete(obj)                    cJSON_Delete(obj)
 
 #ifdef __cplusplus
 }

@@ -6,7 +6,7 @@
 
 #define FILENAME               ( strrchr( __FILE__, '/' ) ? strrchr( __FILE__, '/' ) + 1 : __FILE__ )
 
-#define ASSERT(...)  if (!(__VA_ARGS__)) { logError("ASSERT: %s:%d", __FILE__, __LINE__); return; }
+#define ASSERT(...)  if (!(__VA_ARGS__)) { printf("ERROR ASSERT: %s:%d", __FILE__, __LINE__); return; }
 
 extern const char* SERVICE_NAME;
 extern char* g_dbgFileName;
@@ -116,7 +116,7 @@ extern int g_dbgLineNumber;
 #define GW_RESPONSE_ADD_DEVICE                          (68U)
 #define GW_RESPONSE_ADD_SCENE_HC                        (69U)
 #define GW_RESPONSE_DEL_SCENE_HC                        (70U)
-#define GW_RESPONSE_SCENE_LC_WRITE_INTO_DEVICE          (71U)
+#define GW_RESPONSE_ADD_SCENE          (71U)
 #define GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE           (72U)
 #define GW_RESPONSE_ADD_SCENE_LC                        (73U)
 #define GW_RESPONSE_DEL_SCENE_LC                        (74U)
@@ -475,7 +475,6 @@ extern int g_dbgLineNumber;
 
 #define MOSQ_TOPIC_DEVICE_BLE               "DEVICE_SERVICES/BLE/#"
 #define MOSQ_TOPIC_DEVICE_TUYA              "DEVICE_SERVICES/TUYA/#"
-#define MOSQ_TOPIC_DEVICE_WIFI              "DEVICE_SERVICES/WIFI/#"
 
 
 #define MOSQ_TOPIC_TOOL                     "SUPPORTING_SERVICES/Tool/#"
@@ -498,9 +497,8 @@ extern int g_dbgLineNumber;
 
 #define SERVICE_AWS                  "AWS"
 #define SERVICE_CORE                 "CORE"
-#define SERVICE_CMD                  "Command"
 #define SERVICE_BLE                  "BLE"
-#define SERVICE_WIFI                 "WIFI"
+#define SERVICE_TUYA                 "TUYA"
 
 
 #define MOSQ_NameService_Manager_ServieceManager        "ServieceManager"
@@ -532,7 +530,7 @@ extern int g_dbgLineNumber;
 //using for BLE service
 #define MAX_SIZE_UART_STRING_RECEIVE            ( 100000U )
 #define MAX_SIZE_ELEMENT_QUEUE                  ( 100000U )
-#define MAX_SIZE_NUMBER_QUEUE                   ( 10U )
+#define MAX_SIZE_NUMBER_QUEUE                   ( 1000U )
 #define MAX_SIZE_INFO_ADDRESS                   ( 100000U )
 
 

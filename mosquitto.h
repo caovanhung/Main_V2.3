@@ -41,7 +41,7 @@ typedef struct
 typedef struct {
     int             reqType;
     DeviceInfo*  deviceInfo;
-    dp_info_t       dps[20];
+    DpInfo       dps[20];
     size_t          dpCount;
 } local_packet_t;
 

@@ -177,20 +177,20 @@ void Ble_ProcessPacket()
             switch(frameType) {
                 case GW_RESPONSE_DEVICE_STATE: {
                     JSON* packet = JSON_CreateObject();
-                    JSON* devicesArray = JSON_AddArrayToObject(packet, "devices");
-                    JSON* arrayItem = JSON_ArrayAddObject(devicesArray);
+                    JSON* devicesArray = JSON_AddArray(packet, "devices");
+                    JSON* arrayItem = JArr_AddObject(devicesArray);
                     JSON_SetText(arrayItem, "deviceAddr", tmp->address_element);
                     int onlineState = bleFrames[i].onlineState? TYPE_DEVICE_ONLINE : TYPE_DEVICE_OFFLINE;
                     JSON_SetNumber(arrayItem, "deviceState", onlineState);
                     if (bleFrames[i].sendAddr2 != 0) {
-                        arrayItem = JSON_ArrayAddObject(devicesArray);
+                        arrayItem = JArr_AddObject(devicesArray);
                         char str[5];
                         sprintf(str, "%04x", bleFrames[i].sendAddr2);
                         JSON_SetText(arrayItem, "deviceAddr", str);
                         onlineState = bleFrames[i].onlineState2? TYPE_DEVICE_ONLINE : TYPE_DEVICE_OFFLINE;
                         JSON_SetNumber(arrayItem, "deviceState", onlineState);
                     }
-                    sendPacketTo(SERVICE_CORE, GW_RESPONSE_DEVICE_STATE, packet);
+                    // sendPacketTo(SERVICE_CORE, GW_RESPONSE_DEVICE_STATE, packet);
                     JSON_Delete(packet);
                     break;
                 }
@@ -308,8 +308,6 @@ void Ble_ProcessPacket()
                 case GW_RESPONSE_SET_TIME_SENSOR_PIR:
                 case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_UNSUCCESS:
                 case GW_RESPONSE_ACTIVE_DEVICE_HG_RD_SUCCESS:
-                case GW_RESPONSE_SAVE_GATEWAY_HG:
-                case GW_RESPONSE_SAVE_GATEWAY_RD:
                 {
                     // InfoDataUpdateDevice_t->type_reponse = TYPE_DATA_REPONSE_STATE;
                     // InfoDataUpdateDevice_t->deviceID = tmp->address_element;
@@ -319,15 +317,19 @@ void Ble_ProcessPacket()
                     break;
                 }
 
-                case GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE:
-                case GW_RESPONSE_SCENE_LC_WRITE_INTO_DEVICE:
-                case GW_RESPONSE_DEVICE_KICKOUT:
+                // case GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE:
+                case GW_RESPONSE_ADD_SCENE:
+                // case GW_RESPONSE_DEVICE_KICKOUT:
                 {
-                    // InfoDataUpdateDevice_t->type_reponse = TYPE_DATA_REPONSE_STATE;
-                    // InfoDataUpdateDevice_t->deviceID = (char *)deviceID;
-                    // InfoDataUpdateDevice_t->value = tmp->value;
-                    // InfoDataUpdateDevice_t->dpID = tmp->address_element;
-                    // response = frameType;
+                    logInfo("GW_RESPONSE_ADD_SCENE");
+                    JSON* packet = JSON_CreateObject();
+                    char sceneId[10];
+                    sprintf(sceneId, "%02X%02X", bleFrames[i].param[1], bleFrames[i].param[2]);
+                    JSON_SetText(packet, "sceneId", sceneId);
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    JSON_SetNumber(packet, "status", bleFrames[i].param[0]? 0: 1);
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    JSON_Delete(packet);
                     break;
                 }
                 case GW_RESPONSE_ADD_GROUP_LIGHT: {
@@ -397,8 +399,10 @@ int main( int argc,char ** argv )
         return 1;
     }
     while (g_mosqIsConnected == false);
+    sleep(3);
     // Send request to CORE service to ask it sending request to sync device state
-    sendToService(SERVICE_CORE, TYPE_SYNC_DEVICE_STATE, "{}");
+    // sendToService(SERVICE_CORE, TYPE_SYNC_DEVICE_STATE, "{}");
+    // set_inf_DV_for_GW("F302", "BLEHG010201", "C3E1817DD2C37BEF489363C335E7710C");
 
     while (xRun!=0) {
         pthread_mutex_lock(&g_mqttMsgQueueMutex);
@@ -560,7 +564,7 @@ int main( int argc,char ** argv )
                         if (ret) {
                             ret = addSceneActions(sceneId, actionsNeedAdd);
                         }
-                        if (ret && JSON_HasObjectItem(payload, "conditionNeedRemove")) {
+                        if (ret && JSON_HasKey(payload, "conditionNeedRemove")) {
                             JSON* conditionNeedRemove = JSON_GetObject(payload, "conditionNeedRemove");
                             JSON* conditionNeedAdd = JSON_GetObject(payload, "conditionNeedAdd");
                             ret = deleteSceneCondition(sceneId, conditionNeedRemove);
@@ -618,85 +622,62 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
     }
     char commonDevices[1200]    = {'\0'};
     int  i = 0, j = 0;
-    LogInfo((get_localtime_now()),("[addSceneLC] sceneId = %s", sceneId));
-    int actionCount = JSON_ArrayCount(actions);
+    logInfo("[addSceneActions] sceneId = %s", sceneId);
+    int actionCount = JArr_Count(actions);
+    JSON* mergedActions = JSON_CreateArray();
     for (i = 0; i < actionCount; i++) {
-        LogInfo((get_localtime_now()),("[ACTION %d]", i));
-        JSON* action = JSON_ArrayGetObject(actions, i);
+        JSON* action = JArr_GetObject(actions, i);
         char* pid = JSON_GetText(action, "pid");
         char* deviceAddr = JSON_GetText(action, "entityAddr");
         int dpId = JSON_GetNumber(action, "dpId");
+        int dpValue = JSON_GetNumber(action, "dpValue");
 
         if (pid != NULL) {
             if (isContainString(HG_BLE_SWITCH, pid)) {
-                int dpValue = JSON_GetNumber(action, "dpValue");
-                int dpid_t = 0;
-                dpid_t = (dpId - 1)*0x10 + dpValue;
-                LogInfo((get_localtime_now()),("    [addSceneLC] deviceAddr = %s", deviceAddr));
-                LogInfo((get_localtime_now()),("    [addSceneLC] dpId       = %d", dpId));
-                LogInfo((get_localtime_now()),("    [addSceneLC] dpValue    = %d", dpValue));
-                LogInfo((get_localtime_now()),("    [addSceneLC] commonDevices = %s", commonDevices));
-                if (!isContainString(commonDevices, deviceAddr)) {
-                    char element_count[3]= {'\0'};
-                    char param[9] = {'\0'};
-                    char tmp_para[2] = {'\0'};
-                    Int2Hex_1byte(dpid_t, tmp_para);
-                    strcat(param, tmp_para);
-                    LogInfo((get_localtime_now()),("    [addSceneLC] tmp_para    = %s", tmp_para));
-                    j = i + 1;
-                    for (j; j < actionCount; j++) {
-                        JSON* actionCompare = JSON_ArrayGetObject(actions, j);
-                        char* deviceAddrCompare = JSON_GetText(actionCompare, "entityAddr");
-                        int dpIdCompare         = JSON_GetNumber(actionCompare, "dpId");
-                        int dpValueCompare      = JSON_GetNumber(actionCompare, "dpValue");
-                        int dpid_t_compare = 0;
-                        dpid_t_compare = (dpIdCompare - 1)*0x10 + dpValueCompare;
-                        LogInfo((get_localtime_now()),("    [CHECK COMMON %d]",j));
-                        LogInfo((get_localtime_now()),("        [addSceneLC] deviceAddrCompare   = %s",deviceAddrCompare));
-                        LogInfo((get_localtime_now()),("        [addSceneLC] dpid_t_compare     = %d", dpid_t_compare));
-                        LogInfo((get_localtime_now()),("        [addSceneLC] dpValueCompare    = %d", dpValueCompare));
-
-                        if (isMatchString(deviceAddr, deviceAddrCompare)) {
-                            char tmp_para_compare[3] = {'\0'};
-                            Int2Hex_1byte(dpid_t_compare, tmp_para_compare);
-                            LogInfo((get_localtime_now()),("[addSceneLC] tmp_para_compare = %s",tmp_para_compare));
-                            if (!isContainString(param, tmp_para_compare)) {
-                                strncat(param, tmp_para_compare, 2);
-                            }
-                        }
-                    }
-                    int size_para = strlen(param)/2;
-                    sprintf(element_count,"%02d",size_para);
-                    LogInfo((get_localtime_now()),("    [addSceneLC] param = %s",param));
-                    LogInfo((get_localtime_now()),("    [addSceneLC] element_count = %s",element_count));
-                    LogInfo((get_localtime_now()),("    [addSceneLC] deviceAddr = %s", deviceAddr));
-                    ble_setSceneLocalToDeviceSwitch(deviceAddr, sceneId, "64", element_count, param);
-                    sleep(1);
-                    strcat(commonDevices, deviceAddr);
+                int dpParam = (dpId - 1)*0x10 + dpValue;
+                dpParam = dpParam << 24;
+                JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
+                if (mergedActionItem == NULL) {
+                    mergedActionItem = JArr_AddObject(mergedActions);
+                    JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
+                    JSON_SetNumber(mergedActionItem, "param", dpParam);
+                    JSON_SetNumber(mergedActionItem, "dpCount", 1);
+                } else {
+                    uint32_t newParam = (uint32_t)JSON_GetNumber(mergedActionItem, "param");
+                    newParam = dpParam | (newParam >> 8);
+                    JSON_SetNumber(mergedActionItem, "param", newParam);
+                    JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
                 }
             } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
                 ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x00");
-                sleep(1);
             } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
                 ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x01");
-                sleep(1);
             } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
                 ble_setSceneLocalToDeviceLightCCT_HOMEGY(deviceAddr, sceneId);
-                sleep(1);
             }
         }
     }
+
+    if (JArr_Count(mergedActions) > 0) {
+        JSON_ForEach(item, mergedActions) {
+            char* addr = JSON_GetText(item, "deviceAddr");
+            int dpCount = JSON_GetNumber(item, "dpCount");
+            uint32_t param = (uint32_t)JSON_GetNumber(item, "param");
+            ble_setSceneLocalToDeviceSwitch(sceneId, addr, dpCount, param);
+        }
+    }
+
     return true;
 }
 
 bool deleteSceneActions(const char* sceneId, JSON* actions) {
     if (sceneId && actions) {
-        size_t actionCount = JSON_ArrayCount(actions);
+        size_t actionCount = JArr_Count(actions);
         char commonDevices[1200] = {'\0'};
         uint8_t  i = 0;
         for (i = 0; i < actionCount; i++) {
             LogInfo((get_localtime_now()),("[ACTION %d]", i));
-            JSON* action     = JSON_ArrayGetObject(actions, i);
+            JSON* action     = JArr_GetObject(actions, i);
             char* deviceAddr = JSON_GetText(action, "entityAddr");
             LogInfo((get_localtime_now()),("    [deleteSceneActions] deviceAddr  = %s", deviceAddr));
             LogInfo((get_localtime_now()),("    [deleteSceneActions] commonDevices = %s", commonDevices));
@@ -750,7 +731,7 @@ bool addSceneLC(JSON* packet) {
         JSON* conditions = JSON_GetObject(packet, "conditions");
         ret = addSceneActions(sceneId, actions);
         if (ret && sceneType == SceneTypeOneOfConds) {
-            JSON* condition = JSON_ArrayGetObject(conditions, 0);
+            JSON* condition = JArr_GetObject(conditions, 0);
             ret = addSceneCondition(sceneId, condition);
         }
     }
@@ -766,7 +747,7 @@ bool delSceneLC(JSON* packet) {
         logInfo("[delSceneLC] sceneId = %s", sceneId);
         ret = deleteSceneActions(sceneId, actions);
         if (ret) {
-            JSON* condition = JSON_ArrayGetObject(conditions, 0);
+            JSON* condition = JArr_GetObject(conditions, 0);
             ret = deleteSceneCondition(sceneId, condition);
         }
     }

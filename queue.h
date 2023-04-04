@@ -1,7 +1,7 @@
 #ifndef __QUEUE__
 #define __QUEUE__
 
-#define QUEUE_SIZE 100
+#define QUEUE_SIZE 1000
 struct Queue;
 
 extern struct Queue* newQueue(int capacity);

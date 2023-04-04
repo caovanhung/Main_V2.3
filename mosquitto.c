@@ -21,18 +21,14 @@ bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int ty
     char* layerService;
     char topic[100];
 
-    if (strcmp(serviceToSend, SERVICE_CORE) == 0) {
-        layerService = MOSQ_LayerService_Core;
-    } else if (strcmp(serviceToSend, SERVICE_CMD) == 0) {
+    if (strcmp(serviceToSend, SERVICE_AWS) == 0) {
+        layerService = MOSQ_LayerService_App;
+    } else if (strcmp(serviceToSend, SERVICE_CORE) == 0) {
         layerService = MOSQ_LayerService_Core;
     } else if (strcmp(serviceToSend, SERVICE_BLE) == 0) {
         layerService = MOSQ_LayerService_Device;
-    } else if (strcmp(serviceToSend, SERVICE_AWS) == 0) {
-        layerService = MOSQ_LayerService_App;
-    } else if (strcmp(serviceToSend, MOSQ_NameService_Support_Rule_Schedule) == 0) {
-        layerService = MOSQ_LayerService_Support;
-    } else if (strcmp(serviceToSend, MOSQ_NameService_Support_Rule_Schedule) == 0) {
-        layerService = MOSQ_LayerService_Support;
+    } else if (strcmp(serviceToSend, SERVICE_TUYA) == 0) {
+        layerService = MOSQ_LayerService_Device;
     } else {
         layerService = "Unknown";
     }

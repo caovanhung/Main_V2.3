@@ -168,7 +168,7 @@ int Db_DeleteDevice(const char* deviceId) {
 }
 
 int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight) {
-    char* sqlCmd = malloc(sizeof(devices) + 200);
+    char* sqlCmd = malloc(strlen(devices) + 200);
     sprintf(sqlCmd, "INSERT INTO GROUP_INF(groupAdress, name, devices) VALUES('%s', '%s', '%s')", groupAddr, groupName, devices);
     Sql_Exec(sqlCmd);
     if (isLight) {
@@ -197,9 +197,12 @@ char* Db_FindDevicesInGroup(const char* groupAddr)
 }
 
 int Db_SaveGroupDevices(const char* groupAddr, const char* devices) {
-    char sqlCmd[100];
+    ASSERT(groupAddr);
+    ASSERT(devices);
+    char* sqlCmd = malloc(strlen(devices) + 300);
     sprintf(sqlCmd, "UPDATE group_inf SET devices='%s' WHERE groupAdress = '%s'", devices, groupAddr);
     Sql_Exec(sqlCmd);
+    free(sqlCmd);
     return 1;
 }
 
@@ -212,7 +215,7 @@ int Db_DeleteGroup(const char* groupAddr) {
     return 1;
 }
 
-int Db_FindDp(dp_info_t* dpInfo, const char* deviceId, int dpId) {
+int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId) {
     int rowCount = 0;
     char sqlCommand[100];
     sprintf(sqlCommand, "SELECT * FROM devices WHERE deviceId = '%s' AND dpId='%d';", deviceId, dpId);
@@ -233,7 +236,7 @@ int Db_FindDp(dp_info_t* dpInfo, const char* deviceId, int dpId) {
     return rowCount;
 }
 
-int Db_FindDpByAddr(dp_info_t* dpInfo, const char* dpAddr) {
+int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr) {
     int rowCount = 0;
     char sqlCommand[100];
     sprintf(sqlCommand, "SELECT * FROM devices WHERE address='%s' ORDER BY dpId LIMIT 1;", dpAddr);
@@ -287,6 +290,17 @@ int Db_LoadSceneToRam() {
                 StringCopy(action->dpAddr, JSON_GetText(act, "dpAddr"));
                 action->dpId = JSON_GetNumber(act, "dpId");
                 action->dpValue = JSON_GetNumber(act, "dpValue");
+            }
+            // Load 'code' field for controlling tuya
+            if (JSON_HasKey(act, "code")) {
+                JSON* executorProperty = JSON_GetObject(act, "executorProperty");
+                JSON_ForEach(o, executorProperty) {
+                    action->dpValue = o->valueint;
+                }
+                StringCopy(action->dpAddr, JSON_GetText(act, "code"));
+                StringCopy(action->serviceName, SERVICE_TUYA);  // Service for controlling Tuya device
+            } else {
+                StringCopy(action->serviceName, SERVICE_BLE);   // Service for controlling BLE device
             }
             actionCount++;
         }
@@ -444,11 +458,11 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
     JSON_SetNumber(histories, "totalRows", count);
     JSON_SetNumber(histories, "pageIndex", pageIndex);
     JSON_SetNumber(histories, "pageCount", ceil((float)count / limit));
-    JSON* rows = JSON_AddArrayToObject(histories, "rows");
+    JSON* rows = JSON_AddArray(histories, "rows");
     // get row details
     sprintf(sqlCmd, "SELECT * FROM device_histories WHERE time >= %lld AND time <= %lld AND deviceId='%s' %s ORDER BY time DESC LIMIT %d OFFSET %d", startTime, endTime, deviceId, dpIdCondition, limit, offset);
     {Sql_Query(sqlCmd, row) {
-        JSON* r = JSON_ArrayAddObject(rows);
+        JSON* r = JArr_AddObject(rows);
         JSON_SetNumber(r, "id",         sqlite3_column_int(row, 0));
         JSON_SetNumber(r, "time",       sqlite3_column_int(row, 1));
         JSON_SetNumber(r, "causeType",  sqlite3_column_int(row, 2));

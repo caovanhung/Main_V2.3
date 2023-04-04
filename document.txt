@@ -63,3 +63,12 @@ Tính năng chạy nhiều HC trong 1 nhà
 Thêm chức năng của loa và nút nhấn cho HC
 Test tải cho HC
 Tạo file image nạp cho HC, chỉ cần nạp file này xuống board là HC sẽ chạy luôn mà không cần cài đặt gì thêm
+
+
+Nguyên nhân làm đèn sáng/tắt
+    Người dùng bật từ app
+    Đèn nằm trong action của kịch bản local và kịch bản này được kích hoạt
+    Đèn nằm trong action của kịch bản HC và kịch bản này được kích hoạt
+    Đèn được thêm vào nhóm và người dùng bật nhóm từ app
+    Đèn được thêm vào nhóm và nhóm đèn này nằm trong action của kịch bản local và kịch bản này được kích hoạt
+    Đèn được thêm vào nhóm và nhóm đèn này nằm trong action của kịch bản HC và kịch bản này được kích hoạt

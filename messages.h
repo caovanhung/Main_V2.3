@@ -12,10 +12,10 @@ typedef enum {
 } language_t;
 
 typedef enum {
-    MSG_ADD_GROUP_SUCCESS,
-    MSG_ADD_GROUP_FAILED,
-    MSG_ADD_SOFT_LINK_SUCCESS,
-    MSG_ADD_SOFT_LINK_FAILED,
+    MSG_ADD_GROUP_NORMAL,
+    MSG_UPDATE_GROUP_NORMAL,
+    MSG_ADD_GROUP_LINK,
+    MSG_UPDATE_GROUP_LINK,
     MESSAGE_COUNT       // Number of messages
 } msg_t;
 
@@ -26,7 +26,7 @@ typedef enum {
 
 
 void setLanguage(language_t language);
-const char* msg(msg_t msgId);
-const char* msgByReqType(int reqType, msg_type_t msgType);
+const char* msgById(msg_t msgId);
+const char* msgByReqType(int reqType);
 
 #endif  // MESSAGES_H

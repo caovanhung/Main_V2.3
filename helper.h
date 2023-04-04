@@ -2,6 +2,7 @@
 #define HELPER_H
 
 #include "parson.h"
+#include "stdbool.h"
 
 typedef struct {
     void* items[1000];

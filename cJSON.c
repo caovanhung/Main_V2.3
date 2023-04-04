@@ -3120,8 +3120,10 @@ CJSON_PUBLIC(void) cJSON_free(void *object)
 }
 
 
-char* JSON_GetText(cJSON* obj, const char* name) {
-    cJSON* c = cJSON_GetObjectItem(obj, name);
+#include "helper.h"
+
+char* JSON_GetText(JSON* obj, const char* name) {
+    JSON* c = cJSON_GetObjectItem(obj, name);
     if (!cJSON_IsString(c)) {
         myLogError("JSON Object %s is not STRING or NOT exist", name);
         return NULL;
@@ -3129,9 +3131,9 @@ char* JSON_GetText(cJSON* obj, const char* name) {
     return cJSON_GetStringValue(c);
 }
 
-double JSON_GetNumber(cJSON* obj, const char* name) {
+double JSON_GetNumber(JSON* obj, const char* name) {
     if (obj) {
-        cJSON* c = cJSON_GetObjectItem(obj, name);
+        JSON* c = cJSON_GetObjectItem(obj, name);
         if (cJSON_IsBool(c)) {
             return c->valueint;
         } else if  (cJSON_IsNumber(c)) {
@@ -3143,15 +3145,21 @@ double JSON_GetNumber(cJSON* obj, const char* name) {
     return 0;
 }
 
-cJSON* JSON_SetText(cJSON* obj, const char* name, const char* value) {
+JSON* JSON_SetText(JSON* obj, const char* name, const char* value) {
+    if (JSON_HasKey(obj, name)) {
+        JSON_RemoveKey(obj, name);
+    }
     return cJSON_AddStringToObject(obj, name, value);
 }
 
-cJSON* JSON_SetNumber(cJSON* obj, const char* name, double value) {
+JSON* JSON_SetNumber(JSON* obj, const char* name, double value) {
+    if (JSON_HasKey(obj, name)) {
+        JSON_RemoveKey(obj, name);
+    }
     return cJSON_AddNumberToObject(obj, name, value);
 }
 
-size_t JSON_ArrayCount(cJSON* arr) {
+size_t JArr_Count(JSON* arr) {
     size_t count = 0;
     JSON_ForEach(o, arr) {
         count++;
@@ -3159,7 +3167,7 @@ size_t JSON_ArrayCount(cJSON* arr) {
     return count;
 }
 
-char* JSON_ArrayGetText(cJSON* arr, int index) {
+char* JArr_GetText(JSON* arr, int index) {
     JSON* item = cJSON_GetArrayItem(arr, index);
     if (!cJSON_IsString(item)) {
         myLogError("Item at %d of %s is not STRING or NOT exist", index, arr->string);
@@ -3168,7 +3176,7 @@ char* JSON_ArrayGetText(cJSON* arr, int index) {
     return cJSON_GetStringValue(item);
 }
 
-double JSON_ArrayGetNumber(cJSON* arr, int index) {
+double JArr_GetNumber(JSON* arr, int index) {
     JSON* c = cJSON_GetArrayItem(arr, index);
     if (cJSON_IsBool(c)) {
         return c->valueint;
@@ -3179,13 +3187,27 @@ double JSON_ArrayGetNumber(cJSON* arr, int index) {
     return 0;
 }
 
-cJSON* JSON_ArrayAddText(cJSON* arr, const char* value) {
-    cJSON *string_item = cJSON_CreateString(value);
+JSON* JArr_AddText(JSON* arr, const char* value) {
+    JSON *string_item = cJSON_CreateString(value);
     cJSON_AddItemToArray(arr, string_item);
 }
 
-cJSON* JSON_ArrayAddObject(cJSON* arr) {
-    cJSON *item = cJSON_CreateObject();
+JSON* JArr_AddObject(JSON* arr) {
+    JSON *item = cJSON_CreateObject();
     cJSON_AddItemToArray(arr, item);
     return item;
+}
+
+JSON* JArr_FindByText(JSON* array, const char* key, const char* value) {
+    ASSERT(array); ASSERT(key); ASSERT(value);
+
+    JSON_ForEach(item, array) {
+        if (cJSON_IsObject(item) && JSON_HasKey(item, key)) {
+            JSON* v = JSON_GetText(item, key);
+            if (StringCompare(v, value)) {
+                return item;
+            }
+        }
+    }
+    return NULL;
 }

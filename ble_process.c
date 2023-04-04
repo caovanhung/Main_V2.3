@@ -15,7 +15,7 @@ void waitResponse(uint16_t addr) {
     while (g_bleFrameSender != addr) {
         usleep(10);
         i++;
-        if (i > 2500) {
+        if (timeInMilliseconds() - start > 1000) {
             break;
         }
     }
@@ -695,9 +695,9 @@ void get_string_add_DV_write_GW(char **result,const char* address_device,const c
     strcat(*result, deviceID);
 }
 
-int set_inf_DV_for_GW(const char* address_device,const char* pid,const char* deviceID)
+int set_inf_DV_for_GW(const char* address_device,const char* pid,const char* deviceKey)
 {
-    if (address_device && pid && deviceID) {
+    if (address_device && pid && deviceKey) {
         char *str_send_uart = (char*) malloc(1000 * sizeof(char));
         unsigned char *hex_send_uart;
         int check = 0;
@@ -705,7 +705,7 @@ int set_inf_DV_for_GW(const char* address_device,const char* pid,const char* dev
 
         int  element_count = get_count_element_of_DV(pid);
         Int2String(element_count,element_count_str);
-        get_string_add_DV_write_GW(&str_send_uart,address_device,element_count_str,deviceID);
+        get_string_add_DV_write_GW(&str_send_uart,address_device,element_count_str,deviceKey);
         int len_str = (int)strlen(str_send_uart);
         hex_send_uart  = (char*) malloc(len_str * sizeof(char)*10);
         String2HexArr(str_send_uart,hex_send_uart);
@@ -885,7 +885,7 @@ bool ble_addDeviceToGroupLightCCT_HOMEGY(const char *address_group,const char *a
     ASSERT(address_group && address_device && address_element);
     int check = 0,i = 0;
     uint8_t  SET_GROUP[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00   ,0x00,0x00 ,0x80,0x1b  ,0x00,0x00,0x00,0x00,  0x00,0x10};
-
+    long int dpAddrHex = strtol(address_device, NULL, 16);
     uint8_t hex_address_group[5];
     uint8_t hex_address_device[5];
     uint8_t hex_address_element[5];
@@ -904,7 +904,8 @@ bool ble_addDeviceToGroupLightCCT_HOMEGY(const char *address_group,const char *a
     SET_GROUP[15] = *(hex_address_group+1);
 
     check = UART0_Send(fd, SET_GROUP, 18);
-    usleep(DELAY_SEND_UART_MS);
+    waitResponse(dpAddrHex);
+    // sleep(1);
     if (check != 18) {
         return false;
     }
@@ -1144,6 +1145,7 @@ int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* origin
                 resultFrames[frameCount].onlineState2 = originPackage[i + 14] > 0? 1 : 0;
                 resultFrames[frameCount].sendAddr = ((uint16_t)originPackage[i + 6] << 8) | originPackage[i + 7];
                 resultFrames[frameCount].sendAddr2 = ((uint16_t)originPackage[i + 12] << 8) | originPackage[i + 13];
+                resultFrames[frameCount].opcode = 0;
             } else {
                 // Other frames
                 resultFrames[frameCount].sendAddr = ((uint16_t)originPackage[i + 2] << 8) | originPackage[i + 3];
@@ -1179,24 +1181,18 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     sprintf(address_t, "%04X", frame->sendAddr);
     temp->address_element=address_t;
 
-    // Online/Offline
     if (frame->flag == 0x919d) {
+        // Online/Offline
         return GW_RESPONSE_DEVICE_STATE;
-    }
-    // Device is kicked out from mesh network
-    else if (frame->opcode == 0x804a)
-    {
+    } else if (frame->opcode == 0x804a) {
+        // Device is kicked out from mesh network
         temp->value = "0";
         return GW_RESPONSE_DEVICE_KICKOUT;
-    }
-    // ADD_GROUP_LIGHT
-    else if (frame->paramSize >= 7 && frame->opcode == 0x801f && frame->param[5] == 0x00 && frame->param[6] == 0x10)
-    {
+    } else if (frame->paramSize >= 7 && frame->opcode == 0x801f && frame->param[5] == 0x00 && frame->param[6] == 0x10) {
+        // ADD_GROUP_LIGHT
         return GW_RESPONSE_ADD_GROUP_LIGHT;
-    }
-    // Homegy smart switch, Rang Dong light
-    if (frame->opcode == 0x8204)
-    {
+    } else if (frame->opcode == 0x8204) {
+        // Homegy smart switch, Rang Dong light
         if (frame->paramSize == 4) {
             sprintf(str, "%d", frame->param[0]);
             temp->dpValue = frame->param[0];
@@ -1212,39 +1208,25 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         temp->value = str;
         g_bleFrameRespType = GW_RESPONSE_DEVICE_CONTROL;
         return GW_RESPONSE_DEVICE_CONTROL;
-    }
-
-    // Smoke sensor
-    else if(frame->opcode == 0x5208 && frame->paramSize >= 3 && frame->param[0] == 0x01) {
-        if (frame->param[1] == 0x00)
-        {
-            if (frame->param[2] == 0x00)
-            {
+    } else if(frame->opcode == 0x5208 && frame->paramSize >= 3 && frame->param[0] == 0x01) {
+        // Smoke sensor
+        if (frame->param[1] == 0x00) {
+            if (frame->param[2] == 0x00) {
                 sprintf(value_t, "%s%s", "00","00");
-            }
-            else
-            {
+            } else {
                 sprintf(value_t, "%s%s", "00","01");
             }
-        }
-        else if(frame->param[1] == 0x01)
-        {
-            if (frame->param[2] == 0x00)
-            {
+        } else if(frame->param[1] == 0x01) {
+            if (frame->param[2] == 0x00) {
                 sprintf(value_t, "%s%s", "01","00");
-            }
-            else
-            {
+            } else {
                 sprintf(value_t, "%s%s", "01","01");
             }
         }
         temp->value = value_t;
         return GW_RESPONSE_SMOKE_SENSOR;
-    }
-
-    // Temperature/Humidity sensor
-    else if (frame->opcode == 0x5206 && frame->paramSize >= 5 && frame->param[0] == 0x00)
-    {
+    } else if (frame->opcode == 0x5206 && frame->paramSize >= 5 && frame->param[0] == 0x00) {
+        // Temperature/Humidity sensor
         char *nhietdo_ = malloc(10);
         sprintf(nhietdo_, "%02X%02X", frame->param[1], frame->param[2]);
         char *doam_ = malloc(10);
@@ -1254,55 +1236,27 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         free(nhietdo_);
         free(doam_);
         return GW_RESPONSE_SENSOR_ENVIRONMENT;
-    }
-
-    //type % pin
-    else if(frame->opcode == 0x5201 && frame->paramSize >= 3 && frame->param[0] == 0x00)
-    {
+    } else if(frame->opcode == 0x5201 && frame->paramSize >= 3 && frame->param[0] == 0x00) {
+        //type % pin
         sprintf(value_t, "%d", frame->param[2]);
         temp->value = value_t;
         return GW_RESPONSE_SENSOR_BATTERY;
-    }
-
-    // Door sensor detect
-    else if(frame->opcode == 0x5209 && frame->paramSize >= 2 && frame->param[0] == 0x00)
-    {
+    } else if(frame->opcode == 0x5209 && frame->paramSize >= 2 && frame->param[0] == 0x00) {
+        // Door sensor detect
         return GW_RESPONSE_SENSOR_DOOR_DETECT;
-    }
-
-    // Door sensor hanging detect
-    else if(frame->opcode == 0x5209 && frame->paramSize >= 2 && frame->param[0] == 0x04)
-    {
+    } else if(frame->opcode == 0x5209 && frame->paramSize >= 2 && frame->param[0] == 0x04) {
+        // Door sensor hanging detect
         return GW_RESPONSE_SENSOR_DOOR_ALARM;
-    }
-
-    // PIR sensor human detect
-    else if(frame->opcode == 0x5205 && frame->paramSize >= 2 && frame->param[0] == 0x00)
-    {
+    } else if(frame->opcode == 0x5205 && frame->paramSize >= 2 && frame->param[0] == 0x00) {
+        // PIR sensor human detect
         return GW_RESPONSE_SENSOR_PIR_DETECT;
-    }
-
-    // PIR sensor light intensity
-    else if(frame->opcode == 0x5204 && frame->paramSize >= 3 && frame->param[0] == 0x00)
-    {
+    } else if(frame->opcode == 0x5204 && frame->paramSize >= 3 && frame->param[0] == 0x00) {
+        // PIR sensor light intensity
         return GW_RESPONSE_SENSOR_PIR_LIGHT;
+    } else if (frame->opcode == 0x8245 && frame->paramSize >= 1) {
+        // Add scene LC
+        return GW_RESPONSE_ADD_SCENE;
     }
-
-    // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x82 &&rcv_uart_buff[9] == 0x45)
-    // {
-    //     printf("GW_RESPONSE_SCENE_LC_WRITE_INTO_DEVICE\n");
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     temp->address_element=address_t;
-    //     if(rcv_uart_buff[10] == 0x00)
-    //     {
-    //         temp->value = KEY_TRUE;
-    //     }
-    //     else
-    //     {
-    //         temp->value = KEY_FALSE;
-    //     }
-    //     return GW_RESPONSE_SCENE_LC_WRITE_INTO_DEVICE;
-    // }
     // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0xE1 &&rcv_uart_buff[9] == 0x11 && rcv_uart_buff[10] == 0x02 && rcv_uart_buff[11] == 0x04 && rcv_uart_buff[12] == 0x00)
     // {
     //     printf("GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE\n");
@@ -1323,18 +1277,6 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     //     return GW_RESPONSE_DIM_LED_SWITCH_HOMEGY;
     // }
 
-
-    // //SAVE GW RANGDONG
-    // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0xE1 &&rcv_uart_buff[9] == 0x11 && rcv_uart_buff[10] == 0x02 && rcv_uart_buff[11] == 0x02 && rcv_uart_buff[10] == 0x02 && rcv_uart_buff[11] == 0x02 && rcv_uart_buff[15] == 0x01 && rcv_uart_buff[16] == 0x02)
-    // {
-    //     printf("SAVE_GW SW RD\n");
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     sprintf(value_t, "%02X%02X",rcv_uart_buff[13],rcv_uart_buff[14]);
-    //     temp->address_element=address_t;
-    //     temp->value = value_t;
-    //     return GW_RESPONSE_SAVE_GATEWAY_RD;
-    //     // return GW_RESPONSE_SAVE_GATEWAY_HG;
-    // }
 
     // //GW_RESPONSE_SET_TIME_SENSOR_PIR
     // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0xE1 &&rcv_uart_buff[9] == 0x11 && rcv_uart_buff[10] == 0x02 && rcv_uart_buff[11] == 0x45 && rcv_uart_buff[12] == 0x03)
@@ -1494,64 +1436,30 @@ bool getInfoControlModeBlinkRGB_BLE(InfoControlBlinkRGB_BLE  *InfoControlBlinkRG
 }
 
 
-bool ble_setSceneLocalToDeviceSwitch(const char* address_device,const char* sceneID, const char* dimLED,const char* element_count,const char* param)
-{
-    int check = 0,i = 0;
-    //################################FLAG###################################address_device####ofcode#####sceneID#####DIM##ELE_COUNT##########para############
-    uint8_t  SceneLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,      0x82,0x46,  0x00,0x00, 0x00,  0x00,       0x00,0x00,0x00,0x00,};
-
-    uint8_t  *hex_address_device = malloc(5);
-    uint8_t  *hex_sceneID = malloc(5);
-    uint8_t  *hex_DIM = malloc(3);
-    uint8_t  *hex_element_count = malloc(3);
-    uint8_t  *hex_pare = malloc(9);
-
-    String2HexArr((char*)address_device,hex_address_device);
-    String2HexArr((char*)sceneID,hex_sceneID);
-    String2HexArr((char*)dimLED,hex_DIM);
-    String2HexArr((char*)element_count,hex_element_count);
-    String2HexArr((char*)param,hex_pare);
-
-    SceneLocalToDevice[8] = *hex_address_device;
-    SceneLocalToDevice[9] = *(hex_address_device+1);
-
-    SceneLocalToDevice[12] = *hex_sceneID;
-    SceneLocalToDevice[13] = *(hex_sceneID+1);
-
-
-    SceneLocalToDevice[14] = *hex_DIM;
-
-    SceneLocalToDevice[15] = *hex_element_count;
-
-
-    SceneLocalToDevice[16] = *hex_pare;
-    SceneLocalToDevice[17] = *(hex_pare+1);
-    SceneLocalToDevice[18] = *(hex_pare+2);
-    SceneLocalToDevice[19] = *(hex_pare+3);
-
-
-    check = UART0_Send(fd,SceneLocalToDevice,20);
-    free(hex_address_device);
-    free(hex_sceneID);
-    free(hex_DIM);
-    free(hex_element_count);
-    free(hex_pare);
-    hex_address_device = NULL;
-    hex_sceneID = NULL;
-    hex_DIM = NULL;
-    hex_element_count = NULL;
-    hex_pare = NULL;
-    if(check != 20)
-    {
-        return false;
-    }
+bool ble_setSceneLocalToDeviceSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param) {
+    ASSERT(sceneId); ASSERT(deviceAddr); ASSERT(dpCount <= 4);
+    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,      0x82,0x46,  0x00,0x00, 0x00,  0x00,       0x00,0x00,0x00,0x00,};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    long int sceneIdHex = strtol(sceneId, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[12] = (uint8_t)(sceneIdHex >> 8);
+    data[13] = (uint8_t)(sceneIdHex);
+    data[14] = 0x64;
+    data[15] = dpCount;
+    data[16] = (uint8_t)(param >> 24);
+    data[17] = (uint8_t)(param >> 16);
+    data[18] = (uint8_t)(param >> 8);
+    data[19] = (uint8_t)(param);
+    UART0_Send(fd, data, 16 + dpCount);
+    usleep(DELAY_SEND_UART_MS);
     return true;
 }
 
 bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const char* sceneID)
 {
     int check = 0,i = 0;
-    //################################FLAG###################################address_device####ofcode#####sceneID#####DIM##ELE_COUNT##########para############
+    long int dpAddrHex = strtol(address_device, NULL, 16);
     uint8_t  SceneLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,      0x82,0x46,  0x00,0x00};
 
     uint8_t  *hex_address_device = malloc(5);
@@ -1568,6 +1476,7 @@ bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const c
 
 
     check = UART0_Send(fd,SceneLocalToDevice,14);
+    waitResponse(dpAddrHex);
     free(hex_address_device);
     free(hex_sceneID);
 
@@ -1586,7 +1495,7 @@ bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const ch
     int check = 0,i = 0;
     //################################FLAG###################################address_device####ofcode#####sceneID####modeBlinkRgb##############
     uint8_t  SceneLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0x00,0x00,   0x82,0x46,  0x00,0x00,     0x00,         0x00,0x00};
-
+    long int dpAddrHex = strtol(address_device, NULL, 16);
     uint8_t  *hex_address_device = malloc(5);
     uint8_t  *hex_sceneID = malloc(5);
     uint8_t  *hex_modeBlinkRgb = malloc(3);
@@ -1605,6 +1514,9 @@ bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const ch
 
 
     check = UART0_Send(fd,SceneLocalToDevice,17);
+    waitResponse(dpAddrHex);
+    // usleep(DELAY_SEND_UART_MS);
+    // sleep(1);
     free(hex_address_device);
     free(hex_sceneID);
     free(hex_modeBlinkRgb);

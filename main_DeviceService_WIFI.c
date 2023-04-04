@@ -49,12 +49,13 @@
 #include "database.h"
 #include "wifi_process.h"
 
-const char* SERVICE_NAME = SERVICE_BLE;
+const char* SERVICE_NAME = SERVICE_TUYA;
+static char g_homeId[30] = {0};
 struct mosquitto * mosq;
 struct Queue *queue_received;
 pthread_mutex_t mutex_lock_t            = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t dataUpdate_Queue         = PTHREAD_COND_INITIALIZER;
-bool getHomeID();
+bool getHomeId();
 
 void on_connect(struct mosquitto *mosq, void *obj, int rc) 
 {
@@ -63,7 +64,7 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc)
         LogError((get_localtime_now()),("Error with result code: %d\n", rc));
         exit(-1);
     }
-    mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_DEVICE_WIFI, 0);
+    mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_DEVICE_TUYA, 0);
 }
 
 void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg)
@@ -133,16 +134,13 @@ int main( int argc,char ** argv )
         LogInfo((get_localtime_now()),("access_token = %s",access_token));
     }
     char val_input[MAX_SIZE_ELEMENT_QUEUE] = {'\0'};
-    char home_id[50] = {'\0'};
     char body[1000] = {'\0'};
     char message[MAX_SIZE_ELEMENT_QUEUE] = {'\0'};
     char tp[MAX_SIZE_TOPIC] = {'\0'};
     char pl[MAX_SIZE_PAYLOAD] = {'\0'};
 
-    //get home_id
-    getHomeID();
-    while(xRun!=0)
-    {
+    getHomeId();
+    while (xRun!=0) {
         pthread_mutex_lock(&mutex_lock_t);
         size_queue = get_sizeQueue(queue_received);
         if(size_queue > 0)
@@ -163,9 +161,14 @@ int main( int argc,char ** argv )
             const char *object_string   = json_object_get_string(json_object(schema),MOSQ_Payload);
             object                      = json_parse_string(object_string);
 
-            char* deviceID = json_object_get_string(json_object(object),KEY_DEVICE_ID);
-            char* code = json_object_get_string(json_object(object),KEY_CODE);
+            JSON* payload = JSON_Parse(object_string);
+            JSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
+            char* code;
             int value = 0;
+            char* deviceID = JSON_GetText(payload, "entityId");
+            JSON_ForEach(dp, dictDPs) {
+                code = JSON_GetText(dp, "addr");
+            }
 
             switch(type_action_t)
             {
@@ -174,17 +177,11 @@ int main( int argc,char ** argv )
                     LogInfo((get_localtime_now()),("[TYPE_MANAGER_PING_ON_OFF] NameService = %s",NameService));
                     break;
                 }
-                case TYPE_HOME_ID:
-                {
-                    strcpy(home_id,(char*)json_object_get_string(json_object(object),KEY_SHADOWNAME_AWS));
-                    LogInfo((get_localtime_now()),("[TYPE_HOME_ID] home_id = %s",home_id));
-
-                    break;
-                }
                 case TYPE_CTR_DEVICE:
                 {
                     memset(body,'\0',1000);
                     memset(message,'\0',MAX_SIZE_ELEMENT_QUEUE);
+                    sprintf(body, "{\"commands\": [%s]}", code);
                     switch(json_value_get_type(json_object_get_value(json_object(object),KEY_DP_VAL)))
                     {
                         case JSONString:
@@ -219,11 +216,6 @@ int main( int argc,char ** argv )
                         get_access_token(access_token);
                         break;
                     }
-                    if(!strlen(home_id))
-                    {
-                        getHomeID();
-                        break;
-                    }
                     sprintf(message,"/v1.0/devices/%s/commands",deviceID);
                     send_commands(access_token,CTR_DEVICE,message, body);
                     break;
@@ -236,26 +228,21 @@ int main( int argc,char ** argv )
                         get_access_token(access_token);
                         break;
                     }
-                    if(!strlen(home_id))
-                    {
-                        getHomeID();
-                        break;
-                    }
                     memset(body,'\0',1000);
                     memset(message,'\0',1000);
                     if(isMatchString(deviceID,KEY_RULE_ENABLE))
                     {
-                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/enable",home_id, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
+                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/enable", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
                     }
                     else if(isMatchString(deviceID,KEY_RULE_DISABLE))
                     {
-                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/disable",home_id, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
+                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/disable", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
                     }
                     else
                     {
-                        sprintf(message, "/v1.0/homes/%s/scenes/%s/trigger",home_id, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
+                        sprintf(message, "/v1.0/homes/%s/scenes/%s/trigger", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
                     }
-                    LogInfo((get_localtime_now()),("message = %s",message));
+                    LogInfo((get_localtime_now()),("message = %s", message));
                     send_commands(access_token,CTR_SCENE,message, "\0");
                     break;
                 }
@@ -281,14 +268,15 @@ int main( int argc,char ** argv )
 }
 
 
-bool getHomeID()
+bool getHomeId()
 {
-    char message[MAX_SIZE_ELEMENT_QUEUE] = {'\0'};
-    char tp[MAX_SIZE_TOPIC] = {'\0'};
-    char pl[MAX_SIZE_PAYLOAD] = {'\0'};
-
-    // get_topic_modifi(tp,MOSQ_LayerService_App,MOSQ_NameService_App_Aws,TYPE_HOME_ID,MOSQ_ActNoResponse);
-    // creatPayloadString_modifi(pl,KEY_SHADOWNAME_AWS,"MOSQ_Reponse");
-    // getFormTranMOSQ_modifi(message,MOSQ_LayerService_Device,MOSQ_NameService_Device_WIFI,TYPE_HOME_ID,MOSQ_ActResponse,KEY_SHADOWNAME_AWS, timeInMilliseconds() ,pl);
-    // mosquitto_publish(mosq, NULL,tp, strlen(message),message, 0, false);
+    logInfo("Getting HomeId");
+    FILE* f = fopen("app.json", "r");
+    char buff[1000];
+    fread(buff, sizeof(char), 1000, f);
+    fclose(f);
+    JSON* setting = JSON_Parse(buff);
+    StringCopy(g_homeId, JSON_GetText(setting, "homeId"));
+    logInfo("HomeId: %s", g_homeId);
+    return true;
 }

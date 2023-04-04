@@ -179,7 +179,7 @@ int ble_logTouch(const char *address_element, uint8_t dpId, int state);
 /*
  * Add/delete local scene
  */
-bool ble_setSceneLocalToDeviceSwitch(const char* address_device,const char* sceneID, const char* dimLED,const char* element_count,const char* param);
+bool ble_setSceneLocalToDeviceSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param);
 bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const char* sceneID);
 bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID,const char* modeBlinkRgb );
 bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue);
