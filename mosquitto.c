@@ -504,8 +504,7 @@ void Aws_updateGroupState(const char* groupAddr, int state)
 
 void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const list_t* failedDevices) {
     char tmp[50];
-    char str[3000];
-    // char notification[3000];
+    char* str = malloc((devices->count + failedDevices->count) * 50);
     JSON_Value* jsonValue = json_value_init_object();
     JSON_Object* obj = json_object(jsonValue);
     json_object_dotset_number(obj, "state.reported.type", TYPE_UPDATE_GROUP_NORMAL);
@@ -524,12 +523,11 @@ void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const 
         sprintf(tmp, "state.reported.groups.%s.failed", groupAddr);
         List_ToString(failedDevices, "|", str);
         json_object_dotset_string(obj, tmp, str);
-        // sprintf(notification, "%s: %s", MESSAGE_DEVICE_ERROR, str);
-        // sendNotiToUser(notification);
     }
     char* payload = json_serialize_to_string(jsonValue);
     sendToService(SERVICE_AWS, GW_RESPONSE_ADD_GROUP_NORMAL, payload);
     json_free_serialized_string(payload);
+    free(str);
 }
 
 bool getPayloadReponseDevicesGroupAWS(char** result,char *deviceID,char*  devices)

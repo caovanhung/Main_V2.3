@@ -89,6 +89,7 @@ extern int g_dbgLineNumber;
 #define TYPE_UPDATE_SERVICE             (25U)
 
 #define TYPE_SYNC_DEVICE_STATE          (99U)
+#define TYPE_GET_DEVICE_STATUS          (100U)
 
 ///////////////////////Define type repons from Devices///////////////////////////////////////
 #define GW_RESPONSE_UNKNOW               ( -1 )
@@ -102,7 +103,7 @@ extern int g_dbgLineNumber;
 #define GW_RESPONSE_SENSOR_PIR_LIGHT     ( 57U )
 #define GW_RESPONSE_SENSOR_DOOR_DETECT   ( 58U )
 #define GW_RESPONSE_SENSOR_DOOR_ALARM    ( 59U )
-#define GW_RESPONSE_ADD_GROUP_LIGHT      ( 60U )
+#define GW_RESPONSE_GROUP                ( 60U )
 #define GW_RESPONSE_LIGHT_RD_CONTROL     ( 61U )
 
 #define GW_RESPONSE_SENSOR_ENVIRONMENT_TEMPER   ( 62U )

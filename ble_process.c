@@ -9,7 +9,7 @@ static uint8_t g_bleFrameRespType = 0;
 static uint16_t g_bleFrameSender = 0;
 int fd = 0;
 
-void waitResponse(uint16_t addr) {
+bool waitResponse(uint16_t addr) {
     int i = 0;
     long long start = timeInMilliseconds();
     while (g_bleFrameSender != addr) {
@@ -22,8 +22,10 @@ void waitResponse(uint16_t addr) {
     long long end = timeInMilliseconds();
     if (addr != g_bleFrameSender) {
         myLogInfo("Time spent: TIMEOUT after %lld ms", end - start);
+        return false;
     } else {
         myLogInfo("Time spent: %lld ms", end - start);
+        return true;
     }
 }
 
@@ -56,12 +58,10 @@ bool BLE_GetDeviceOnOffState(const char* dpAddr) {
     long int dpAddrHex = strtol(dpAddr, NULL, 16);
     data[9] = dpAddrHex & (0xFF);
     data[8] = (dpAddrHex >> 8) & 0xFF;
+
+    g_bleFrameSender = 0;
     sentLength = UART0_Send(fd, data, 12);
-    waitResponse(dpAddrHex);
-    if (sentLength != 12) {
-        return false;
-    }
-    return true;
+    return waitResponse(dpAddrHex);
 }
 
 bool ble_bindGateWay(provison_inf *PRV)
@@ -806,6 +806,7 @@ int ble_controlOnOFF(const char *address_element,const char *state)
     int len_str = (int)strlen(str_send_uart);
     hex_send_uart  = (char*) malloc(len_str * sizeof(char));
     String2HexArr(str_send_uart,hex_send_uart);
+    g_bleFrameSender = 0;
     check = UART0_Send(fd,hex_send_uart,len_str/2);
     waitResponse(dpAddrHex);
     free(hex_send_uart);
@@ -903,104 +904,74 @@ bool ble_addDeviceToGroupLightCCT_HOMEGY(const char *address_group,const char *a
     SET_GROUP[14] = *hex_address_group;
     SET_GROUP[15] = *(hex_address_group+1);
 
+    g_bleFrameSender = 0;
     check = UART0_Send(fd, SET_GROUP, 18);
-    waitResponse(dpAddrHex);
-    // sleep(1);
-    if (check != 18) {
-        return false;
-    }
-    return true;
+    return waitResponse(dpAddrHex);
 }
 
 
-bool ble_addDeviceToGroupLink(const char *address_group,const char *address_device,const char *address_element)
+bool ble_addDeviceToGroupLink(const char *groupAddr, const char *deviceAddr, const char *dpAddr)
 {
-    if (address_group == NULL || address_device == NULL || address_element == NULL) {
-        return false;
-    }
+    ASSERT(groupAddr);  ASSERT(deviceAddr);  ASSERT(dpAddr);
     int check = 0,i = 0;
-    uint8_t  SET_GROUP[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00   ,0x00,0x00 ,0x80,0x1b  ,0x00,0x00,0x00,0x00,  0x00,0x10,0x01};
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00   ,0x00,0x00 ,0x80,0x1b  ,0x00,0x00,0x00,0x00,  0x00,0x10,0x01};
+    long int deviceAddrHex = strtol(deviceAddr, NULL, 16);
+    uint8_t hex_address_group[5];
+    uint8_t hex_address_device[5];
+    uint8_t hex_address_element[5];
 
-    uint8_t  *hex_address_group = malloc(5);
-    uint8_t  *hex_address_device = malloc(5);
-    uint8_t  *hex_address_element = malloc(5);
+    String2HexArr((char*)groupAddr, hex_address_group);
+    String2HexArr((char*)deviceAddr, hex_address_device);
+    String2HexArr((char*)dpAddr, hex_address_element);
 
-    String2HexArr((char*)address_group,hex_address_group);
-    String2HexArr((char*)address_device,hex_address_device);
-    String2HexArr((char*)address_element,hex_address_element);
+    data[8] = *hex_address_device;
+    data[9] = *(hex_address_device + 1);
 
-    SET_GROUP[8] = *hex_address_device;
-    SET_GROUP[9] = *(hex_address_device+1);
+    data[12] = *hex_address_element;
+    data[13] = *(hex_address_element + 1);
 
-    SET_GROUP[12] = *hex_address_element;
-    SET_GROUP[13] = *(hex_address_element+1);
+    data[14] = *hex_address_group;
+    data[15] = *(hex_address_group + 1);
 
-    SET_GROUP[14] = *hex_address_group;
-    SET_GROUP[15] = *(hex_address_group+1);
-
-    check = UART0_Send(fd,SET_GROUP,19);
-    usleep(DELAY_SEND_UART_MS);
-    free(hex_address_group);
-    free(hex_address_device);
-    free(hex_address_element);
-
-    hex_address_group = NULL;
-    hex_address_device = NULL;
-    hex_address_element = NULL;
-
-    if(check != 19)
-    {
-        return false;
-    }
-    return true;
+    g_bleFrameSender = 0;
+    check = UART0_Send(fd, data, 19);
+    return waitResponse(deviceAddrHex);
 }
 
-bool ble_deleteDeviceToGroupLightCCT_HOMEGY(const char *address_group,const char *address_device,const char *address_element)
+bool ble_deleteDeviceToGroupLightCCT_HOMEGY(const char *groupAddr, const char *deviceAddr, const char *dpAddr)
 {
-    ASSERT(address_group);
-    ASSERT(address_device);
-    ASSERT(address_element);
+    ASSERT(groupAddr); ASSERT(deviceAddr); ASSERT(dpAddr);
 
     int check = 0,i = 0;
     uint8_t  SET_GROUP[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00   ,0x00,0x00 ,0x80,0x1c  ,0x00,0x00,0x00,0x00,  0x00,0x10};
+    long int deviceAddrHex = strtol(deviceAddr, NULL, 16);
+    uint8_t hex_address_group[5];
+    uint8_t hex_address_device[5];
+    uint8_t hex_address_element[5];
 
-    uint8_t  *hex_address_group = malloc(5);
-    uint8_t  *hex_address_device = malloc(5);
-    uint8_t  *hex_address_element = malloc(5);
+    String2HexArr((char*)groupAddr, hex_address_group);
+    String2HexArr((char*)deviceAddr, hex_address_device);
+    String2HexArr((char*)dpAddr, hex_address_element);
 
-    String2HexArr((char*)address_group,hex_address_group);
-    String2HexArr((char*)address_device,hex_address_device);
-    String2HexArr((char*)address_element,hex_address_element);
+    SET_GROUP[8] = hex_address_device[0];
+    SET_GROUP[9] = hex_address_device[1];
 
-    SET_GROUP[8] = *hex_address_device;
-    SET_GROUP[9] = *(hex_address_device+1);
+    SET_GROUP[12] = hex_address_element[0];
+    SET_GROUP[13] = hex_address_element[1];
 
-    SET_GROUP[12] = *hex_address_element;
-    SET_GROUP[13] = *(hex_address_element+1);
+    SET_GROUP[14] = hex_address_group[0];
+    SET_GROUP[15] = hex_address_group[1];
 
-    SET_GROUP[14] = *hex_address_group;
-    SET_GROUP[15] = *(hex_address_group+1);
-    check = UART0_Send(fd,SET_GROUP,18);
-    usleep(DELAY_SEND_UART_MS);
-    free(hex_address_group);
-    free(hex_address_device);
-    free(hex_address_element);
-
-    hex_address_group = NULL;
-    hex_address_device = NULL;
-    hex_address_element = NULL;
-
-    if(check != 18)
-    {
-        return false;
-    }
-    return true;
+    g_bleFrameSender = 0;
+    check = UART0_Send(fd, SET_GROUP, 18);
+    return waitResponse(deviceAddrHex);
 }
 
-int ble_controlCTL(const char *address_element,int lightness,int colorTemperature)
+int ble_controlCTL(const char *dpAddr,int lightness,int colorTemperature)
 {
-    ASSERT(address_element);
+    ASSERT(dpAddr);
 
+    long int dpAddrHex = strtol(dpAddr, NULL, 16);
     char *lightness_s = malloc(5);
     char *colorTemperature_s = malloc(5);
     int lightness_ = lightness*65535/1000;
@@ -1011,103 +982,75 @@ int ble_controlCTL(const char *address_element,int lightness,int colorTemperatur
     int check = 0,i = 0;
     uint8_t  SET_CT[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x82,0x5e,0x00,0x00,0x00,0x00};
 
-    uint8_t  *hex_address = malloc(5);
-    uint8_t  *hex_lightness = malloc(5);
-    uint8_t  *hex_colorTemperature = malloc(5);
+    uint8_t hex_address[5];
+    uint8_t hex_lightness[5];
+    uint8_t hex_colorTemperature[5];
 
 
-    String2HexArr((char*)address_element,hex_address);
+    String2HexArr((char*)dpAddr,hex_address);
     String2HexArr((char*)lightness_s,hex_lightness);
     String2HexArr((char*)colorTemperature_s,hex_colorTemperature);
 
-    SET_CT[8] = *hex_address;
-    SET_CT[9] = *(hex_address+1);
+    SET_CT[8] = hex_address[0];
+    SET_CT[9] = hex_address[1];
 
-    SET_CT[13] = *hex_lightness;
-    SET_CT[12] = *(hex_lightness+1);
-    SET_CT[15] = *hex_colorTemperature;
-    SET_CT[14] = *(hex_colorTemperature+1);
+    SET_CT[13] = hex_lightness[0];
+    SET_CT[12] = hex_lightness[1];
+    SET_CT[15] = hex_colorTemperature[0];
+    SET_CT[14] = hex_colorTemperature[1];
 
-    check = UART0_Send(fd,SET_CT,16);
-    free(hex_address);
-    free(hex_lightness);
-    free(hex_colorTemperature);
-    free(lightness_s);
-    free(colorTemperature_s);
-
-    hex_address = NULL;
-    hex_lightness = NULL;
-    hex_colorTemperature = NULL;
-    lightness_s = NULL;
-    colorTemperature_s = NULL;
-    if(check != 16)
-    {
-        return false;
-    }
-    return true;
+    g_bleFrameSender = 0;
+    UART0_Send(fd,SET_CT,16);
+    return waitResponse(dpAddrHex);
 }
 
-int ble_controlHSL(const char *address_element,const char *HSL)
+int ble_controlHSL(const char *dpAddr, const char *HSL)
 {
     int check = 0,i = 0;
     uint8_t  SET_HSL[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x82,0x76,0x00,0x00,0x00,0x00,0x00,0x00};
 
-    uint8_t  *hex_address = malloc(5);
-    uint8_t  *hex_HSL = malloc(13);
-    String2HexArr((char*)address_element,hex_address);
-    String2HexArr((char*)HSL,hex_HSL);
+    long int dpAddrHex = strtol(dpAddr, NULL, 16);
+    uint8_t hex_address[5];
+    uint8_t hex_HSL[13];
+    String2HexArr((char*)dpAddr, hex_address);
+    String2HexArr((char*)HSL, hex_HSL);
 
-    SET_HSL[8] = *hex_address;
-    SET_HSL[9] = *(hex_address+1);
+    SET_HSL[8] = hex_address[0];
+    SET_HSL[9] = hex_address[1];
 
-    SET_HSL[13] = *hex_HSL;
-    SET_HSL[12] = *(hex_HSL+1);
-    SET_HSL[15] = *(hex_HSL+2);
-    SET_HSL[14] = *(hex_HSL+3);
-    SET_HSL[17] = *(hex_HSL+4);
-    SET_HSL[16] = *(hex_HSL+5);
+    SET_HSL[13] = hex_HSL[0];
+    SET_HSL[12] = hex_HSL[1];
+    SET_HSL[15] = hex_HSL[2];
+    SET_HSL[14] = hex_HSL[3];
+    SET_HSL[17] = hex_HSL[4];
+    SET_HSL[16] = hex_HSL[5];
 
-    check = UART0_Send(fd,SET_HSL,18);
-    free(hex_address);
-    free(hex_HSL);
-    hex_address = NULL;
-    hex_HSL = NULL;
-    if(check != 18)
-    {
-        return false;
-    }
-    return true;
+    g_bleFrameSender = 0;
+    UART0_Send(fd,SET_HSL,18);
+    return waitResponse(dpAddrHex);
 }
 
 
-int ble_controlModeBlinkRGB(const char *address_element,const char *modeBlinkRgb)
+int ble_controlModeBlinkRGB(const char *dpAddr, const char *modeBlinkRgb)
 {
     int check = 0,i = 0;
     uint8_t  SET_BLINK[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0x82,0x50,0x19,0x09,  0x00};
 
-    uint8_t  *hex_address = malloc(5);
-    uint8_t  *hex_modeBlinkRgb = malloc(2);
+    long int dpAddrHex = strtol(dpAddr, NULL, 16);
+    uint8_t hex_address[5];
+    uint8_t hex_modeBlinkRgb[2];
 
-    String2HexArr((char*)address_element,hex_address);
+    String2HexArr((char*)dpAddr, hex_address);
     String2HexArr((char*)modeBlinkRgb,hex_modeBlinkRgb);
 
-    SET_BLINK[8] = *hex_address;
-    SET_BLINK[9] = *(hex_address+1);
+    SET_BLINK[8] = hex_address[0];
+    SET_BLINK[9] = hex_address[1];
 
-    SET_BLINK[14] = *hex_modeBlinkRgb;
+    SET_BLINK[14] = hex_modeBlinkRgb[0];
 
+    g_bleFrameSender = 0;
     check = UART0_Send(fd,SET_BLINK,15);
-
-
-    free(hex_address);
-    free(hex_modeBlinkRgb);
-    hex_address = NULL;
-    hex_modeBlinkRgb = NULL;
-    if(check != 15)
-    {
-        return false;
-    }
-    return true;
+    return waitResponse(dpAddrHex);
 }
 
 
@@ -1190,7 +1133,7 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         return GW_RESPONSE_DEVICE_KICKOUT;
     } else if (frame->paramSize >= 7 && frame->opcode == 0x801f && frame->param[5] == 0x00 && frame->param[6] == 0x10) {
         // ADD_GROUP_LIGHT
-        return GW_RESPONSE_ADD_GROUP_LIGHT;
+        return GW_RESPONSE_GROUP;
     } else if (frame->opcode == 0x8204) {
         // Homegy smart switch, Rang Dong light
         if (frame->paramSize == 4) {
@@ -1474,7 +1417,7 @@ bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const c
     SceneLocalToDevice[12] = *hex_sceneID;
     SceneLocalToDevice[13] = *(hex_sceneID+1);
 
-
+    g_bleFrameSender = 0;
     check = UART0_Send(fd,SceneLocalToDevice,14);
     waitResponse(dpAddrHex);
     free(hex_address_device);
@@ -1492,44 +1435,28 @@ bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const c
 
 bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID,const char* modeBlinkRgb )
 {
-    int check = 0,i = 0;
-    //################################FLAG###################################address_device####ofcode#####sceneID####modeBlinkRgb##############
+    int i = 0;
     uint8_t  SceneLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0x00,0x00,   0x82,0x46,  0x00,0x00,     0x00,         0x00,0x00};
     long int dpAddrHex = strtol(address_device, NULL, 16);
-    uint8_t  *hex_address_device = malloc(5);
-    uint8_t  *hex_sceneID = malloc(5);
-    uint8_t  *hex_modeBlinkRgb = malloc(3);
+    uint8_t hex_address_device[5];
+    uint8_t hex_sceneID[5];
+    uint8_t hex_modeBlinkRgb[3];
 
     String2HexArr((char*)address_device,hex_address_device);
     String2HexArr((char*)sceneID,hex_sceneID);
     String2HexArr((char*)modeBlinkRgb,hex_modeBlinkRgb);
 
-    SceneLocalToDevice[8] = *hex_address_device;
-    SceneLocalToDevice[9] = *(hex_address_device+1);
+    SceneLocalToDevice[8] = hex_address_device[0];
+    SceneLocalToDevice[9] = hex_address_device[1];
 
-    SceneLocalToDevice[12] = *hex_sceneID;
-    SceneLocalToDevice[13] = *(hex_sceneID+1);
+    SceneLocalToDevice[12] = hex_sceneID[0];
+    SceneLocalToDevice[13] = hex_sceneID[1];
 
-    SceneLocalToDevice[14] = *hex_modeBlinkRgb;
+    SceneLocalToDevice[14] = hex_modeBlinkRgb[0];
 
-
-    check = UART0_Send(fd,SceneLocalToDevice,17);
-    waitResponse(dpAddrHex);
-    // usleep(DELAY_SEND_UART_MS);
-    // sleep(1);
-    free(hex_address_device);
-    free(hex_sceneID);
-    free(hex_modeBlinkRgb);
-
-    hex_address_device = NULL;
-    hex_sceneID = NULL;
-    hex_modeBlinkRgb = NULL;
-
-    if(check != 17)
-    {
-        return false;
-    }
-    return true;
+    g_bleFrameSender = 0;
+    UART0_Send(fd,SceneLocalToDevice,17);
+    return waitResponse(dpAddrHex);
 }
 
 bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue)
@@ -1540,36 +1467,27 @@ bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, 
     int check = 0,i = 0;
     //################################FLAG###################################address_device####ofcode###############################################sceneID############
     uint8_t  CallSceneLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,      0xE0,0x11,0x02,0x00,0x00,     0x04,0x00,          0x00,0x00,  0x00, 0x00};
-
-    uint8_t  *hex_address_device = malloc(5);
-    uint8_t  *hex_sceneID = malloc(5);
-    uint8_t  *hex_state = malloc(3);
+    long int deviceAddrHex = strtol(address_device, NULL, 16);
+    uint8_t hex_address_device[5];
+    uint8_t hex_sceneID[5];
+    uint8_t hex_state[3];
 
     String2HexArr((char*)address_device,hex_address_device);
     String2HexArr((char*)sceneID,hex_sceneID);
     String2HexArr((char*)enableOrDisable,hex_state);
 
 
-    CallSceneLocalToDevice[8] = *hex_address_device;
-    CallSceneLocalToDevice[9] = *(hex_address_device+1);
+    CallSceneLocalToDevice[8] = hex_address_device[0];
+    CallSceneLocalToDevice[9] = hex_address_device[1];
 
-    CallSceneLocalToDevice[17] = *hex_sceneID;
-    CallSceneLocalToDevice[18] = *(hex_sceneID+1);
-    CallSceneLocalToDevice[19] = *hex_state;
+    CallSceneLocalToDevice[17] = hex_sceneID[0];
+    CallSceneLocalToDevice[18] = hex_sceneID[1];
+    CallSceneLocalToDevice[19] = hex_state[0];
     CallSceneLocalToDevice[20] = dpValue;
 
+    g_bleFrameSender = 0;
     check = UART0_Send(fd, CallSceneLocalToDevice, 21);
-    free(hex_address_device);
-    free(hex_sceneID);
-    free(hex_state);
-    hex_address_device = NULL;
-    hex_sceneID = NULL;
-    hex_state = NULL;
-    if(check != 20)
-    {
-        return false;
-    }
-    return true;
+    return waitResponse(deviceAddrHex);
 }
 
 bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID)
@@ -1577,32 +1495,21 @@ bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID)
     int check = 0,i = 0;
     //################################FLAG###################################address_device####ofcode#####sceneID#####
     uint8_t  DelLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,      0x82,0x9E,  0x00,0x00};
-
-    uint8_t  *hex_address_device = malloc(5);
-    uint8_t  *hex_sceneID = malloc(5);
-
+    long int deviceAddrHex = strtol(address_device, NULL, 16);
+    uint8_t hex_address_device[5];
+    uint8_t hex_sceneID[5];
 
     String2HexArr((char*)address_device,hex_address_device);
     String2HexArr((char*)sceneID,hex_sceneID);
 
+    DelLocalToDevice[8] = hex_address_device[0];
+    DelLocalToDevice[9] = hex_address_device[1];
+    DelLocalToDevice[12] = hex_sceneID[0];
+    DelLocalToDevice[13] = hex_sceneID[1];
 
-    DelLocalToDevice[8] = *hex_address_device;
-    DelLocalToDevice[9] = *(hex_address_device+1);
-
-    DelLocalToDevice[12] = *hex_sceneID;
-    DelLocalToDevice[13] = *(hex_sceneID+1);
-
-
+    g_bleFrameSender = 0;
     check = UART0_Send(fd,DelLocalToDevice,14);
-    free(hex_address_device);
-    free(hex_sceneID);
-    hex_address_device = NULL;
-    hex_sceneID = NULL;
-    if(check != 14)
-    {
-        return false;
-    }
-    return true;
+    return waitResponse(deviceAddrHex);
 }
 
 bool ble_callSceneLocalToHC(const char* address_device,const char* sceneID)
@@ -1610,36 +1517,23 @@ bool ble_callSceneLocalToHC(const char* address_device,const char* sceneID)
     int check = 0,i = 0;
     //################################FLAG###################################address_device####ofcode#######sceneID############
     uint8_t  CallSceneLocalToHC[14] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,      0x82,0x42,  0x00,0x00 ,     0x00,0x00,0x00};
-
-    uint8_t  *hex_address_device = malloc(5);
-    uint8_t  *hex_sceneID = malloc(5);
+    long int deviceAddrHex = strtol(address_device, NULL, 16);
+    uint8_t hex_address_device[5];
+    uint8_t hex_sceneID[5];
 
     String2HexArr((char*)address_device,hex_address_device);
     String2HexArr((char*)sceneID,hex_sceneID);
 
 
-    CallSceneLocalToHC[8] = *hex_address_device;
-    CallSceneLocalToHC[9] = *(hex_address_device+1);
+    CallSceneLocalToHC[8] = hex_address_device[0];
+    CallSceneLocalToHC[9] = hex_address_device[1];
 
-    CallSceneLocalToHC[12] = *hex_sceneID;
-    CallSceneLocalToHC[13] = *(hex_sceneID+1);
+    CallSceneLocalToHC[12] = hex_sceneID[0];
+    CallSceneLocalToHC[13] = hex_sceneID[1];
 
-    printf("CallSceneLocalToHC : ");
-    for(i=0;i<17;i++)
-    {
-        printf("  %02X",CallSceneLocalToHC[i]);
-    }
-    printf("\n\n");
-    check = UART0_Send(fd,CallSceneLocalToHC,14);
-    free(hex_address_device);
-    free(hex_sceneID);
-    hex_address_device = NULL;
-    hex_sceneID = NULL;
-    if(check != 17)
-    {
-        return false;
-    }
-    return true;
+    g_bleFrameSender = 0;
+    UART0_Send(fd,CallSceneLocalToHC,14);
+    return waitResponse(deviceAddrHex);
 }
 
 bool ble_setTimeForSensorPIR(const char* address_device,const char* time)

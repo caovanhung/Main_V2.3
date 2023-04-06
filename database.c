@@ -259,7 +259,8 @@ int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr) {
 
 int Db_SaveDpValue(const char* dpAddr, int dpId, double value) {
     char sqlCmd[200];
-    sprintf(sqlCmd, "UPDATE devices SET dpValue='%f' WHERE address='%s' AND dpId=%d", value, dpAddr, dpId);
+    long long int currentTime = timeInMilliseconds();
+    sprintf(sqlCmd, "UPDATE devices SET dpValue='%f', updateTime=%lld WHERE address='%s' AND dpId=%d", value, currentTime, dpAddr, dpId);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -517,7 +518,7 @@ bool creat_table_database(sqlite3 **db)
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES;CREATE TABLE DEVICES(deviceID TEXT,dpID TEXT,address TEXT,dpValue TEXT,state INTEGER);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES;CREATE TABLE DEVICES(deviceID TEXT, dpID TEXT, address TEXT, dpValue TEXT, updateTime INTEGER);");
     if(check != 0)
     {
         printf("DELETE DEVICES is error!\n");

@@ -60,6 +60,7 @@ static bool g_mosqIsConnected = false;
 
 struct mosquitto * mosq;
 struct Queue *g_mqttMsgQueue;
+struct Queue *g_lowPrioMqttMsgQueue;
 static struct Queue* g_bleFrameQueue;
 static pthread_mutex_t g_mqttMsgQueueMutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -71,6 +72,7 @@ bool addSceneActions(const char* sceneId, JSON* actions);
 bool deleteSceneActions(const char* sceneId, JSON* actions);
 bool addSceneCondition(const char* sceneId, JSON* condition);
 bool deleteSceneCondition(const char* sceneId, JSON* condition);
+void sendGroupResp(const char* groupAddr, const char* deviceAddr, int status);
 void Ble_ProcessPacket();
 
 void On_mqttConnect(struct mosquitto *mosq, void *obj, int rc)
@@ -84,14 +86,21 @@ void On_mqttConnect(struct mosquitto *mosq, void *obj, int rc)
 }
 
 void On_mqttMessage(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
+    char* topic = msg->topic;
+    list_t* tmp = String_Split(topic, "\\");
     pthread_mutex_lock(&g_mqttMsgQueueMutex);
-    int size_queue = get_sizeQueue(g_mqttMsgQueue);
-    if (size_queue < MAX_SIZE_NUMBER_QUEUE) {
-        enqueue(g_mqttMsgQueue, (uint8_t*)msg->payload);
-        pthread_mutex_unlock(&g_mqttMsgQueueMutex);
+    if (tmp->count == 3 && tmp->items[2] >= 100) {
+        int size_queue = get_sizeQueue(g_lowPrioMqttMsgQueue);
+        if (size_queue < MAX_SIZE_NUMBER_QUEUE) {
+            enqueue(g_lowPrioMqttMsgQueue, (uint8_t*)msg->payload);
+        }
     } else {
-       pthread_mutex_unlock(&g_mqttMsgQueueMutex);
+        int size_queue = get_sizeQueue(g_mqttMsgQueue);
+        if (size_queue < MAX_SIZE_NUMBER_QUEUE) {
+            enqueue(g_mqttMsgQueue, (uint8_t*)msg->payload);
+        }
     }
+    pthread_mutex_unlock(&g_mqttMsgQueueMutex);
 }
 
 void Mosq_Init(const char* clientId) {
@@ -122,6 +131,28 @@ void Mosq_ProcessLoop() {
         mosquitto_destroy(mosq);
         Mosq_Init(SERVICE_BLE);
     }
+}
+
+
+/*
+ * Function to send response from main thread to CORE service.
+ * We need this function because Mqtt service is running in "MqttTask" thread and we shouldn't
+ * publish in other threads. Any thread wanted to send packet to CORE service should call the
+ * function Mosq_MarkPacketToSend()
+ */
+static JSON* g_respPacket = NULL;
+static int g_respType = 0;
+void Mosq_SendResponse() {
+    if (g_respType > 0) {
+        sendPacketTo(SERVICE_CORE, g_respType, g_respPacket);
+        g_respType = 0;
+    }
+}
+
+void Mosq_MarkPacketToSend(int reqType, JSON* packet) {
+    g_respType = reqType;
+    g_respPacket = packet;
+    while (g_respType > 0);
 }
 
 
@@ -185,12 +216,12 @@ void Ble_ProcessPacket()
                     if (bleFrames[i].sendAddr2 != 0) {
                         arrayItem = JArr_AddObject(devicesArray);
                         char str[5];
-                        sprintf(str, "%04x", bleFrames[i].sendAddr2);
+                        sprintf(str, "%04X", bleFrames[i].sendAddr2);
                         JSON_SetText(arrayItem, "deviceAddr", str);
                         onlineState = bleFrames[i].onlineState2? TYPE_DEVICE_ONLINE : TYPE_DEVICE_OFFLINE;
                         JSON_SetNumber(arrayItem, "deviceState", onlineState);
                     }
-                    // sendPacketTo(SERVICE_CORE, GW_RESPONSE_DEVICE_STATE, packet);
+                    sendPacketTo(SERVICE_CORE, GW_RESPONSE_DEVICE_STATE, packet);
                     JSON_Delete(packet);
                     break;
                 }
@@ -332,8 +363,8 @@ void Ble_ProcessPacket()
                     JSON_Delete(packet);
                     break;
                 }
-                case GW_RESPONSE_ADD_GROUP_LIGHT: {
-                    logInfo("GW_RESPONSE_ADD_GROUP_LIGHT");
+                case GW_RESPONSE_GROUP: {
+                    logInfo("GW_RESPONSE_GROUP");
                     char deviceAddr[10];
                     char groupAddr[10];
                     sprintf(deviceAddr, "%02X%02X", bleFrames[i].param[1], bleFrames[i].param[2]);
@@ -341,6 +372,7 @@ void Ble_ProcessPacket()
                     JSON* packet = JSON_CreateObject();
                     JSON_SetText(packet, "deviceAddr", deviceAddr);
                     JSON_SetText(packet, "groupAddr", groupAddr);
+                    JSON_SetNumber(packet, "status", bleFrames[i].param[0]);
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
                     break;
@@ -362,6 +394,7 @@ void* MqttTask(void* p)
         BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue
         Ble_ProcessPacket();  // Get BLE frames from bleFrameQueue => publish message to CORE service
         Mosq_ProcessLoop();   // Receive mqtt message from CORE service => Push to mqttMsgQueue
+        Mosq_SendResponse();
         usleep(100);
     }
     return p;
@@ -370,12 +403,12 @@ void* MqttTask(void* p)
 
 int main( int argc,char ** argv )
 {
-    int size_queue = 0;
-    bool check_flag = false;
+    int mqttSizeQueue = 0, lowPrioMqttSizeQueue = 0;
     pthread_t thr[4];
     int err,xRun = 1;
     int rc[4];
     g_mqttMsgQueue = newQueue(MAX_SIZE_NUMBER_QUEUE);
+    g_lowPrioMqttMsgQueue = newQueue(MAX_SIZE_NUMBER_QUEUE);
     g_bleFrameQueue = newQueue(MAX_SIZE_NUMBER_QUEUE);
     //Init for uart()
     fd = UART0_Open(fd,VAR_PORT_UART);
@@ -394,10 +427,8 @@ int main( int argc,char ** argv )
     rc[1] = pthread_create(&thr[1], NULL, MqttTask, NULL);
     usleep(50000);
 
-    if (pthread_mutex_init(&g_mqttMsgQueueMutex, NULL) != 0) {
-        LogError((get_localtime_now()),("mutex init has failed"));
-        return 1;
-    }
+    pthread_mutex_init(&g_mqttMsgQueueMutex, NULL);
+
     while (g_mosqIsConnected == false);
     sleep(3);
     // Send request to CORE service to ask it sending request to sync device state
@@ -406,211 +437,236 @@ int main( int argc,char ** argv )
 
     while (xRun!=0) {
         pthread_mutex_lock(&g_mqttMsgQueueMutex);
-        size_queue = get_sizeQueue(g_mqttMsgQueue);
-        if (size_queue > 0) {
-            int dpValue_int = 0;
-            int i = 0,j=0,count=0;
-
-            char* recvMsg = (char *)dequeue(g_mqttMsgQueue);
+        int mqttSizeQueue = get_sizeQueue(g_mqttMsgQueue);
+        int lowPrioMqttSizeQueue = get_sizeQueue(g_lowPrioMqttMsgQueue);
+        char* recvMsg;
+        if (mqttSizeQueue > 0) {
+            recvMsg = (char *)dequeue(g_mqttMsgQueue);
+        } else if (lowPrioMqttSizeQueue > 0) {
+            recvMsg = (char *)dequeue(g_lowPrioMqttMsgQueue);
+        } else {
             pthread_mutex_unlock(&g_mqttMsgQueueMutex);     // Release g_mqttMsgQueue for other thread
-
-            printf("\n\r");
-            logInfo("Received message: %s", recvMsg);
-
-            JSON* recvPacket = JSON_Parse(recvMsg);
-            int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
-            JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
-            if (payload) {
-                char* dpAddr, *groupAddr;
-                switch (reqType) {
-                    case TYPE_ADD_GW: {
-                        provison_inf PRV;
-                        ble_getInfoProvison(&PRV, payload);
-                        ble_bindGateWay(&PRV);
-                        break;
-                    }
-                    case TYPE_CTR_DEVICE:
-                    case TYPE_CTR_GROUP_NORMAL: {
-                        StringCopy(g_senderId, JSON_GetText(payload, "senderId"));  // Save senderId to response to Core service after receiving response from device
-                        char* pid = JSON_GetText(payload, "pid");
-                        cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
-                        int lightness = -1, colorTemperature = -1;
-                        JSON_ForEach(o, dictDPs) {
-                            int dpId = JSON_GetNumber(o, "id");
-                            dpAddr = JSON_GetText(o, "addr");
-                            int dpValue = JSON_GetNumber(o, "value");
-                            char valueStr[5];
-                            sprintf(valueStr, "%d", dpValue);
-                            if (isContainString(HG_BLE_SWITCH, pid)) {
-                                ble_controlOnOFF_SW(dpAddr, dpValue);
-                            } else if (isContainString(HG_BLE_CURTAIN, pid) || dpId == 20) {
-                                ble_controlOnOFF(dpAddr, valueStr);
-                            } else if (dpId == 24) {
-                                ble_controlHSL(dpAddr, valueStr);
-                            } else if (dpId == 21) {
-                                ble_controlModeBlinkRGB(dpAddr, valueStr);
-                            } else if (dpId == 22) {
-                                lightness = dpValue;
-                            } else if (dpId == 23) {
-                                colorTemperature = dpValue;
-                            }
-
-                            if (lightness >= 0 && colorTemperature >= 0) {
-                                ble_controlCTL(dpAddr, lightness, colorTemperature);
-                            }
-                        }
-                        break;
-                    }
-                    case TYPE_CTR_SCENE: {
-                        char* sceneId = JSON_GetText(payload, "sceneId");
-                        int sceneType = JSON_GetNumber(payload, "sceneType");
-                        int state = JSON_GetNumber(payload, "state");
-                        if (sceneType == SceneTypeManual) {
-                            logInfo("Executing LC scene %s", sceneId);
-                            ble_callSceneLocalToHC("FFFF", sceneId);
-                        } else {
-                            // Enable/Disable scene
-                        }
-                        break;
-                    }
-                    case TYPE_ADD_GROUP_NORMAL:
-                    case TYPE_DEL_GROUP_NORMAL: {
-                        char* groupAddr = JSON_GetText(payload, "groupAddr");
-                        JSON* devicesArray = JSON_GetObject(payload, "devices");
-                        JSON_ForEach(device, devicesArray) {
-                            char* deviceAddr = JSON_GetText(device, "deviceAddr");
-                            if (reqType == TYPE_ADD_GROUP_NORMAL) {
-                                ble_addDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
-                            } else {
-                                ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
-                            }
-                        }
-                        break;
-                    }
-                    case TYPE_UPDATE_GROUP_NORMAL: {
-                        char* groupAddr = JSON_GetText(payload, "groupAddr");
-                        JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
-                        JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
-                        JSON_ForEach(dpNeedRemove, dpsNeedRemove) {
-                            char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
-                            ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
-                        }
-                        JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
-                            char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
-                            ble_addDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
-                        }
-                        break;
-                    }
-                    case TYPE_DEL_GROUP_LINK:
-                    case TYPE_ADD_GROUP_LINK: {
-                        char* groupAddr = JSON_GetText(payload, "groupAddr");
-                        JSON* devicesArray = JSON_GetObject(payload, "devices");
-                        JSON_ForEach(device, devicesArray) {
-                            char* deviceAddr = JSON_GetText(device, "deviceAddr");
-                            char* dpAddr = JSON_GetText(device, "dpAddr");
-                            if (reqType == TYPE_ADD_GROUP_LINK) {
-                                ble_addDeviceToGroupLink(groupAddr, deviceAddr, dpAddr);
-                            } else {
-                                ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, dpAddr);
-                            }
-                        }
-                        break;
-                    }
-                    case TYPE_UPDATE_GROUP_LINK: {
-                        char* groupAddr = JSON_GetText(payload, "groupAddr");
-                        JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
-                        JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
-                        JSON_ForEach(dpNeedRemove, dpsNeedRemove) {
-                            char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
-                            char* dpAddr = JSON_GetText(dpNeedRemove, "dpAddr");
-                            ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, dpAddr);
-                        }
-                        JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
-                            char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
-                            char* dpAddr = JSON_GetText(dpNeedAdd, "dpAddr");
-                            ble_addDeviceToGroupLink(groupAddr, deviceAddr, dpAddr);
-                        }
-                        break;
-                    }
-                    case TYPE_ADD_DEVICE: {
-                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
-                        char* devicePid = JSON_GetText(payload, "devicePid");
-                        char* deviceKey = JSON_GetText(payload, "deviceKey");
-                        set_inf_DV_for_GW(deviceAddr, devicePid, deviceKey);
-                        break;
-                    }
-                    case TYPE_DEL_DEVICE: {
-                        char* deviceId = JSON_GetText(payload, "deviceId");
-                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
-                        if (deviceAddr) {
-                            setResetDeviceSofware(deviceAddr);
-                            logInfo("Deleted deviceId: %s, address: %s", deviceId, deviceAddr);
-                        }
-                        break;
-                    }
-                    case TYPE_ADD_SCENE: {
-                        addSceneLC(payload);
-                        break;
-                    }
-                    case TYPE_DEL_SCENE: {
-                        delSceneLC(payload);
-                        break;
-                    }
-                    case TYPE_UPDATE_SCENE: {
-                        char* sceneId = JSON_GetText(payload, "sceneId");
-                        JSON* actionsNeedRemove = JSON_GetObject(payload, "actionsNeedRemove");
-                        JSON* actionsNeedAdd = JSON_GetObject(payload, "actionsNeedAdd");
-                        bool ret = deleteSceneActions(sceneId, actionsNeedRemove);
-                        if (ret) {
-                            ret = addSceneActions(sceneId, actionsNeedAdd);
-                        }
-                        if (ret && JSON_HasKey(payload, "conditionNeedRemove")) {
-                            JSON* conditionNeedRemove = JSON_GetObject(payload, "conditionNeedRemove");
-                            JSON* conditionNeedAdd = JSON_GetObject(payload, "conditionNeedAdd");
-                            ret = deleteSceneCondition(sceneId, conditionNeedRemove);
-                            if (ret) {
-                                ret = addSceneCondition(sceneId, conditionNeedAdd);
-                            }
-                        }
-                        break;
-                    }
-                    case TYPE_SYNC_DEVICE_STATE: {
-                        JSON_ForEach(dpAddr, payload) {
-                            BLE_GetDeviceOnOffState(dpAddr->valuestring);
-                        }
-                        break;
-                    }
-                    case TYPE_DIM_LED_SWITCH: {
-                        char* dpAddr = JSON_GetText(payload, "dpAddr");
-                        int value = JSON_GetNumber(payload, "value");
-                        ble_dimLedSwitch_HOMEGY(dpAddr, value);
-                    }
-                    case TYPE_LOCK_AGENCY: {
-                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
-                        int value = JSON_GetNumber(payload, "value");
-                        ble_logDeivce(deviceAddr, value);
-                        break;
-                    }
-                    case TYPE_LOCK_KIDS: {
-                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
-                        JSON* dps = JSON_GetObject(payload, "lock");
-                        JSON_ForEach(dp, dps) {
-                            if (dp->string) {
-                                ble_logTouch(deviceAddr, atoi(dp->string), dp->valueint);
-                            }
-                        }
-                        break;
-                    }
-                }
-            } else {
-                logError("Payload is NULL");
-            }
-            cJSON_Delete(recvPacket);
-            cJSON_Delete(payload);
-        } else if (size_queue == MAX_SIZE_NUMBER_QUEUE) {
-            pthread_mutex_unlock(&g_mqttMsgQueueMutex);
+            continue;
         }
-        pthread_mutex_unlock(&g_mqttMsgQueueMutex);
+        pthread_mutex_unlock(&g_mqttMsgQueueMutex);     // Release g_mqttMsgQueue for other thread
+
+        printf("\n\r");
+        logInfo("Received message: %s", recvMsg);
+
+        int i = 0,j=0,count=0;
+        JSON* recvPacket = JSON_Parse(recvMsg);
+        int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
+        JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
+        if (payload) {
+            char* dpAddr, *groupAddr;
+            switch (reqType) {
+                case TYPE_ADD_GW: {
+                    provison_inf PRV;
+                    ble_getInfoProvison(&PRV, payload);
+                    ble_bindGateWay(&PRV);
+                    break;
+                }
+                case TYPE_CTR_DEVICE:
+                case TYPE_CTR_GROUP_NORMAL: {
+                    StringCopy(g_senderId, JSON_GetText(payload, "senderId"));  // Save senderId to response to Core service after receiving response from device
+                    char* pid = JSON_GetText(payload, "pid");
+                    cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
+                    int lightness = -1, colorTemperature = -1;
+                    JSON_ForEach(o, dictDPs) {
+                        int dpId = JSON_GetNumber(o, "id");
+                        dpAddr = JSON_GetText(o, "addr");
+                        int dpValue = JSON_GetNumber(o, "value");
+                        char valueStr[5];
+                        sprintf(valueStr, "%d", dpValue);
+                        if (isContainString(HG_BLE_SWITCH, pid)) {
+                            ble_controlOnOFF_SW(dpAddr, dpValue);
+                        } else if (isContainString(HG_BLE_CURTAIN, pid) || dpId == 20) {
+                            ble_controlOnOFF(dpAddr, valueStr);
+                        } else if (dpId == 24) {
+                            ble_controlHSL(dpAddr, valueStr);
+                        } else if (dpId == 21) {
+                            ble_controlModeBlinkRGB(dpAddr, valueStr);
+                        } else if (dpId == 22) {
+                            lightness = dpValue;
+                        } else if (dpId == 23) {
+                            colorTemperature = dpValue;
+                        }
+
+                        if (lightness >= 0 && colorTemperature >= 0) {
+                            ble_controlCTL(dpAddr, lightness, colorTemperature);
+                        }
+                    }
+                    break;
+                }
+                case TYPE_CTR_SCENE: {
+                    char* sceneId = JSON_GetText(payload, "sceneId");
+                    int sceneType = JSON_GetNumber(payload, "sceneType");
+                    int state = JSON_GetNumber(payload, "state");
+                    if (sceneType == SceneTypeManual) {
+                        logInfo("Executing LC scene %s", sceneId);
+                        ble_callSceneLocalToHC("FFFF", sceneId);
+                    } else {
+                        // Enable/Disable scene
+                    }
+                    break;
+                }
+                case TYPE_ADD_GROUP_NORMAL:
+                case TYPE_DEL_GROUP_NORMAL: {
+                    char* groupAddr = JSON_GetText(payload, "groupAddr");
+                    JSON* devicesArray = JSON_GetObject(payload, "devices");
+                    JSON_ForEach(device, devicesArray) {
+                        char* deviceAddr = JSON_GetText(device, "deviceAddr");
+                        bool ret = false;
+                        if (reqType == TYPE_ADD_GROUP_NORMAL) {
+                            ret = ble_addDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                        } else {
+                            ret = ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                        }
+                        // Response TIMEOUT status to Core service
+                        if (ret == false) {
+                            sendGroupResp(groupAddr, deviceAddr, 1);
+                        }
+                    }
+                    break;
+                }
+                case TYPE_UPDATE_GROUP_NORMAL: {
+                    char* groupAddr = JSON_GetText(payload, "groupAddr");
+                    JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
+                    JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
+                    bool ret = false;
+                    JSON_ForEach(dpNeedRemove, dpsNeedRemove) {
+                        char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
+                        ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                    }
+                    JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
+                        char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
+                        ret = ble_addDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                        // Response TIMEOUT status to Core service
+                        if (ret == false) {
+                            sendGroupResp(groupAddr, deviceAddr, 1);
+                        }
+                    }
+                    break;
+                }
+                case TYPE_ADD_GROUP_LINK:
+                case TYPE_DEL_GROUP_LINK: {
+                    char* groupAddr = JSON_GetText(payload, "groupAddr");
+                    JSON* devicesArray = JSON_GetObject(payload, "devices");
+                    JSON_ForEach(device, devicesArray) {
+                        char* deviceAddr = JSON_GetText(device, "deviceAddr");
+                        char* dpAddr = JSON_GetText(device, "dpAddr");
+                        bool ret = false;
+                        if (reqType == TYPE_ADD_GROUP_LINK) {
+                            ret = ble_addDeviceToGroupLink(groupAddr, deviceAddr, dpAddr);
+                        } else {
+                            ret = ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, dpAddr);
+                        }
+                        // Response TIMEOUT status to Core service
+                        if (ret == false) {
+                            sendGroupResp(groupAddr, dpAddr, 1);
+                        }
+                    }
+                    break;
+                }
+                case TYPE_UPDATE_GROUP_LINK: {
+                    char* groupAddr = JSON_GetText(payload, "groupAddr");
+                    JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
+                    JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
+                    bool ret = false;
+                    JSON_ForEach(dpNeedRemove, dpsNeedRemove) {
+                        char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
+                        char* dpAddr = JSON_GetText(dpNeedRemove, "dpAddr");
+                        ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, dpAddr);
+                    }
+                    JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
+                        char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
+                        char* dpAddr = JSON_GetText(dpNeedAdd, "dpAddr");
+                        ret = ble_addDeviceToGroupLink(groupAddr, deviceAddr, dpAddr);
+                        if (ret == false) {
+                            sendGroupResp(groupAddr, dpAddr, 1);
+                        }
+                    }
+                    break;
+                }
+                case TYPE_ADD_DEVICE: {
+                    char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                    char* devicePid = JSON_GetText(payload, "devicePid");
+                    char* deviceKey = JSON_GetText(payload, "deviceKey");
+                    set_inf_DV_for_GW(deviceAddr, devicePid, deviceKey);
+                    break;
+                }
+                case TYPE_DEL_DEVICE: {
+                    char* deviceId = JSON_GetText(payload, "deviceId");
+                    char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                    if (deviceAddr) {
+                        setResetDeviceSofware(deviceAddr);
+                        logInfo("Deleted deviceId: %s, address: %s", deviceId, deviceAddr);
+                    }
+                    break;
+                }
+                case TYPE_ADD_SCENE: {
+                    addSceneLC(payload);
+                    break;
+                }
+                case TYPE_DEL_SCENE: {
+                    delSceneLC(payload);
+                    break;
+                }
+                case TYPE_UPDATE_SCENE: {
+                    char* sceneId = JSON_GetText(payload, "sceneId");
+                    JSON* actionsNeedRemove = JSON_GetObject(payload, "actionsNeedRemove");
+                    JSON* actionsNeedAdd = JSON_GetObject(payload, "actionsNeedAdd");
+                    bool ret = deleteSceneActions(sceneId, actionsNeedRemove);
+                    if (ret) {
+                        ret = addSceneActions(sceneId, actionsNeedAdd);
+                    }
+                    if (ret && JSON_HasKey(payload, "conditionNeedRemove")) {
+                        JSON* conditionNeedRemove = JSON_GetObject(payload, "conditionNeedRemove");
+                        JSON* conditionNeedAdd = JSON_GetObject(payload, "conditionNeedAdd");
+                        ret = deleteSceneCondition(sceneId, conditionNeedRemove);
+                        if (ret) {
+                            ret = addSceneCondition(sceneId, conditionNeedAdd);
+                        }
+                    }
+                    break;
+                }
+                case TYPE_SYNC_DEVICE_STATE: {
+                    JSON_ForEach(dpAddr, payload) {
+                        BLE_GetDeviceOnOffState(dpAddr->valuestring);
+                    }
+                    break;
+                }
+                case TYPE_DIM_LED_SWITCH: {
+                    char* dpAddr = JSON_GetText(payload, "dpAddr");
+                    int value = JSON_GetNumber(payload, "value");
+                    ble_dimLedSwitch_HOMEGY(dpAddr, value);
+                }
+                case TYPE_LOCK_AGENCY: {
+                    char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                    int value = JSON_GetNumber(payload, "value");
+                    ble_logDeivce(deviceAddr, value);
+                    break;
+                }
+                case TYPE_LOCK_KIDS: {
+                    char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                    JSON* dps = JSON_GetObject(payload, "lock");
+                    JSON_ForEach(dp, dps) {
+                        if (dp->string) {
+                            ble_logTouch(deviceAddr, atoi(dp->string), dp->valueint);
+                        }
+                    }
+                    break;
+                }
+                case TYPE_GET_DEVICE_STATUS: {
+                    char* addr = JSON_GetText(payload, "addr");
+                    BLE_GetDeviceOnOffState(addr);
+                }
+            }
+        } else {
+            logError("Payload is NULL");
+        }
+        cJSON_Delete(recvPacket);
+        cJSON_Delete(payload);
         usleep(1000);
     }
     return 0;
@@ -752,4 +808,14 @@ bool delSceneLC(JSON* packet) {
         }
     }
     return ret;
+}
+
+
+void sendGroupResp(const char* groupAddr, const char* deviceAddr, int status) {
+    JSON* packet = JSON_CreateObject();
+    JSON_SetText(packet, "deviceAddr", deviceAddr);
+    JSON_SetText(packet, "groupAddr", groupAddr);
+    JSON_SetNumber(packet, "status", 1);
+    Mosq_MarkPacketToSend(GW_RESPONSE_GROUP, packet);
+    JSON_Delete(packet);
 }

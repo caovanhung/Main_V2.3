@@ -48,10 +48,11 @@
 
 
 Tính năng OTA cho HC, Gateway, devices
-Tính năng khóa trẻ em, khóa hãng, set độ sáng cho hạt công tắc Homegy
-Tính năng update nhóm đèn, nhóm công tắc
+Enable/Disable kịch bản local
+Xử lý điều kiện lớn hơn, nhỏ hơn của kịch bản HC cho cảm biến
+Tính năng set độ sáng cho hạt công tắc Homegy
 Tính năng ping HC từ app
-Tích hợp các thiết bị cảm biến, thiết bị của Tuya và Homekit vào HC
+Tích hợp các thiết bị Homekit vào HC
 Tính năng scan trạng thái on/off của thiết bị (công tắc, đèn) lúc bật nguồn HC
 Tính năng đồng bộ database giữa HC và cloud
 Tính năng đồng bộ trạng thái bật/tắt của thiết bị và HC khi bật tắt cùng lúc làm gói tin BLE bị miss
