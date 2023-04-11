@@ -3125,7 +3125,7 @@ CJSON_PUBLIC(void) cJSON_free(void *object)
 char* JSON_GetText(JSON* obj, const char* name) {
     JSON* c = cJSON_GetObjectItem(obj, name);
     if (!cJSON_IsString(c)) {
-        myLogError("JSON Object %s is not STRING or NOT exist", name);
+        printf("[ERROR] JSON Object %s is not STRING or NOT exist\n", name);
         return NULL;
     }
     return cJSON_GetStringValue(c);

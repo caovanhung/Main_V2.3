@@ -7,7 +7,7 @@
 #include"termios.h"    /* Definition for terminal control*/
 #include"errno.h"      /* Definition for error signal*/
 #include"string.h"
-
+#include <stdbool.h>
 
 /*******************************************************************
 * name:             UART0_Open
@@ -74,4 +74,4 @@ int UART0_Recv(int fd, char *rcv_buf,int data_len);
 *               data_len: the length of the data frame
 * out param:    return 0 if success, or 1 if fail
 *******************************************************************/
-int UART0_Send(int fd, char *send_buf, int data_len);
+bool UART0_Send(int fd, char *send_buf, int data_len);

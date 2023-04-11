@@ -198,7 +198,7 @@ int UART0_Set(int fd,int speed,int flow_ctrl,int databits,int stopbits,int parit
 int UART0_Init(int fd, int speed,int flow_ctrl,int databits,int stopbits,int parity)
 {
     int err;
-    if (UART0_Set(fd,115200,0,8,1,'N') == FALSE)
+    if (UART0_Set(fd,speed,0,8,1,'N') == FALSE)
     {
         return FALSE;
     }
@@ -250,7 +250,8 @@ int UART0_Recv(int fd, char *rcv_buf,int data_len)
 *               data_len: the length of the data frame
 * out param:    return 0 if success, or 1 if fail
 *******************************************************************/
-int UART0_Send(int fd, char *send_buf,int data_len)
+int g_uartSendingIdx = 0;
+bool UART0_Send(int fd, char *send_buf,int data_len)
 {
     char tmp[100];
     int len = 0;
@@ -262,13 +263,13 @@ int UART0_Send(int fd, char *send_buf,int data_len)
             sprintf(&tmp[i*3], "%02X ", send_buf[i]);
         }
 
-        myLogInfo("Sent UART frame to device: %s", tmp);
-        return len;
+        myLogInfo("Sent to UART%d: %s", g_uartSendingIdx, tmp);
+        return true;
     }
     else
     {
         tcflush(fd,TCOFLUSH);
         myLogError("Failed to sent data to UART. Sent length = %d", len);
-        return 0;
+        return false;
     }
 }

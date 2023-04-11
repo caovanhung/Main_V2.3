@@ -66,13 +66,14 @@
 
 #define MQTT_SUB_TOPIC_DEVICES             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/d_%s_1/update/accepted"
 #define MQTT_SUB_TOPIC_SCENE               "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/s_%s_1/update/accepted"
+#define MQTT_SUB_TOPIC_GROUP               "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/g_%s_1/update/accepted"
 #define MQTT_SUB_TOPIC_INF                 "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/update/accepted"
 #define MQTT_SUB_TOPIC_NOTIFY              "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/notify"
 #define MQTT_SUB_TOPIC_GET_INF             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/get/accepted"
 #define MQTT_PUB_TOPIC_GET_INF             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/get"
-#define MQTT_PUB_TOPIC_DEVICES             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/d_%s_1/update"
+#define MQTT_PUB_TOPIC_DEVICES             "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/d_%s_%d/update"
 #define MQTT_PUB_TOPIC_SCENE               "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/s_%s_1/update"
-#define MQTT_PUB_TOPIC_GROUP               "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/%s/update"
+#define MQTT_PUB_TOPIC_GROUP               "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name/g_%s_%d/update"
 
 const char* SERVICE_NAME = SERVICE_AWS;
 FILE *fptr;
@@ -93,7 +94,7 @@ pthread_cond_t dataUpdate_MosqQueue     = PTHREAD_COND_INITIALIZER;
 static bool g_awsIsConnected = false;
 static bool g_mosqIsConnected = false;
 static char g_homeId[30] = {0};
-static char g_cloudSubTopicDevice[100], g_cloudSubTopicScene[100], g_cloudSubTopicInfo[100], g_cloudSubTopicNotify[100];
+static char g_cloudSubTopicDevice[100], g_cloudSubTopicScene[100], g_cloudSubTopicGroup[100], g_cloudSubTopicInfo[100], g_cloudSubTopicNotify[100];
 static char g_cloudPubTopicDevice[100], g_cloudPubTopicScene[100], g_cloudPubTopicGroup[100];
 
 typedef struct PublishPackets
@@ -115,7 +116,7 @@ uint8_t buffer[NETWORK_BUFFER_SIZE];
 MQTTSubAckStatus_t globalSubAckStatus = MQTTSubAckFailure;
 
 
-MQTTSubscribeInfo_t pGlobalSubscriptionList[4];
+MQTTSubscribeInfo_t pGlobalSubscriptionList[5];
 
 
 uint32_t generateRandomNumber();
@@ -147,11 +148,11 @@ void getHcInformation() {
     logInfo("HomeId: %s", g_homeId);
     sprintf(g_cloudSubTopicDevice, MQTT_SUB_TOPIC_DEVICES, g_homeId);
     sprintf(g_cloudSubTopicScene, MQTT_SUB_TOPIC_SCENE, g_homeId);
+    sprintf(g_cloudSubTopicGroup, MQTT_SUB_TOPIC_GROUP, g_homeId);
     sprintf(g_cloudSubTopicInfo, MQTT_SUB_TOPIC_INF, g_homeId);
     sprintf(g_cloudSubTopicNotify, MQTT_SUB_TOPIC_NOTIFY, g_homeId);
     sprintf(g_cloudPubTopicDevice, MQTT_PUB_TOPIC_DEVICES, g_homeId);
     sprintf(g_cloudPubTopicScene, MQTT_PUB_TOPIC_SCENE, g_homeId);
-    sprintf(g_cloudPubTopicGroup, MQTT_PUB_TOPIC_GROUP, g_homeId);
 }
 
 uint32_t generateRandomNumber()
@@ -689,18 +690,21 @@ int subscribeToTopic( MQTTContext_t * pMqttContext )
     pGlobalSubscriptionList[ 0 ].pTopicFilter = g_cloudSubTopicDevice;
     pGlobalSubscriptionList[ 0 ].topicFilterLength = strlen(g_cloudSubTopicDevice);
 
-
     pGlobalSubscriptionList[ 1 ].qos = MQTTQoS0;
     pGlobalSubscriptionList[ 1 ].pTopicFilter = g_cloudSubTopicScene;
     pGlobalSubscriptionList[ 1 ].topicFilterLength = strlen(g_cloudSubTopicScene);
 
     pGlobalSubscriptionList[ 2 ].qos = MQTTQoS0;
-    pGlobalSubscriptionList[ 2 ].pTopicFilter = g_cloudSubTopicInfo;
-    pGlobalSubscriptionList[ 2 ].topicFilterLength = strlen(g_cloudSubTopicInfo);
+    pGlobalSubscriptionList[ 2 ].pTopicFilter = g_cloudSubTopicGroup;
+    pGlobalSubscriptionList[ 2 ].topicFilterLength = strlen(g_cloudSubTopicGroup);
 
     pGlobalSubscriptionList[ 3 ].qos = MQTTQoS0;
-    pGlobalSubscriptionList[ 3 ].pTopicFilter = g_cloudSubTopicNotify;
-    pGlobalSubscriptionList[ 3 ].topicFilterLength = strlen(g_cloudSubTopicNotify);
+    pGlobalSubscriptionList[ 3 ].pTopicFilter = g_cloudSubTopicInfo;
+    pGlobalSubscriptionList[ 3 ].topicFilterLength = strlen(g_cloudSubTopicInfo);
+
+    pGlobalSubscriptionList[ 4 ].qos = MQTTQoS0;
+    pGlobalSubscriptionList[ 4 ].pTopicFilter = g_cloudSubTopicNotify;
+    pGlobalSubscriptionList[ 4 ].topicFilterLength = strlen(g_cloudSubTopicNotify);
 
     /* Generate packet identifier for the SUBSCRIBE packet. */
     globalSubscribePacketIdentifier = MQTT_GetPacketId( pMqttContext );
@@ -748,6 +752,10 @@ int unsubscribeFromTopic( MQTTContext_t * pMqttContext )
     pGlobalSubscriptionList[ 1 ].qos = MQTTQoS0;
     pGlobalSubscriptionList[ 1 ].pTopicFilter = g_cloudSubTopicScene;
     pGlobalSubscriptionList[ 1 ].topicFilterLength = strlen(g_cloudSubTopicScene);
+
+    pGlobalSubscriptionList[ 2 ].qos = MQTTQoS0;
+    pGlobalSubscriptionList[ 2 ].pTopicFilter = g_cloudSubTopicGroup;
+    pGlobalSubscriptionList[ 2 ].topicFilterLength = strlen(g_cloudSubTopicGroup);
 
     /* Generate packet identifier for the UNSUBSCRIBE packet. */
     globalUnsubscribePacketIdentifier = MQTT_GetPacketId( pMqttContext );
@@ -1026,6 +1034,10 @@ void Mosq_ProcessMessage() {
 
         char *message;
         JSON* recvPacket = JSON_Parse(val_input);
+        int pageIndex = -1;
+        if (JSON_HasKey(recvPacket, "pageIndex")) {
+            pageIndex = JSON_GetNumber(recvPacket, "pageIndex");
+        }
         int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
         JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
         switch (reqType) {
@@ -1033,22 +1045,23 @@ void Mosq_ProcessMessage() {
                 mqttCloudPublish(g_cloudSubTopicNotify, val_input);
                 break;
             }
-            case GW_RESPONSE_DEVICE_CONTROL: {
-                JSON* cloudPacket = Aws_CreateCloudPacket(payload);
-                sendPacketToCloud(g_cloudPubTopicDevice, cloudPacket);
-                JSON_Delete(cloudPacket);
+            case GW_RESPONSE_DEVICE_CONTROL:
+            case GW_RESPONSE_DEVICE_KICKOUT:
+            case GW_RESPONSE_DEVICE_STATE: {
+                if (pageIndex >= 0) {
+                    sprintf(g_cloudPubTopicDevice, MQTT_PUB_TOPIC_DEVICES, g_homeId, pageIndex);
+                    sendPacketToCloud(g_cloudPubTopicDevice, payload);
+                }
                 break;
             }
-            case GW_RESPONSE_DEVICE_STATE: {
-                JSON* devicesArray = JSON_GetObject(payload, "devices");
-                JSON_ForEach(arrayItem, devicesArray) {
-                    char* deviceId = JSON_GetText(arrayItem, "deviceId");
-                    if (deviceId) {
-                        int deviceState = JSON_GetNumber(arrayItem, "deviceState");
-                        char* payload = getPayloadReponseStateDeviceAWS(deviceId, deviceState);
-                        mqttCloudPublish(g_cloudPubTopicDevice, payload);
-                        free(payload);
-                    }
+            case GW_RESPONSE_UPDATE_GROUP:
+            case GW_RESPONSE_ADD_GROUP_LINK:
+            case GW_RESPONSE_DEL_GROUP_LINK:
+            case GW_RESPONSE_DEL_GROUP_NORMAL:
+            case GW_RESPONSE_ADD_GROUP_NORMAL: {
+                if (pageIndex >= 0) {
+                    sprintf(g_cloudPubTopicGroup, MQTT_PUB_TOPIC_GROUP, g_homeId, pageIndex);
+                    sendPacketToCloud(g_cloudPubTopicGroup, payload);
                 }
                 break;
             }
@@ -1112,22 +1125,9 @@ void Mosq_ProcessMessage() {
                     break;
                 }
 
-                case GW_RESPONSE_DEVICE_KICKOUT:
-                case GW_RESPONSE_ADD_DEVICE:
-                {
-                    mqttCloudPublish(g_cloudPubTopicDevice, object_string);
-                    break;
-                }
 
-                case GW_RESPONSE_UPDATE_GROUP:
-                case GW_RESPONSE_ADD_GROUP_LINK:
-                case GW_RESPONSE_DEL_GROUP_LINK:
-                case GW_RESPONSE_DEL_GROUP_NORMAL:
-                case GW_RESPONSE_ADD_GROUP_NORMAL:
-                {
-                    mqttCloudPublish(g_cloudPubTopicGroup, object_string);
-                    break;
-                }
+
+
 
                 case GW_RESPONSE_ADD_SCENE_HC:
                 case GW_RESPONSE_UPDATE_SCENE:
@@ -1171,12 +1171,13 @@ int main( int argc,char ** argv ) {
             // Info_device_Debug *inf_device_Debug = (Info_device_Debug *)malloc(sizeof(Info_device_Debug));
 
             Info_scene *inf_scene = (Info_scene *)malloc(sizeof(Info_scene));
-            InfoProvisonGateway *InfoProvisonGateway_t = (InfoProvisonGateway *)malloc(sizeof(InfoProvisonGateway));
+            InfoProvisonGateway InfoProvisonGateway_t;
             Info_group *info_group_t = (Info_group *)malloc(sizeof(Info_group));
 
 
             char *val_input = (char*)malloc(10000);
-            strcpy(val_input,(char *)dequeue(queue_received_aws));
+            char* recvMsg = (char *)dequeue(queue_received_aws);
+            strcpy(val_input, recvMsg);
             check_flag = AWS_pre_detect_message_received(pre_detect,val_input);
             if (check_flag && (pre_detect->sender == SENDER_APP_VIA_LOCAL || pre_detect->sender == SENDER_APP_VIA_CLOUD ))
             {
@@ -1235,7 +1236,7 @@ int main( int argc,char ** argv ) {
                     case TYPE_ADD_DEVICE:
                     {
                         TimeCreat = timeInMilliseconds();
-                        check_flag =  AWS_get_info_device(inf_device, pre_detect, "A000");
+                        check_flag =  AWS_get_info_device(inf_device, pre_detect);
                         if (check_flag) {
                             // Send device info to Core service
                             MOSQ_getTemplateAddDevice(&payload, inf_device);
@@ -1347,8 +1348,8 @@ int main( int argc,char ** argv ) {
                     }
                     case TYPE_ADD_GW:
                     {
-                        AWS_getInfoGateway(InfoProvisonGateway_t, pre_detect);
-                        MOSQ_getTemplateAddGateway(&payload, InfoProvisonGateway_t);
+                        AWS_getInfoGateway(&InfoProvisonGateway_t, pre_detect);
+                        MOSQ_getTemplateAddGateway(&payload, &InfoProvisonGateway_t);
                         sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
@@ -1373,8 +1374,6 @@ int main( int argc,char ** argv ) {
                 free(pre_detect);
                 free(inf_scene);
                 free(info_group_t);
-                free(InfoProvisonGateway_t);
-                // free(inf_device_Debug);
             }
             else
             {
@@ -1395,10 +1394,8 @@ int main( int argc,char ** argv ) {
                         break;
                     }
                 }
-
             }
-
-
+            free(recvMsg);
         }
         usleep(100);
     }

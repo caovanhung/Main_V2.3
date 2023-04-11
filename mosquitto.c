@@ -57,6 +57,48 @@ bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int ty
     return ret;
 }
 
+bool sendToServicePageIndexFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, int pageIndex, const char* payload) {
+    bool ret = false;
+    char* layerService;
+    char topic[100];
+
+    if (strcmp(serviceToSend, SERVICE_AWS) == 0) {
+        layerService = MOSQ_LayerService_App;
+    } else if (strcmp(serviceToSend, SERVICE_CORE) == 0) {
+        layerService = MOSQ_LayerService_Core;
+    } else if (strcmp(serviceToSend, SERVICE_BLE) == 0) {
+        layerService = MOSQ_LayerService_Device;
+    } else if (strcmp(serviceToSend, SERVICE_TUYA) == 0) {
+        layerService = MOSQ_LayerService_Device;
+    } else {
+        layerService = "Unknown";
+    }
+
+    sprintf(topic, "%s/%s/%d", layerService, serviceToSend, typeAction);
+
+    JSON_Value *root_value = json_value_init_object();
+    JSON_Object *root_object = json_value_get_object(root_value);
+
+    // json_object_set_string(root_object, MOSQ_LayerService, layerService);
+    json_object_set_string(root_object, MOSQ_NameService, SERVICE_NAME);
+    json_object_set_number(root_object, MOSQ_ActionType, typeAction);
+    json_object_set_number(root_object, MOSQ_TimeCreat, timeInMilliseconds());
+    json_object_set_number(root_object, "pageIndex", pageIndex);
+    json_object_set_string(root_object, MOSQ_Payload, payload);
+
+    char *message = json_serialize_to_string_pretty(root_value);
+    int reponse = mosquitto_publish(mosq, NULL, topic, strlen(message), message, 0, false);
+    if (MOSQ_ERR_SUCCESS == reponse) {
+        myLogInfo("Sent to service %s (topic %s), data: %s", serviceToSend, topic, message);
+        ret = true;
+    } else {
+        myLogInfo("Failed to publish to local topic: %s", topic);
+    }
+    json_free_serialized_string(message);
+    json_value_free(root_value);
+    return ret;
+}
+
 
 bool get_inf_topic_mos(Info_topic_mosquitto* inf_topic_mos,char *topic)
 {
@@ -495,14 +537,36 @@ bool getPayloadReponseValueSceneAWS(char** result,int sender,int type,char *valu
     return true;       
 }
 
+void Aws_DeleteDevice(const char* deviceId, int pageIndex) {
+    ASSERT(deviceId);
+    char payload[200];
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", GW_RESPONSE_DEVICE_KICKOUT, SENDER_HC_VIA_CLOUD, deviceId);
+    sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_KICKOUT, pageIndex, payload);
+}
+
+void Aws_SaveDeviceState(const char* deviceId, int state, int pageIndex) {
+    ASSERT(deviceId);
+    char payload[200];
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%d}}}}", TYPE_UPDATE_DEVICE, SENDER_HC_VIA_CLOUD, deviceId, state);
+    sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_STATE, pageIndex, payload);
+}
+
+void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex) {
+    ASSERT(deviceId);
+    char payload[200];
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":2, \"dictDPs\":{\"%d\":%d}}}}}", TYPE_UPDATE_DEVICE, SENDER_HC_VIA_CLOUD, deviceId, dpId, value);
+    sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_CONTROL, pageIndex, payload);
+}
+
 void Aws_updateGroupState(const char* groupAddr, int state)
 {
     char payload[200];
-    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"groups\":{\"%s\": {\"%s\":%d}}}}}", TYPE_UPDATE_GROUP_NORMAL, SENDER_HC_VIA_CLOUD, groupAddr, KEY_STATE, state);
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":%d}}}}", TYPE_UPDATE_GROUP_NORMAL, SENDER_HC_VIA_CLOUD, groupAddr, KEY_STATE, state);
     sendToService(SERVICE_AWS, GW_RESPONSE_ADD_GROUP_NORMAL, payload);
 }
 
 void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const list_t* failedDevices) {
+    int pageIndex = 1;
     char tmp[50];
     char* str = malloc((devices->count + failedDevices->count) * 50);
     JSON_Value* jsonValue = json_value_init_object();
@@ -510,22 +574,22 @@ void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const 
     json_object_dotset_number(obj, "state.reported.type", TYPE_UPDATE_GROUP_NORMAL);
     json_object_dotset_number(obj, "state.reported.sender", SENDER_HC_VIA_CLOUD);
     if (devices->count > 0) {
-        sprintf(tmp, "state.reported.groups.%s.devices", groupAddr);
+        sprintf(tmp, "state.reported.%s.devices", groupAddr);
         List_ToString(devices, "|", str);
         json_object_dotset_string(obj, tmp, str);
-        sprintf(tmp, "state.reported.groups.%s.state", groupAddr);
+        sprintf(tmp, "state.reported.%s.state", groupAddr);
         json_object_dotset_number(obj, tmp, AWS_STATUS_SUCCESS);
     } else {
-        sprintf(tmp, "state.reported.groups.%s.state", groupAddr);
+        sprintf(tmp, "state.reported.%s.state", groupAddr);
         json_object_dotset_number(obj, tmp, AWS_STATUS_FAILED);
     }
     if (failedDevices->count > 0) {
-        sprintf(tmp, "state.reported.groups.%s.failed", groupAddr);
+        sprintf(tmp, "state.reported.%s.failed", groupAddr);
         List_ToString(failedDevices, "|", str);
         json_object_dotset_string(obj, tmp, str);
     }
     char* payload = json_serialize_to_string(jsonValue);
-    sendToService(SERVICE_AWS, GW_RESPONSE_ADD_GROUP_NORMAL, payload);
+    sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_ADD_GROUP_NORMAL, pageIndex, payload);
     json_free_serialized_string(payload);
     free(str);
 }

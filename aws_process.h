@@ -63,6 +63,7 @@ typedef struct
 	char *dictDPs;
 	char *dictName;
 	char *senderId;
+	int pageIndex;
 }Info_device;
 
 typedef struct  
@@ -124,7 +125,8 @@ typedef struct
 	const char *netkey;
 	const char *appkeyIndex;
 	const char *deviceKey;
-	const char *address;
+	const char *address1;
+	const char *address2;
 }InfoProvisonGateway;
 
 typedef struct  
@@ -156,7 +158,7 @@ bool AWS_pre_detect_message_received(Pre_parse *var,char *mess);
 bool AWS_detect_message_received_for_update(Pre_parse *var,char *mess);
 
 //for add device
-bool AWS_get_info_device(Info_device *inf_device,Pre_parse *pre_detect,char *IDgateway);
+bool AWS_get_info_device(Info_device *inf_device,Pre_parse *pre_detect);
 bool MOSQ_getTemplateAddDevice(char **result,Info_device *inf_device);
 bool MOSQ_getTemplateReponseAWSAddDevice(char **result,char *deviceID);
 //dor add scene

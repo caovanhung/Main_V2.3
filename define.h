@@ -18,8 +18,10 @@ extern int g_dbgLineNumber;
 #define myLogError(...)   printf("[ERROR][%s] [%s:%d] [%s]", SERVICE_NAME, g_dbgFileName, g_dbgLineNumber, get_localtime_now()); printf(__VA_ARGS__); printf("\n\r");
 #define mqttLocalPublish(topic, message)  {int reponse = mosquitto_publish(mosq, NULL,topic, strlen(message), message, 0, false); if (MOSQ_ERR_SUCCESS == reponse) { logInfo("Published to local topic: %s, payload: %s", topic, message); } else { logError("Failed to publish to local topic: %s", topic); }}
 
+#define GATEWAY_NUM             2
 //UART
-#define VAR_PORT_UART           "/dev/ttyS2"
+#define UART_GATEWAY1           "/dev/ttyS0"
+#define UART_GATEWAY2           "/dev/ttyS2"
 #define DELAY_SEND_UART_MS         250000
 #define _USE_DEBUG_UART //define for debug UART
 #define _USE_DEBUG //define for debug UART

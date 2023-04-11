@@ -106,11 +106,12 @@ bool AWS_pre_detect_message_received(Pre_parse *var,char *mess)
 						{
 							var->object = (char *)temp;
 							var->JS_object = json_object_get_object(object,temp);
+							// myLogInfo(json_serialize_to_string(var->JS_object));
 						}
-						// else
-						// {
-						// 	return false;
-						// }
+
+						if (var->pageIndex == 0) {
+							var->pageIndex = 1;
+						}
 					}
 				}
 				else
@@ -153,17 +154,17 @@ bool AWS_detect_message_received_for_update(Pre_parse *var,char *mess)
 /*
 Note: Have optimite *result = malloc(max_size_message_received);
 */
-bool AWS_get_info_device(Info_device *inf_device,Pre_parse *pre_detect,char *IDgateway)
+bool AWS_get_info_device(Info_device *inf_device,Pre_parse *pre_detect)
 {
-
 	char *device_inf =  (char*)json_object_get_string(pre_detect->JS_object, DEVICES_INF); 
 
-	if(pre_detect->object == NULL || IDgateway == NULL || device_inf == NULL)
+	if(pre_detect->object == NULL || device_inf == NULL)
 	{
 		return false;
 	}
 	inf_device->deviceID 		= pre_detect->object;
-	inf_device->IDgateway 		= IDgateway;
+	inf_device->IDgateway 		= (char*)json_object_get_string(pre_detect->JS_object, "gateWay");
+	inf_device->pageIndex 		= pre_detect->pageIndex;
 	inf_device->name 			= (char*)json_object_get_string(pre_detect->JS_object, KEY_NAME);
 	inf_device->created 		= 11111;
 	inf_device->modified 		= 11111;
@@ -220,7 +221,7 @@ bool MOSQ_getTemplateAddDevice(char **result,Info_device *inf_device)
 	json_object_set_string(root_object, "firmware", "1.0");
 	json_object_set_number(root_object, "last_updated", 2222);
 	json_object_set_number(root_object, "state", TYPE_DEVICE_ONLINE);
-
+	json_object_set_number(root_object, "pageIndex", inf_device->pageIndex);
 
 
 	json_object_dotset_number(root_object, "protocol_para.provider", 	inf_device->provider );
@@ -379,7 +380,8 @@ bool AWS_getInfoGateway(InfoProvisonGateway *InfoProvisonGateway_t,Pre_parse *pr
 	InfoProvisonGateway_t->netkey = json_object_get_string(object, KEY_NETKEY);
 	InfoProvisonGateway_t->appkeyIndex = json_object_get_string(object, KEY_APP_KEY_INDEX);
 	InfoProvisonGateway_t->deviceKey = json_object_get_string(object, KEY_DEVICE_KEY);
-	InfoProvisonGateway_t->address = json_object_get_string(object, KEY_ADDRESS);
+	InfoProvisonGateway_t->address1 = json_object_get_string(object, "gateway1");
+	InfoProvisonGateway_t->address2 = json_object_get_string(object, "gateway2");
 	return true;
 }
 
@@ -395,8 +397,8 @@ bool MOSQ_getTemplateAddGateway(char **result,InfoProvisonGateway *InfoProvisonG
 	json_object_set_string(root_object, KEY_NETKEY,InfoProvisonGateway_t->netkey);
 	json_object_set_string(root_object, KEY_APP_KEY_INDEX,InfoProvisonGateway_t->appkeyIndex);
 	json_object_set_string(root_object, KEY_DEVICE_KEY,InfoProvisonGateway_t->deviceKey);
-	json_object_set_string(root_object, KEY_ADDRESS_GW,InfoProvisonGateway_t->address);
-
+	json_object_set_string(root_object, "address1", InfoProvisonGateway_t->address1);
+	json_object_set_string(root_object, "address2", InfoProvisonGateway_t->address2);
 
 
     serialized_string = json_serialize_to_string_pretty(root_value);
@@ -635,15 +637,11 @@ Note: Have optimite *result = malloc(max_size_message_received);
 */
 bool AWS_getInfoAddGroupNormal(Info_group *info_group_t,Pre_parse *pre_detect)
 {
-	JSON_Object *object = NULL;
-	char *AddGroup = (char *)json_object_get_name(pre_detect->JS_object,0);
-	object =  json_object_get_object(pre_detect->JS_object,AddGroup);
-
-	info_group_t->name  	=  	json_object_get_string(object,KEY_NAME);
-	info_group_t->groupID 	= 	json_object_get_name(pre_detect->JS_object,0);
-	info_group_t->devices  	=  	json_object_get_string(object,KEY_DEVICES_GROUP);
-	info_group_t->pid  		=  	json_object_get_string(object,KEY_PID);
-	info_group_t->state  	=  	json_object_get_number(object,KEY_STATE);
+	info_group_t->name  	=  	json_object_get_string(pre_detect->JS_object, KEY_NAME);
+	info_group_t->groupID 	= 	pre_detect->object;
+	info_group_t->devices  	=  	json_object_get_string(pre_detect->JS_object, KEY_DEVICES_GROUP);
+	info_group_t->pid  		=  	json_object_get_string(pre_detect->JS_object, KEY_PID);
+	info_group_t->state  	=  	json_object_get_number(pre_detect->JS_object, KEY_STATE);
 	return true;
 }
 
@@ -677,10 +675,10 @@ bool AWS_getInfoControlGroupNormal(Info_group *info_group_t,Pre_parse *pre_detec
 	char *AddGroup = (char *)json_object_get_name(pre_detect->JS_object,0);
 	object =  json_object_get_object(pre_detect->JS_object,AddGroup);
 
-	info_group_t->groupID 		= 	json_object_get_name(pre_detect->JS_object,0);
+	info_group_t->groupID 		= 	pre_detect->object;
 	info_group_t->provider  	=  	pre_detect->provider;
 	info_group_t->senderId  	=  	pre_detect->senderId;
-	info_group_t->dictDPs  		=  	(char*)json_serialize_to_string_pretty(json_object_get_value(object, KEY_DICT_DPS));
+	info_group_t->dictDPs  		=  	(char*)json_serialize_to_string_pretty(json_object_get_value(pre_detect->JS_object, KEY_DICT_DPS));
 	return true;
 }
 
@@ -711,7 +709,7 @@ Note: Have optimite *result = malloc(max_size_message_received);
 */
 bool AWS_getInfoDeleteGroupNormal(Info_group *info_group_t,Pre_parse *pre_detect)
 {
-	info_group_t->groupID 	= 	(char *)json_object_get_name(pre_detect->JS_object,0);
+	info_group_t->groupID 	= 	pre_detect->object;
 	info_group_t->state     =	TYPE_DEVICE_RESETED;
 	return true;
 }

@@ -53,7 +53,8 @@ typedef struct
     const char *netkey;
     const char *appkeyIndex;
     const char *deviceKey;
-    const char *address;
+    const char *address1;
+    const char *address2;
 }provison_inf;
 
 typedef struct  
@@ -72,8 +73,7 @@ typedef struct
 
 struct state_element
 {
-    char* address_element;
-    char* value;
+    char address_element[5];
     double dpValue;
     uint8_t causeType;
     char causeId[10];
@@ -113,6 +113,10 @@ typedef struct
     char* value;
 }InfoDataUpdateDevice;
 
+int findAvailGatewayFd();
+bool ble_checkResponse();
+void ble_sendUartFrames();
+
 // Send request to get the device ON/OFF state
 bool BLE_GetDeviceOnOffState(const char* dpAddr);
 
@@ -120,7 +124,7 @@ bool BLE_GetDeviceOnOffState(const char* dpAddr);
  * On/Off control
  * Models: HG_BLE_SWITCH_1, HG_BLE_SWITCH_2, HG_BLE_SWITCH_3, HG_BLE_SWITCH_4
  */
-int ble_controlOnOFF_SW(const char* dpAddr, uint8_t dpValue);
+bool ble_controlOnOFF_SW(const char* dpAddr, uint8_t dpValue);
 
 /*
  * On/Off control
@@ -128,7 +132,7 @@ int ble_controlOnOFF_SW(const char* dpAddr, uint8_t dpValue);
  *         RD_BLE_LIGHT_RGB (20), HG_BLE_CURTAIN_2_LAYER, HG_BLE_ROLLING_DOOR, HG_BLE_CURTAIN_NORMAL,
  *         LIGHT_GROUP (20)
  */
-int ble_controlOnOFF(const char *address_element, const char *state);
+bool ble_controlOnOFF(const char *address_element, const char *state);
 
 /*
  * Control lightness and color temperature
@@ -136,19 +140,19 @@ int ble_controlOnOFF(const char *address_element, const char *state);
  *         RD_BLE_LIGHT_RGB (22,23),
  *         LIGHT_GROUP (22,23)
  */
-int ble_controlCTL(const char *address_element, int lightness, int colorTemperature);
+bool ble_controlCTL(const char *address_element, int lightness, int colorTemperature);
 
 /*
  * Control HSL color of RGB light
  * Models: RD_BLE_LIGHT_RGB (24), LIGHT_GROUP (24)
  */
-int ble_controlHSL(const char *address_element, const char *HSL);
+bool ble_controlHSL(const char *address_element, const char *HSL);
 
 /*
  * Control blink mode of RGB light
  * Models: RD_BLE_LIGHT_RGB (21), LIGHT_GROUP (21)
  */
-int ble_controlModeBlinkRGB(const char *address_element, const char *modeBlinkRgb);
+bool ble_controlModeBlinkRGB(const char *address_element, const char *modeBlinkRgb);
 
 /*
  * Dim LED of switch
@@ -158,13 +162,13 @@ bool ble_dimLedSwitch_HOMEGY(const char *address_device, int lightness);
 /*
  * Add/Delete a CCT light to/from a group
  */
-bool ble_addDeviceToGroupLightCCT_HOMEGY(const char *address_group, const char *address_device, const char *address_element);
-bool ble_deleteDeviceToGroupLightCCT_HOMEGY(const char *address_group, const char *address_device, const char *address_element);
+bool ble_addDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
+bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
 
 /*
  * Add a switch to a group
  */
-bool ble_addDeviceToGroupLink(const char *address_group, const char *address_device, const char *address_element);
+bool ble_addDeviceToGroupLink(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
 
 /*
  * Lock agency
@@ -216,30 +220,14 @@ bool ble_getInfoProvison(provison_inf *PRV, JSON* packet);
                 PRV: the struct data for provision
 * out param:    NO
 *******************************************************************/
-bool ble_bindGateWay(provison_inf *PRV);
-bool ble_saveInforDeviceForGatewayRangDong(const char *address_t,const char *address_gateway);
-bool ble_saveInforDeviceForGatewayHomegy(const char *address_element_0,const char *address_gateway);
-bool creatFormReponseBLE(char **ResultTemplate);
-bool insertObjectReponseBLE(char **ResultTemplate, char *address,char *Id,long long TimeCreat,char *State);
-bool removeObjectReponseBLE(char **ResultTemplate,char *address);
-long long int  getTimeCreatReponseBLE(char *ResultTemplate,char *address);
-bool  getStateReponseBLE(char **state,char *ResultTemplate,char *address);
-bool  getIdReponseBLE(char **Id,char *ResultTemplate,char *address);
+bool ble_bindGateWay(int gwIndex, provison_inf *PRV);
 int get_count_element_of_DV(const char* pid_);
 void get_string_add_DV_write_GW(char **result,const char* address_device,const char* element_count,const char* deviceID);
-int set_inf_DV_for_GW(const char* address_device,const char* pid,const char* deviceID);
+int set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,const char* deviceKey);
 
 void ble_getStringControlOnOff_SW(char **result,const char* strAddress,const char* strState);
 
 void ble_getStringControlOnOff(char **result,const char* strAddress,const char* strState);
-
-
-int ble_controlOnOFF_NODELAY(const char *address_element,const char *state);
-
-
-
-
-long long GW_getSizeMessage(char *size_reverse_2_byte_hex);
 
 /*
  * Split a long BLE frame that received from UART into multiple single packages
@@ -255,17 +243,6 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
 
 void getStringResetDeviveSofware(char **result,const char* addressDevice);
 bool setResetDeviceSofware(const char *addressDevice);
-
-bool IsHasDeviceIntoDabase(const JSON_Value *object_devices,const char* deviceID);
-
-bool getPidDevice(char **result,const JSON_Value *object_devices,const char* deviceID);
-bool getAndressFromDeviceAndDpid(char **result,const JSON_Value *object_devices,const char* deviceID,const char* dpID);
-int getNumberElementNeedControl(JSON_Value *object);
-
-bool getInfoControlOnOffBLE(InfoControlDeviceBLE  *InfoControlDeviceBLE_t,const JSON_Value *object_devices,const char* deviceID,const char* dpID);
-bool getInfoControlCTL_BLE(InfoControlCLT_BLE  *InfoControlCLT_BLE_t,const JSON_Value *object_devices,const char *object_string);
-bool getInfoControlHSL_BLE(InfoControlHSL_BLE  *InfoControlHSL_BLE_t,const JSON_Value *object_devices,const char *object_string);
-bool getInfoControlModeBlinkRGB_BLE(InfoControlBlinkRGB_BLE  *InfoControlBlinkRGB_BLE_t,const JSON_Value *object_devices,const char *object_string);
 
 char *get_dpid(const char *code);
 

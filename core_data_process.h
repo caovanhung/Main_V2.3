@@ -46,7 +46,7 @@ typedef struct {
 /***********************************************************/
 
 
-bool addNewDevice(sqlite3 **db,const char *object_);
+bool addNewDevice(sqlite3 **db, JSON* packet);
 bool delDevice(sqlite3 **db,const char *deviceID);
 
 char *delDeviceIntoGroups(sqlite3 **db,const char *deviceID);

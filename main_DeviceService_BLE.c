@@ -53,7 +53,7 @@
 
 const char* SERVICE_NAME = SERVICE_BLE;
 FILE *fptr;
-extern int fd;
+extern int g_gatewayFds[GATEWAY_NUM];
 char rcv_uart_buff[MAXLINE];
 static bool g_mosqInitDone = false;
 static bool g_mosqIsConnected = false;
@@ -87,9 +87,8 @@ void On_mqttConnect(struct mosquitto *mosq, void *obj, int rc)
 
 void On_mqttMessage(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
     char* topic = msg->topic;
-    list_t* tmp = String_Split(topic, "\\");
-    pthread_mutex_lock(&g_mqttMsgQueueMutex);
-    if (tmp->count == 3 && tmp->items[2] >= 100) {
+    list_t* tmp = String_Split(topic, "/");
+    if (tmp->count == 3 && atoi(tmp->items[2]) >= 100) {
         int size_queue = get_sizeQueue(g_lowPrioMqttMsgQueue);
         if (size_queue < MAX_SIZE_NUMBER_QUEUE) {
             enqueue(g_lowPrioMqttMsgQueue, (uint8_t*)msg->payload);
@@ -100,7 +99,6 @@ void On_mqttMessage(struct mosquitto *mosq, void *obj, const struct mosquitto_me
             enqueue(g_mqttMsgQueue, (uint8_t*)msg->payload);
         }
     }
-    pthread_mutex_unlock(&g_mqttMsgQueueMutex);
 }
 
 void Mosq_Init(const char* clientId) {
@@ -162,16 +160,43 @@ void Mosq_MarkPacketToSend(int reqType, JSON* packet) {
  */
 void BLE_ReceivePacket() {
     char givenStr[MAX_PACKAGE_SIZE];
-    int len_uart = UART0_Recv( fd, rcv_uart_buff, MAX_PACKAGE_SIZE);
+    int len_uart = UART0_Recv(g_gatewayFds[0], rcv_uart_buff, MAX_PACKAGE_SIZE);
     if ( len_uart > 0) {
+        if (len_uart == 1 || len_uart > 998) {
+            return;
+        }
         // Ignore frame 0x91b5
         if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
+            return;
+        }
+        if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
             return;
         }
         if (len_uart >= 10 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x5d && rcv_uart_buff[9] == 0x00) {
             return;
         }
         strcpy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
+        enqueue(g_bleFrameQueue, givenStr);
+    }
+
+    len_uart = UART0_Recv(g_gatewayFds[1], rcv_uart_buff, MAX_PACKAGE_SIZE);
+    if ( len_uart > 0) {
+        if (len_uart == 1 || len_uart > 998) {
+            return;
+        }
+        // Ignore frame 0x91b5
+        if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
+            return;
+        }
+        if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
+            return;
+        }
+        if (len_uart >= 10 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x5d && rcv_uart_buff[9] == 0x00) {
+            return;
+        }
+        strcpy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
+        // printf("\n\r");
+        // logInfo("Received package from UART2: %s", givenStr);
         enqueue(g_bleFrameQueue, givenStr);
     }
 }
@@ -192,9 +217,9 @@ void Ble_ProcessPacket()
     size_queue = get_sizeQueue(g_bleFrameQueue);
     if (size_queue > 0) {
         char* recvPackage = (char *)dequeue(g_bleFrameQueue);
-        printf("\n\r");
-        logInfo("Received a BLE package: %s", recvPackage);
         String2HexArr(recvPackage, msgHex);
+        printf("\n\r");
+        logInfo("Received package from UART: %s", recvPackage);
         int frameCount = GW_SplitFrame(bleFrames, msgHex, strlen(recvPackage) / 2);
         logInfo("Parsing package. Found %d frames:", frameCount);
         for (int i = 0; i < frameCount; i++) {
@@ -347,18 +372,23 @@ void Ble_ProcessPacket()
                     // response = frameType;
                     break;
                 }
-
+                case GW_RESPONSE_DEVICE_KICKOUT: {
+                    logInfo("GW_RESPONSE_DEVICE_KICKOUT");
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    JSON_Delete(packet);
+                    break;
+                }
                 // case GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE:
-                case GW_RESPONSE_ADD_SCENE:
-                // case GW_RESPONSE_DEVICE_KICKOUT:
-                {
+                case GW_RESPONSE_ADD_SCENE: {
                     logInfo("GW_RESPONSE_ADD_SCENE");
                     JSON* packet = JSON_CreateObject();
                     char sceneId[10];
                     sprintf(sceneId, "%02X%02X", bleFrames[i].param[1], bleFrames[i].param[2]);
                     JSON_SetText(packet, "sceneId", sceneId);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                    JSON_SetNumber(packet, "status", bleFrames[i].param[0]? 0: 1);
+                    JSON_SetNumber(packet, "status", bleFrames[i].param[0]);
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
                     break;
@@ -394,7 +424,7 @@ void* MqttTask(void* p)
         BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue
         Ble_ProcessPacket();  // Get BLE frames from bleFrameQueue => publish message to CORE service
         Mosq_ProcessLoop();   // Receive mqtt message from CORE service => Push to mqttMsgQueue
-        Mosq_SendResponse();
+        // Mosq_SendResponse();
         usleep(100);
     }
     return p;
@@ -411,32 +441,54 @@ int main( int argc,char ** argv )
     g_lowPrioMqttMsgQueue = newQueue(MAX_SIZE_NUMBER_QUEUE);
     g_bleFrameQueue = newQueue(MAX_SIZE_NUMBER_QUEUE);
     //Init for uart()
-    fd = UART0_Open(fd,VAR_PORT_UART);
-    if (fd == -1) {
-        logError("Cannot open UART0");
+    g_gatewayFds[0] = UART0_Open(g_gatewayFds[0], UART_GATEWAY1);
+    g_gatewayFds[1] = UART0_Open(g_gatewayFds[1], UART_GATEWAY2);
+    if (g_gatewayFds[0] == -1) {
+        logError("Cannot open %s", UART_GATEWAY1);
+    }
+    if (g_gatewayFds[1] == -1) {
+        logError("Cannot open %s", UART_GATEWAY2);
     }
     
     do {
-        err = UART0_Init(fd,115200,0,8,1,'N');
+        err = UART0_Init(g_gatewayFds[0], 115200, 0, 8, 1, 'N');
         usleep(50000);
     }
-    while (-1 == err || -1 == fd);
-    logInfo("UART0_Init() done");
+    while (-1 == err || -1 == g_gatewayFds[0]);
+    logInfo("Init %s done", UART_GATEWAY1);
     usleep(50000);
 
-    rc[1] = pthread_create(&thr[1], NULL, MqttTask, NULL);
+    do {
+        err = UART0_Init(g_gatewayFds[1], 115200, 0, 8, 1, 'N');
+        usleep(50000);
+    }
+    while (-1 == err || -1 == g_gatewayFds[1]);
+    logInfo("Init %s done", UART_GATEWAY2);
     usleep(50000);
+
+    // rc[1] = pthread_create(&thr[1], NULL, MqttTask, NULL);
+    usleep(50000);
+    Mosq_Init(SERVICE_BLE);
 
     pthread_mutex_init(&g_mqttMsgQueueMutex, NULL);
-
-    while (g_mosqIsConnected == false);
     sleep(3);
-    // Send request to CORE service to ask it sending request to sync device state
-    // sendToService(SERVICE_CORE, TYPE_SYNC_DEVICE_STATE, "{}");
-    // set_inf_DV_for_GW("F302", "BLEHG010201", "C3E1817DD2C37BEF489363C335E7710C");
-
+    // set_inf_DV_for_GW(0, "6C03", "BLEHGAA0103", "9DC4CBCC70599BD602F8CFF9106E3C8C");
+    // sleep(3);
+    // set_inf_DV_for_GW(1, "6C03", "BLEHGAA0103", "9DC4CBCC70599BD602F8CFF9106E3C8C");
     while (xRun!=0) {
-        pthread_mutex_lock(&g_mqttMsgQueueMutex);
+        ble_sendUartFrames();
+        ble_checkResponse();
+        BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue
+        Ble_ProcessPacket();  // Get BLE frames from bleFrameQueue => publish message to CORE service
+        Mosq_ProcessLoop();   // Receive mqtt message from CORE service => Push to mqttMsgQueue
+        Mosq_SendResponse();
+
+        // Only process next message if there is any available gateway
+        // int gwIdx = findAvailGatewayFd();
+        // if (gwIdx == -1) {
+        //     continue;
+        // }
+
         int mqttSizeQueue = get_sizeQueue(g_mqttMsgQueue);
         int lowPrioMqttSizeQueue = get_sizeQueue(g_lowPrioMqttMsgQueue);
         char* recvMsg;
@@ -445,10 +497,8 @@ int main( int argc,char ** argv )
         } else if (lowPrioMqttSizeQueue > 0) {
             recvMsg = (char *)dequeue(g_lowPrioMqttMsgQueue);
         } else {
-            pthread_mutex_unlock(&g_mqttMsgQueueMutex);     // Release g_mqttMsgQueue for other thread
             continue;
         }
-        pthread_mutex_unlock(&g_mqttMsgQueueMutex);     // Release g_mqttMsgQueue for other thread
 
         printf("\n\r");
         logInfo("Received message: %s", recvMsg);
@@ -463,7 +513,9 @@ int main( int argc,char ** argv )
                 case TYPE_ADD_GW: {
                     provison_inf PRV;
                     ble_getInfoProvison(&PRV, payload);
-                    ble_bindGateWay(&PRV);
+                    ble_bindGateWay(0, &PRV);
+                    sleep(1);
+                    ble_bindGateWay(1, &PRV);
                     break;
                 }
                 case TYPE_CTR_DEVICE:
@@ -515,12 +567,13 @@ int main( int argc,char ** argv )
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* devicesArray = JSON_GetObject(payload, "devices");
                     JSON_ForEach(device, devicesArray) {
+                        int gwIndex = JSON_GetNumber(device, "gwIndex");
                         char* deviceAddr = JSON_GetText(device, "deviceAddr");
                         bool ret = false;
                         if (reqType == TYPE_ADD_GROUP_NORMAL) {
-                            ret = ble_addDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                            ret = ble_addDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, deviceAddr);
                         } else {
-                            ret = ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                            ret = ble_deleteDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, deviceAddr);
                         }
                         // Response TIMEOUT status to Core service
                         if (ret == false) {
@@ -535,12 +588,14 @@ int main( int argc,char ** argv )
                     JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
                     bool ret = false;
                     JSON_ForEach(dpNeedRemove, dpsNeedRemove) {
+                        int gwIndex = JSON_GetNumber(dpNeedRemove, "gwIndex");
                         char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
-                        ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                        ble_deleteDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, deviceAddr);
                     }
                     JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
+                        int gwIndex = JSON_GetNumber(dpNeedAdd, "gwIndex");
                         char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
-                        ret = ble_addDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, deviceAddr);
+                        ret = ble_addDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, deviceAddr);
                         // Response TIMEOUT status to Core service
                         if (ret == false) {
                             sendGroupResp(groupAddr, deviceAddr, 1);
@@ -553,13 +608,14 @@ int main( int argc,char ** argv )
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* devicesArray = JSON_GetObject(payload, "devices");
                     JSON_ForEach(device, devicesArray) {
+                        int gwIndex = JSON_GetNumber(device, "gwIndex");
                         char* deviceAddr = JSON_GetText(device, "deviceAddr");
                         char* dpAddr = JSON_GetText(device, "dpAddr");
                         bool ret = false;
                         if (reqType == TYPE_ADD_GROUP_LINK) {
-                            ret = ble_addDeviceToGroupLink(groupAddr, deviceAddr, dpAddr);
+                            ret = ble_addDeviceToGroupLink(gwIndex, groupAddr, deviceAddr, dpAddr);
                         } else {
-                            ret = ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, dpAddr);
+                            ret = ble_deleteDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, dpAddr);
                         }
                         // Response TIMEOUT status to Core service
                         if (ret == false) {
@@ -574,14 +630,16 @@ int main( int argc,char ** argv )
                     JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
                     bool ret = false;
                     JSON_ForEach(dpNeedRemove, dpsNeedRemove) {
+                        int gwIndex = JSON_GetNumber(dpNeedRemove, "gwIndex");
                         char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
                         char* dpAddr = JSON_GetText(dpNeedRemove, "dpAddr");
-                        ble_deleteDeviceToGroupLightCCT_HOMEGY(groupAddr, deviceAddr, dpAddr);
+                        ble_deleteDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, dpAddr);
                     }
                     JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
+                        int gwIndex = JSON_GetNumber(dpNeedAdd, "gwIndex");
                         char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
                         char* dpAddr = JSON_GetText(dpNeedAdd, "dpAddr");
-                        ret = ble_addDeviceToGroupLink(groupAddr, deviceAddr, dpAddr);
+                        ret = ble_addDeviceToGroupLink(gwIndex, groupAddr, deviceAddr, dpAddr);
                         if (ret == false) {
                             sendGroupResp(groupAddr, dpAddr, 1);
                         }
@@ -592,7 +650,8 @@ int main( int argc,char ** argv )
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                     char* devicePid = JSON_GetText(payload, "devicePid");
                     char* deviceKey = JSON_GetText(payload, "deviceKey");
-                    set_inf_DV_for_GW(deviceAddr, devicePid, deviceKey);
+                    int gatewayId = JSON_GetNumber(payload, "gatewayId");
+                    set_inf_DV_for_GW(gatewayId, deviceAddr, devicePid, deviceKey);
                     break;
                 }
                 case TYPE_DEL_DEVICE: {
@@ -630,12 +689,6 @@ int main( int argc,char ** argv )
                     }
                     break;
                 }
-                case TYPE_SYNC_DEVICE_STATE: {
-                    JSON_ForEach(dpAddr, payload) {
-                        BLE_GetDeviceOnOffState(dpAddr->valuestring);
-                    }
-                    break;
-                }
                 case TYPE_DIM_LED_SWITCH: {
                     char* dpAddr = JSON_GetText(payload, "dpAddr");
                     int value = JSON_GetNumber(payload, "value");
@@ -667,7 +720,8 @@ int main( int argc,char ** argv )
         }
         cJSON_Delete(recvPacket);
         cJSON_Delete(payload);
-        usleep(1000);
+        free(recvMsg);
+        usleep(100);
     }
     return 0;
 }
@@ -748,6 +802,58 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
     }
     return true;
 }
+
+// bool deleteSceneActions(const char* sceneId, JSON* actions) {
+//     if (sceneId == NULL || actions == NULL) {
+//         return false;
+//     }
+//     char commonDevices[1200]    = {'\0'};
+//     int  i = 0, j = 0;
+//     logInfo("[addSceneActions] sceneId = %s", sceneId);
+//     int actionCount = JArr_Count(actions);
+//     JSON* mergedActions = JSON_CreateArray();
+//     for (i = 0; i < actionCount; i++) {
+//         JSON* action = JArr_GetObject(actions, i);
+//         char* pid = JSON_GetText(action, "pid");
+//         char* deviceAddr = JSON_GetText(action, "entityAddr");
+//         int dpId = JSON_GetNumber(action, "dpId");
+
+//         if (pid != NULL) {
+//             if (isContainString(HG_BLE_SWITCH, pid)) {
+//                 int dpParam = (dpId - 1)*0x10 + 2;
+//                 dpParam = dpParam << 24;
+//                 JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
+//                 if (mergedActionItem == NULL) {
+//                     mergedActionItem = JArr_AddObject(mergedActions);
+//                     JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
+//                     JSON_SetNumber(mergedActionItem, "param", dpParam);
+//                     JSON_SetNumber(mergedActionItem, "dpCount", 1);
+//                 } else {
+//                     uint32_t newParam = (uint32_t)JSON_GetNumber(mergedActionItem, "param");
+//                     newParam = dpParam | (newParam >> 8);
+//                     JSON_SetNumber(mergedActionItem, "param", newParam);
+//                     JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
+//                 }
+//             } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
+//                 ble_delSceneLocalToDevice(deviceAddr, sceneId);
+//             } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
+//                 ble_delSceneLocalToDevice(deviceAddr, sceneId);
+//             } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
+//                 ble_delSceneLocalToDevice(deviceAddr, sceneId);
+//             }
+//         }
+//     }
+
+//     if (JArr_Count(mergedActions) > 0) {
+//         JSON_ForEach(item, mergedActions) {
+//             char* addr = JSON_GetText(item, "deviceAddr");
+//             int dpCount = JSON_GetNumber(item, "dpCount");
+//             uint32_t param = (uint32_t)JSON_GetNumber(item, "param");
+//             ble_setSceneLocalToDeviceSwitch(sceneId, addr, dpCount, param);
+//         }
+//     }
+//     return true;
+// }
 
 bool addSceneCondition(const char* sceneId, JSON* condition) {
     if (sceneId && condition) {

@@ -52,11 +52,12 @@ Enable/Disable kịch bản local
 Xử lý điều kiện lớn hơn, nhỏ hơn của kịch bản HC cho cảm biến
 Tính năng set độ sáng cho hạt công tắc Homegy
 Tính năng ping HC từ app
+Tính năng control kịch bản wifi
 Tích hợp các thiết bị Homekit vào HC
-Tính năng scan trạng thái on/off của thiết bị (công tắc, đèn) lúc bật nguồn HC
+[v] Tính năng scan trạng thái on/off của thiết bị (công tắc, đèn) lúc bật nguồn HC
 Tính năng đồng bộ database giữa HC và cloud
 Tính năng đồng bộ trạng thái bật/tắt của thiết bị và HC khi bật tắt cùng lúc làm gói tin BLE bị miss
-
+Thêm pageIndex để quản lý danh sách thiết bị, nhóm, scene theo nhiều page
 Tính năng cài đặt wifi, HomeID cho HC
 Tính năng thay HC
 Tính năng chạy 2 Gateway trên 1 HC
@@ -73,3 +74,11 @@ Nguyên nhân làm đèn sáng/tắt
     Đèn được thêm vào nhóm và người dùng bật nhóm từ app
     Đèn được thêm vào nhóm và nhóm đèn này nằm trong action của kịch bản local và kịch bản này được kích hoạt
     Đèn được thêm vào nhóm và nhóm đèn này nằm trong action của kịch bản HC và kịch bản này được kích hoạt
+
+
+
+Testcases:
+    Đồng bộ trạng thái thiết bị khi bật nguồn (bật HC trước, thiết bị trước hoặc bật đồng thời)
+    Đồng bộ trạng thái thiết bị khi bật tắt nhóm đèn
+    Đồng bộ trạng thái thiết bị khi bật tắt nhóm công tắc
+    Đồng bộ trạng thái thiết bị khi điều khiển thiết bị bằng scene local

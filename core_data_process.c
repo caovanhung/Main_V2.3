@@ -3,64 +3,29 @@
 
 //////////////////////////////////////DATABASE PROCESS//////////////////////////////////
 
-bool addNewDevice(sqlite3 **db,const char *object_)
+bool addNewDevice(sqlite3 **db, JSON* packet)
 {
-    bool check_flag = false;
-    JSON_Value  *object             = NULL;
-    JSON_Object *protocol_object    = NULL;
-    JSON_Object *Object_dictMeta    = NULL;
-    JSON_Object *Object_dictDPs     = NULL;
-    JSON_Object *Object_dictName    = NULL;
+    JSON* protParam = JSON_GetObject(packet, "protocol_para");
+    JSON* dictMeta = JSON_GetObject(protParam, "dictMeta");
+    JSON* deviceInfo = JSON_CreateObject();
+    char* deviceId = JSON_GetText(packet, KEY_DEVICE_ID);
+    int pageIndex = JSON_GetNumber(packet, "pageIndex");
+    JSON_SetText(deviceInfo, KEY_DEVICE_ID, deviceId);
+    JSON_SetText(deviceInfo, KEY_NAME, JSON_GetText(packet, KEY_NAME));
+    JSON_SetText(deviceInfo, KEY_UNICAST, JSON_GetText(protParam, KEY_UNICAST));
+    JSON_SetText(deviceInfo, KEY_ID_GATEWAY, JSON_GetText(protParam, KEY_ID_GATEWAY));
+    JSON_SetText(deviceInfo, KEY_DEVICE_KEY, JSON_GetText(protParam, KEY_DEVICE_KEY));
+    JSON_SetText(deviceInfo, KEY_PID, JSON_GetText(protParam, KEY_PID));
+    JSON_SetNumber(deviceInfo, KEY_PROVIDER, JSON_GetNumber(protParam, KEY_PROVIDER));
+    JSON_SetNumber(deviceInfo, "pageIndex", pageIndex);
+    Db_AddDevice(deviceInfo);
 
-    object                  = json_parse_string(object_);
-    protocol_object         = json_object_get_object(json_object(object),KEY_PROTOCOL);
-    Object_dictMeta         = json_object_get_object(protocol_object,KEY_DICT_META);
-    Object_dictDPs          = json_object_get_object(protocol_object,KEY_DICT_DPS);
-    Object_dictName         = json_object_get_object(protocol_object,KEY_DICT_NAME);
-
-    const char* deviceID    = json_object_get_string(json_object(object), KEY_DEVICE_ID);
-    const char* name        = json_object_get_string(json_object(object), KEY_NAME);
-    int created             = (int)json_object_get_number(json_object(object), KEY_CREATED);
-    int modified            = (int)json_object_get_number(json_object(object), KEY_MODIFILED);
-    int last_updated        = (int)json_object_get_number(json_object(object), KEY_LAST_UPDATE);
-    const char* firmware    = json_object_get_string(json_object(object), KEY_FIRMWARE_VERSION);
-    int state               = (int)json_object_get_number(json_object(object), KEY_STATE);
-
-    const char* MAC         = json_object_get_string(protocol_object, KEY_MAC);
-    const char* Unicast     = json_object_get_string(protocol_object, KEY_UNICAST);
-    const char* IDgateway   = json_object_get_string(protocol_object, KEY_ID_GATEWAY);
-    const char* deviceKey   = json_object_get_string(protocol_object, KEY_DEVICE_KEY);
-    int provider            = json_object_get_number(protocol_object, KEY_PROVIDER);
-    const char* pid         = json_object_get_string(protocol_object, KEY_PID);
-
-
-
-    int count_element       = json_object_get_count(Object_dictMeta);
-    int i = 0;
-    for(i = 0;i<count_element;i++)
-    {
-        const char* dpID    =   json_object_get_name(Object_dictMeta,i);
-        const char* address =   json_object_get_string(Object_dictMeta, dpID);
-        const char* dpValue =   KEY_FALSE;
-        check_flag = sql_insertDataTableDevices(db,deviceID,dpID,address,dpValue,state);
-        if(!check_flag)
-        {
-            printf("sql_insertDataTableDevices failed : %d\n",i );
-            return false;
-        }   
+    JSON_ForEach(dp, dictMeta) {
+        int dpId = atoi(dp->string);
+        Db_AddDp(deviceId, dpId, dp->valuestring, pageIndex);
     }
 
-
-    JSON_Value *root_value    = json_value_init_array();
-
-    check_flag = sql_insertDataTableDevicesInf(db,deviceID,state,name,MAC,Unicast,IDgateway,deviceKey,provider,pid,created,modified,last_updated,firmware,json_serialize_to_string_pretty(root_value),json_serialize_to_string_pretty(root_value));
-    if(!check_flag)
-    {
-        printf("sql_insertDataTableDevicesInf failed \n");
-        return false;
-    }  
-
-    // print_database(db);
+    JSON_Delete(deviceInfo);
     return true;
 }
 

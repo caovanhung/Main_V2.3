@@ -101,22 +101,61 @@ void print_database(sqlite3 **db)
 }
 
 int Db_AddGateway(JSON* gatewayInfo) {
+    ASSERT(gatewayInfo);
     creat_table_database(&db);
     char sqlCmd[500];
-    char* address = JSON_GetText(gatewayInfo, KEY_ADDRESS);
+    char* address1 = JSON_GetText(gatewayInfo, "address1");
+    char* address2 = JSON_GetText(gatewayInfo, "address2");
     char* appkey = JSON_GetText(gatewayInfo, KEY_APP_KEY);
     char* ivIndex = JSON_GetText(gatewayInfo, KEY_IV_INDEX);
     char* netkeyIndex = JSON_GetText(gatewayInfo, KEY_NETKEY_INDEX);
     char* netkey = JSON_GetText(gatewayInfo, KEY_NETKEY);
     char* appkeyIndex = JSON_GetText(gatewayInfo, KEY_APP_KEY_INDEX);
     char* deviceKey = JSON_GetText(gatewayInfo, KEY_DEVICE_KEY);
-    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES('%s','%s','%s','%s','%s','%s','%s')", address, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey);
+    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(0,'%s','%s','%s','%s','%s','%s','%s')", address1, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey);
+    Sql_Exec(sqlCmd);
+
+    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(1,'%s','%s','%s','%s','%s','%s','%s')", address2, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey);
     Sql_Exec(sqlCmd);
     return 1;
 }
 
-int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand)
-{
+int Db_FindGatewayId(const char* gatewayAddr) {
+    ASSERT(gatewayAddr);
+    int id = -1;
+    char sqlCmd[300];
+    sprintf(sqlCmd, "SELECT id FROM gateway WHERE address = '%s'", gatewayAddr);
+    Sql_Query(sqlCmd, row) {
+        id = sqlite3_column_int(row, 0);
+    }
+    return id;
+}
+
+int Db_AddDevice(JSON* deviceInfo) {
+    ASSERT(deviceInfo);
+    char* gwAddr = JSON_GetText(deviceInfo, KEY_ID_GATEWAY);
+    int gwIndex = Db_FindGatewayId(gwAddr);
+    if (gwIndex >= 0) {
+        char* id = JSON_GetText(deviceInfo, KEY_DEVICE_ID);
+        char* name = JSON_GetText(deviceInfo, KEY_NAME);
+        char* unicast = JSON_GetText(deviceInfo, KEY_UNICAST);
+        char* deviceKey = JSON_GetText(deviceInfo, KEY_DEVICE_KEY);
+        int provider = JSON_GetNumber(deviceInfo, KEY_PROVIDER);
+        char* pid = JSON_GetText(deviceInfo, KEY_PID);
+        int pageIndex = JSON_GetNumber(deviceInfo, "pageIndex");
+        char sqlCmd[500];
+        sprintf(sqlCmd, "INSERT INTO DEVICES_INF(deviceId, name,  Unicast, gwIndex, deviceKey, provider, pid,   state, pageIndex) \
+                                          VALUES('%s',     '%s',  '%s',    %d,      '%s',      '%d',     '%s',  '%d',    %d)",
+                                                 id,       name,  unicast, gwIndex, deviceKey, provider, pid,   3,     pageIndex);
+        Sql_Exec(sqlCmd);
+        return 1;
+    }
+    printf("[ERROR][Db_AddDevice] Cannot found gateway %s", gwAddr);
+    return 0;
+}
+
+int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand) {
+    ASSERT(deviceInfo); ASSERT(sqlCommand);
     int rc = 0, rowCount = 0;
     sqlite3_stmt *sqlResponse;
     rc = sqlite3_prepare_v2(db, sqlCommand, -1, &sqlResponse, NULL);
@@ -128,8 +167,9 @@ int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand)
             deviceInfo->provider = sqlite3_column_int(sqlResponse, 7);
             strcpy(deviceInfo->id, sqlite3_column_text(sqlResponse, 0));
             strcpy(deviceInfo->addr, sqlite3_column_text(sqlResponse, 4));
-            strcpy(deviceInfo->gatewayId, sqlite3_column_text(sqlResponse, 5));
+            deviceInfo->gwIndex = sqlite3_column_int(sqlResponse, 5);
             strcpy(deviceInfo->pid, sqlite3_column_text(sqlResponse, 8));
+            deviceInfo->pageIndex = sqlite3_column_int(sqlResponse, 15);
             rowCount = 1;
         }
     }
@@ -137,21 +177,22 @@ int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand)
     return rowCount;
 }
 
-int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId)
-{
+int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId) {
+    ASSERT(deviceInfo); ASSERT(deviceId);
     char sqlCommand[100];
     sprintf(sqlCommand, "SELECT * FROM devices_inf WHERE deviceID = '%s';", deviceId);
     return Db_FindDeviceBySql(deviceInfo, sqlCommand);
 }
 
-int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr)
-{
+int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr) {
+    ASSERT(deviceInfo); ASSERT(deviceAddr);
     char sqlCommand[100];
     sprintf(sqlCommand, "SELECT * FROM devices_inf WHERE Unicast = '%s';", deviceAddr);
     return Db_FindDeviceBySql(deviceInfo, sqlCommand);
 }
 
 int Db_SaveDeviceState(const char* deviceId, int state) {
+    ASSERT(deviceId);
     char sqlCmd[200];
     sprintf(sqlCmd, "UPDATE devices_inf SET state='%d' WHERE deviceId='%s';", state, deviceId);
     Sql_Exec(sqlCmd);
@@ -159,6 +200,7 @@ int Db_SaveDeviceState(const char* deviceId, int state) {
 }
 
 int Db_DeleteDevice(const char* deviceId) {
+    ASSERT(deviceId);
     char sqlCmd[100];
     sprintf(sqlCmd, "DELETE FROM devices_inf WHERE deviceId = '%s'", deviceId);
     Sql_Exec(sqlCmd);
@@ -167,24 +209,25 @@ int Db_DeleteDevice(const char* deviceId) {
     return 1;
 }
 
-int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight) {
+int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, int pageIndex) {
+    ASSERT(groupAddr); ASSERT(groupName); ASSERT(devices);
     char* sqlCmd = malloc(strlen(devices) + 200);
-    sprintf(sqlCmd, "INSERT INTO GROUP_INF(groupAdress, name, devices) VALUES('%s', '%s', '%s')", groupAddr, groupName, devices);
+    sprintf(sqlCmd, "INSERT INTO GROUP_INF(groupAdress, name, devices, pageIndex) VALUES('%s', '%s', '%s', %d)", groupAddr, groupName, devices, pageIndex);
     Sql_Exec(sqlCmd);
     if (isLight) {
-        sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue) VALUES('%s', '%s', '%s', '%s')", groupAddr, groupAddr, "20", "0");
+        sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%s', '%s', %d)", groupAddr, groupAddr, "20", "0", pageIndex);
         Sql_Exec(sqlCmd);
-        sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue) VALUES('%s', '%s', '%s', '%s')", groupAddr, groupAddr, "22", "0");
+        sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%s', '%s', %d)", groupAddr, groupAddr, "22", "0", pageIndex);
         Sql_Exec(sqlCmd);
-        sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue) VALUES('%s', '%s', '%s', '%s')", groupAddr, groupAddr, "23", "0");
+        sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%s', '%s', %d)", groupAddr, groupAddr, "23", "0", pageIndex);
         Sql_Exec(sqlCmd);
     }
     free(sqlCmd);
     return 1;
 }
 
-char* Db_FindDevicesInGroup(const char* groupAddr)
-{
+char* Db_FindDevicesInGroup(const char* groupAddr) {
+    ASSERT(groupAddr);
     char* resultDeviceIds = NULL;
     char sqlCommand[100];
     sprintf(sqlCommand, "SELECT * FROM group_inf WHERE groupAdress = '%s';", groupAddr);
@@ -197,8 +240,7 @@ char* Db_FindDevicesInGroup(const char* groupAddr)
 }
 
 int Db_SaveGroupDevices(const char* groupAddr, const char* devices) {
-    ASSERT(groupAddr);
-    ASSERT(devices);
+    ASSERT(groupAddr); ASSERT(devices);
     char* sqlCmd = malloc(strlen(devices) + 300);
     sprintf(sqlCmd, "UPDATE group_inf SET devices='%s' WHERE groupAdress = '%s'", devices, groupAddr);
     Sql_Exec(sqlCmd);
@@ -207,6 +249,7 @@ int Db_SaveGroupDevices(const char* groupAddr, const char* devices) {
 }
 
 int Db_DeleteGroup(const char* groupAddr) {
+    ASSERT(groupAddr);
     char sqlCmd[100];
     sprintf(sqlCmd, "DELETE FROM group_inf WHERE groupAdress = '%s'", groupAddr);
     Sql_Exec(sqlCmd);
@@ -215,13 +258,24 @@ int Db_DeleteGroup(const char* groupAddr) {
     return 1;
 }
 
+int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex) {
+    ASSERT(deviceId); ASSERT(addr);
+    char sqlCmd[500];
+    sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, dpID,  address, dpValue, pageIndex, updateTime) \
+                                  VALUES('%s',     '%d',  '%s',    '0',     %d,        %lld)",
+                                         deviceId, dpId,  addr,             pageIndex, 0);
+    Sql_Exec(sqlCmd);
+    return 1;
+}
+
 int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId) {
+    ASSERT(dpInfo); ASSERT(deviceId);
     int rowCount = 0;
-    char sqlCommand[100];
-    sprintf(sqlCommand, "SELECT * FROM devices WHERE deviceId = '%s' AND dpId='%d';", deviceId, dpId);
+    char sqlCommand[300];
+    sprintf(sqlCommand, "SELECT deviceId, address, dpValue, pageIndex FROM devices WHERE deviceId = '%s' AND dpId='%d';", deviceId, dpId);
     Sql_Query(sqlCommand, row) {
         dpInfo->id = dpId;
-        char* value = sqlite3_column_text(row, 3);
+        char* value = sqlite3_column_text(row, 2);
         if (strcmp(value, "true") == 0) {
             dpInfo->value = 1;
         } else if (strcmp(value, "false") == 0) {
@@ -230,16 +284,18 @@ int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId) {
             dpInfo->value = strtod(value, NULL);
         }
         strcpy(dpInfo->deviceId, sqlite3_column_text(row, 0));
-        strcpy(dpInfo->addr, sqlite3_column_text(row, 2));
+        strcpy(dpInfo->addr, sqlite3_column_text(row, 1));
+        dpInfo->pageIndex = sqlite3_column_int(row, 3);
         rowCount = 1;
     }
     return rowCount;
 }
 
 int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr) {
+    ASSERT(dpInfo); ASSERT(dpAddr);
     int rowCount = 0;
-    char sqlCommand[100];
-    sprintf(sqlCommand, "SELECT * FROM devices WHERE address='%s' ORDER BY dpId LIMIT 1;", dpAddr);
+    char sqlCommand[300];
+    sprintf(sqlCommand, "SELECT deviceId, dpId, address, dpValue, pageIndex FROM devices WHERE address='%s' ORDER BY dpId LIMIT 1;", dpAddr);
     Sql_Query(sqlCommand, row) {
         dpInfo->id = atoi(sqlite3_column_text(row, 1));
         char* value = sqlite3_column_text(row, 3);
@@ -252,12 +308,14 @@ int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr) {
         }
         strcpy(dpInfo->deviceId, sqlite3_column_text(row, 0));
         strcpy(dpInfo->addr, sqlite3_column_text(row, 2));
+        dpInfo->pageIndex = sqlite3_column_int(row, 4);
         rowCount = 1;
     }
     return rowCount;
 }
 
 int Db_SaveDpValue(const char* dpAddr, int dpId, double value) {
+    ASSERT(dpAddr);
     char sqlCmd[200];
     long long int currentTime = timeInMilliseconds();
     sprintf(sqlCmd, "UPDATE devices SET dpValue='%f', updateTime=%lld WHERE address='%s' AND dpId=%d", value, currentTime, dpAddr, dpId);
@@ -500,6 +558,7 @@ int sql_creat_table(sqlite3 **db,char *name_table)
     int rc = sqlite3_exec(*db, name_table, 0, 0, &err_msg);
     if (rc != SQLITE_OK )
     {
+        printf("SQL ERROR: %s\n", err_msg);
         sqlite3_free(err_msg);
         // sqlite3_close(*db);
         return -1;
@@ -511,35 +570,35 @@ int sql_creat_table(sqlite3 **db,char *name_table)
 bool creat_table_database(sqlite3 **db)
 {
     int check = 0;
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS GATEWAY;CREATE TABLE GATEWAY(address TEXT,appkey TEXT,ivIndex TEXT,netkeyIndex TEXT,netkey TEXT,appkeyIndex TEXT,deviceKey TEXT);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS GATEWAY;CREATE TABLE GATEWAY(id INTEGER,address TEXT,appkey TEXT,ivIndex TEXT,netkeyIndex TEXT,netkey TEXT,appkeyIndex TEXT,deviceKey TEXT);");
     if(check != 0)
     {
         printf("DELETE GATEWAY is error!\n");
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES;CREATE TABLE DEVICES(deviceID TEXT, dpID TEXT, address TEXT, dpValue TEXT, updateTime INTEGER);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES;CREATE TABLE DEVICES(deviceID TEXT, dpID TEXT, address TEXT, dpValue TEXT, pageIndex INTEGER, updateTime INTEGER);");
     if(check != 0)
     {
         printf("DELETE DEVICES is error!\n");
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES_INF;CREATE TABLE DEVICES_INF(deviceID TEXT,state INTEGER,name TEXT,MAC TEXT,Unicast TEXT,IDgateway TEXT,deviceKey TEXT,provider INTEGER,pid TEXT,created INTEGER,modified INTEGER,last_updated INTEGER,firmware TEXT,GroupList TEXT,SceneList TEXT);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES_INF;CREATE TABLE DEVICES_INF(deviceID TEXT, state INTEGER, name TEXT, MAC TEXT, Unicast TEXT, gwIndex INTEGER, deviceKey TEXT, provider INTEGER, pid TEXT, created INTEGER, modified INTEGER, last_updated INTEGER, firmware TEXT, GroupList TEXT, SceneList TEXT, pageIndex INTEGER);");
     if(check != 0)
     {
         printf("DELETE DEVICES_INF is error!\n");
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS GROUP_INF;CREATE TABLE GROUP_INF(groupAdress TEXT,state INTEGER,name TEXT,pid TEXT,devices TEXT);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS GROUP_INF;CREATE TABLE GROUP_INF(groupAdress TEXT,state INTEGER,name TEXT,pid TEXT,devices TEXT, pageIndex INTEGER);");
     if(check != 0)
     {
         printf("DELETE GROUP_INF is error!\n");
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS SCENE_INF;CREATE TABLE SCENE_INF(sceneId TEXT,isLocal INTEGER,state INTEGER,name TEXT,sceneType TEXT,actions TEXT,conditions TEXT,created INTEGER,last_updated INTEGER);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS SCENE_INF;CREATE TABLE SCENE_INF(sceneId TEXT,isLocal INTEGER,state INTEGER,name TEXT,sceneType TEXT,actions TEXT,conditions TEXT,created INTEGER,last_updated INTEGER, pageIndex INTEGER);");
     if(check != 0)
     {
         printf("DELETE SCENE_INF is error!\n");

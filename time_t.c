@@ -1,6 +1,7 @@
 #include "time_t.h"
 
-static char g_currentTimeStr[20];
+static char g_currentTimeStr[40];
+
 
 long long timeInMilliseconds()
 {
@@ -80,10 +81,13 @@ int day_of_week(int date, int month, int year)
 
 char *get_localtime_now()
 {
+	struct timeval tv;
+    gettimeofday(&tv, NULL);
+
 	time_t rawtime;
 	struct tm *info;
 	time( &rawtime );
 	info = localtime( &rawtime );
-	sprintf(g_currentTimeStr, "%02d:%02d:%02d", info->tm_hour, info->tm_min, info->tm_sec);
+	sprintf(g_currentTimeStr, "%02d:%02d:%02d.%03d", info->tm_hour, info->tm_min, info->tm_sec, tv.tv_usec/1000);
 	return g_currentTimeStr;
 }

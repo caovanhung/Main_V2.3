@@ -242,7 +242,7 @@ void checkResponseLoop() {
                 // Save devices to DB
                 char* str = malloc((successDevices->count) * 50);
                 List_ToString(successDevices, "|", str);
-                Db_SaveGroupDevices(itemId, str);
+                // Db_SaveGroupDevices(itemId, str);
                 free(str);
             }
             // Remove this respItem from response list
@@ -251,7 +251,7 @@ void checkResponseLoop() {
             List_Delete(failedDevices);
             // Send notification to user
             char noti[100];
-            sprintf(noti, "Thành công: %d, Thất bại: %d", successCount, failedCount);
+            sprintf(noti, "Thành công: %d, Thất bại: %d", successCount, failedCount + notRespCount);
             sendNotiToUser(noti);
         }
     }
@@ -441,7 +441,7 @@ void executeScenes() {
 
 void getDeviceStatusLoop() {
     static long long int oldTick = 0;
-    if (timeInMilliseconds() - oldTick > 30000) {
+    if (timeInMilliseconds() - oldTick > 60000) {
         oldTick = timeInMilliseconds();
         char sqlCmd[500];
         sprintf(sqlCmd, "SELECT address FROM devices \
@@ -477,18 +477,18 @@ int main( int argc,char ** argv )
     Mosq_Init();
     Db_LoadSceneToRam();
     sleep(1);
-    // SyncDevicesState();
     while(xRun!=0) {
         Mosq_ProcessLoop();
         checkResponseLoop();
         executeScenes();
-        getDeviceStatusLoop();
+        // getDeviceStatusLoop();
 
         size_queue = get_sizeQueue(queue_received);
         if (size_queue > 0) {
             int reponse = 0;int leng =  0,number = 0, size_ = 0,i=0;
             char *val_input = (char*)malloc(10000);
-            strcpy(val_input,(char *)dequeue(queue_received));
+            char* recvMsg = (char *)dequeue(queue_received);
+            strcpy(val_input, recvMsg);
 
             JSON_Value *schema = NULL;
             JSON_Value *object = NULL;
@@ -519,11 +519,11 @@ int main( int argc,char ** argv )
                             JSON_SetText(payload, "deviceId", dpInfo.deviceId);
                             JSON_SetNumber(payload, "dpId", dpInfo.id);
                             JSON_SetNumber(payload, "statusType", GW_RESPONSE_DEVICE_CONTROL);
-                            // Send packet to AWS
-                            sendPacketTo(SERVICE_AWS, reqType, payload);
+                            JSON_SetNumber(payload, "pageIndex", dpInfo.pageIndex);
                             Db_SaveDpValue(dpAddr, dpInfo.id, dpValue);
                             Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
                             Db_AddDeviceHistory(payload);
+                            Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
                             checkSceneForDevice(dpInfo.deviceId, dpInfo.id);     // Check and run scenes for this device if any
                         }
                         break;
@@ -538,9 +538,9 @@ int main( int argc,char ** argv )
                             if (foundDevices == 1) {
                                 JSON_SetText(arrayItem, "deviceId", deviceInfo.id);
                                 Db_SaveDeviceState(deviceInfo.id, deviceState);
+                                Aws_SaveDeviceState(deviceInfo.id, deviceState, deviceInfo.pageIndex);
                             }
                         }
-                        sendPacketTo(SERVICE_AWS, GW_RESPONSE_DEVICE_STATE, payload);
                         break;
                     }
                     case GW_RESPONSE_SENSOR_BATTERY:
@@ -600,6 +600,13 @@ int main( int argc,char ** argv )
                         break;
                     }
                     case GW_RESPONSE_DEVICE_KICKOUT: {
+                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                        DeviceInfo deviceInfo;
+                        int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr);
+                        if (foundDevices == 1) {
+                            Db_DeleteDevice(deviceInfo.id);
+                            Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
+                        }
                         break;
                     }
                     case TYPE_SYNC_DEVICE_STATE: {
@@ -698,31 +705,38 @@ int main( int argc,char ** argv )
                         JSON* localPacket = ConvertToLocalPacket(reqType, object_string);
                         char* deviceId = JSON_GetText(localPacket, "deviceId");
                         int provider = JSON_GetNumber(localPacket, "provider");
-                        logInfo("Adding device: %s", deviceId);
-
                         // Delete device from database if exist
                         logInfo("Delete device %s from database if exist", deviceId);
                         Db_DeleteDevice(deviceId);
+                        logInfo("Adding device: %s", deviceId);
 
                         if (provider == HOMEGY_BLE) {
-                            // Send packet to BLE to save device information in to gateway
-                            sendPacketTo(SERVICE_BLE, TYPE_ADD_DEVICE, localPacket);
-                            JSON_Delete(localPacket);
+                            JSON* protParam = JSON_GetObject(payload, "protocol_para");
+                            char* gatewayAddr = JSON_GetText(protParam, "IDgateway");
+                            int gatewayId = Db_FindGatewayId(gatewayAddr);
+                            if (gatewayId >= 0) {
+                                // Send packet to BLE to save device information in to gateway
+                                JSON_SetNumber(localPacket, "gatewayId", gatewayId);
+                                sendPacketTo(SERVICE_BLE, TYPE_ADD_DEVICE, localPacket);
+                                JSON_Delete(localPacket);
+                            } else {
+                                logError("Gateway %s is not found", gatewayAddr);
+                            }
                         }
 
                         // Insert device to database
-                        addNewDevice(&db, object_string);
+                        addNewDevice(&db, payload);
                         break;
                     }
                     case TYPE_DEL_DEVICE: {
                         JSON* localPacket = ConvertToLocalPacket(reqType, object_string);
                         char* deviceId = JSON_GetText(localPacket, "deviceId");
-                        if (deviceId) {
+                        if (JSON_HasKey(localPacket, "deviceAddr")) {
                             sendPacketTo(SERVICE_BLE, TYPE_DEL_DEVICE, localPacket);
                             Db_DeleteDevice(deviceId);
                             logInfo("Delete deviceId: %s", deviceId);
                         } else {
-                            logError("deviceId is not existed in the packet: %s", object_string);
+                            logError("device %s is not found", deviceId);
                         }
                         JSON_Delete(localPacket);
                         break;
@@ -743,9 +757,7 @@ int main( int argc,char ** argv )
                             JSON_ForEach(action, actions) {
                                 char* sceneId = JSON_GetText(payload, "id");
                                 char* deviceAddr = JSON_GetText(action, "entityAddr");
-                                if (requestIsInRespList(reqType, sceneId) == NULL) {
-                                    addDeviceToRespList(reqType, sceneId, deviceAddr);
-                                }
+                                addDeviceToRespList(reqType, sceneId, deviceAddr);
                             }
                         }
                         break;
@@ -757,6 +769,8 @@ int main( int argc,char ** argv )
                             int isLocal = JSON_GetNumber(sceneInfo, "isLocal");
                             if (isLocal) {
                                 sendPacketTo(SERVICE_BLE, TYPE_DEL_SCENE, sceneInfo);   // Send packet to BLE
+                            } else {
+                                logInfo("Deleted HC scene %s", sceneId);
                             }
                             Db_DeleteScene(sceneId);    // Delete scene from database
                         }
@@ -843,7 +857,7 @@ int main( int argc,char ** argv )
                         JSON* devicesArray = JSON_GetObject(localPacket, "devices");
                         JSON* srcObj = JSON_Parse(object_string);
                         // Insert group information to database
-                        Db_AddGroup(groupAddr, JSON_GetText(srcObj, "name"), JSON_GetText(srcObj, "devices"), true);
+                        Db_AddGroup(groupAddr, JSON_GetText(srcObj, "name"), JSON_GetText(srcObj, "devices"), true, 1);
                         // Add this request to response list for checking response
                         JSON_ForEach(device, devicesArray) {
                             addDeviceToRespList(reqType, groupAddr, JSON_GetText(device, "deviceAddr"));
@@ -938,7 +952,7 @@ int main( int argc,char ** argv )
                         JSON* devicesArray = JSON_GetObject(localPacket, "devices");
                         JSON* srcObj = payload;
                         // Insert group information to database
-                        Db_AddGroup(groupAddr, JSON_GetText(srcObj, "name"), JSON_GetText(srcObj, "devices"), false);
+                        Db_AddGroup(groupAddr, JSON_GetText(srcObj, "name"), JSON_GetText(srcObj, "devices"), false, 1);
                         // Add this request to response list for checking response
                         JSON_ForEach(device, devicesArray) {
                             addDeviceToRespList(reqType, groupAddr, JSON_GetText(device, "dpAddr"));
@@ -1054,6 +1068,7 @@ int main( int argc,char ** argv )
 
             JSON_Delete(recvPacket);
             JSON_Delete(payload);
+            free(recvMsg);
         }
         usleep(100);
     }
@@ -1381,6 +1396,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
                             arrayItem = JSON_CreateObject();
                             JSON_SetText(arrayItem, "deviceId", splitList->items[i]);
                             JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+                            JSON_SetNumber(arrayItem, "gwIndex", deviceInfo.gwIndex);
                         }
                     } else if (arrayItem != NULL) {
                         int dpId = atoi(splitList->items[i]);
@@ -1402,6 +1418,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
                     int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
                     if (foundDevices) {
                         JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+                        JSON_SetNumber(arrayItem, "gwIndex", deviceInfo.gwIndex);
                     }
                     cJSON_AddItemToArray(devicesArray, arrayItem);
                 }

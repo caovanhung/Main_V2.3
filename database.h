@@ -21,15 +21,17 @@ typedef struct {
     char deviceId[50];
     char addr[10];
     double value;
+    int pageIndex;
 } DpInfo;
 
 typedef struct {
     char id[50];
     int  state;
     char addr[10];
-    char gatewayId[10];
-    int provider;
+    int  gwIndex;
+    int  provider;
     char pid[20];
+    int  pageIndex;
 } DeviceInfo;
 
 typedef enum {
@@ -96,6 +98,7 @@ typedef struct {
     uint8_t         effectRepeat;
     int             runningActionIndex;  // Private variable to store the index of action that is executing (-1 means scene is idle)
     long long       delayStart;          // Private variable to store the time when starting the DELAY action
+    int             pageIndex;
 } Scene;
 
 extern Scene* g_sceneList;
@@ -105,18 +108,21 @@ extern int g_sceneCount;
 #define Sql_Exec(sqlCmd)    { char *err_msg; if (sqlite3_exec(db, sqlCmd, 0, 0, &err_msg) != SQLITE_OK) { myLogError("SQL Error: %s, %s", sqlCmd, err_msg); sqlite3_free(err_msg); return 0; }}
 
 int Db_AddGateway(JSON* gatewayInfo);
+int Db_FindGatewayId(const char* gatewayAddr);
 
+int Db_AddDevice(JSON* deviceInfo);
 int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand);
 int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId);
 int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr);
 int Db_SaveDeviceState(const char* deviceId, int state);
 int Db_DeleteDevice(const char* deviceId);
 
-int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight);
+int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, int pageIndex);
 int Db_DeleteGroup(const char* groupAddr);
 char* Db_FindDevicesInGroup(const char* groupAddr);
 int Db_SaveGroupDevices(const char* groupAddr, const char* devices);
 
+int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex);
 int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId);
 int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr);
 int Db_SaveDpValue(const char* dpAddr, int dpId, double value);
