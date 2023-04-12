@@ -483,12 +483,6 @@ int main( int argc,char ** argv )
         Mosq_ProcessLoop();   // Receive mqtt message from CORE service => Push to mqttMsgQueue
         Mosq_SendResponse();
 
-        // Only process next message if there is any available gateway
-        // int gwIdx = findAvailGatewayFd();
-        // if (gwIdx == -1) {
-        //     continue;
-        // }
-
         int mqttSizeQueue = get_sizeQueue(g_mqttMsgQueue);
         int lowPrioMqttSizeQueue = get_sizeQueue(g_lowPrioMqttMsgQueue);
         char* recvMsg;

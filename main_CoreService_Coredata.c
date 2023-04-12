@@ -622,7 +622,10 @@ int main( int argc,char ** argv )
                         long long endTime = JSON_GetNumber(payload, "end");
                         char* deviceId = JSON_GetText(payload, "deviceId");
                         int dpId = atoi(JSON_GetText(payload, "dpId"));
-                        int pageIndex = JSON_GetNumber(payload, "pageIndex");
+                        int pageIndex = 1;
+                        if (JSON_HasKey(payload, "pageIndex")) {
+                            pageIndex = JSON_GetNumber(payload, "pageIndex");
+                        }
                         startTime = startTime == 0? currentTime - 86400000 : startTime;
                         JSON* histories = Db_FindDeviceHistories(startTime, endTime, deviceId, dpId, pageIndex);
                         sendPacketTo(SERVICE_AWS, reqType, histories);
@@ -728,6 +731,27 @@ int main( int argc,char ** argv )
                         addNewDevice(&db, payload);
                         break;
                     }
+                    case TYPE_SYNC_DEVICE: {
+                        char* deviceId = JSON_GetText(payload, "deviceId");
+                        DeviceInfo deviceInfo;
+                        int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
+                        if (foundDevices == 0) {
+                            int provider = JSON_GetNumber(payload, "provider");
+                            if (provider == HOMEGY_BLE) {
+                                JSON* protParam = JSON_GetObject(payload, "protocol_para");
+                                char* gatewayAddr = JSON_GetText(protParam, "IDgateway");
+                                int gatewayId = Db_FindGatewayId(gatewayAddr);
+                                if (gatewayId >= 0) {
+                                    // Send packet to BLE to save device information in to gateway
+                                    JSON_SetNumber(payload, "gatewayId", gatewayId);
+                                    sendPacketTo(SERVICE_BLE, TYPE_ADD_DEVICE, payload);
+                                } else {
+                                    logError("Gateway %s is not found", gatewayAddr);
+                                }
+                            }
+                        }
+                        break;
+                    }
                     case TYPE_DEL_DEVICE: {
                         JSON* localPacket = ConvertToLocalPacket(reqType, object_string);
                         char* deviceId = JSON_GetText(localPacket, "deviceId");
@@ -755,9 +779,11 @@ int main( int argc,char ** argv )
                             // Add this request to response list for checking response
                             JSON* actions = JSON_GetObject(payload, "actions");
                             JSON_ForEach(action, actions) {
-                                char* sceneId = JSON_GetText(payload, "id");
-                                char* deviceAddr = JSON_GetText(action, "entityAddr");
-                                addDeviceToRespList(reqType, sceneId, deviceAddr);
+                                if (JSON_HasKey(action, "pid")) {
+                                    char* sceneId = JSON_GetText(payload, "id");
+                                    char* deviceAddr = JSON_GetText(action, "entityAddr");
+                                    addDeviceToRespList(reqType, sceneId, deviceAddr);
+                                }
                             }
                         }
                         break;
@@ -1134,6 +1160,8 @@ int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr)
 
 bool Scene_GetFullInfo(JSON* packet) {
     JSON* actionsArray = JSON_GetObject(packet, "actions");
+    JSON* newActionsArray = JSON_CreateArray();
+    int i = 0;
     JSON_ForEach(action, actionsArray) {
         JSON* executorProperty = JSON_GetObject(action, "executorProperty");
         char* actionExecutor = JSON_GetText(action, "actionExecutor");
@@ -1146,6 +1174,24 @@ bool Scene_GetFullInfo(JSON* packet) {
             JSON_SetNumber(action, "actionType", EntityDelay);
         } else if (strcmp(actionExecutor, "ruleTrigger") == 0) {
             JSON_SetNumber(action, "actionType", EntityScene);
+        } else if (strcmp(actionExecutor, "deviceGroupDpIssue") == 0) {
+            int dpId = 0, dpValue = 0;
+            JSON_ForEach(o, executorProperty) {
+                dpId = atoi(o->string);
+                dpValue = o->valueint;
+            }
+            if (dpId == 20) {
+                // Get all devices in this group
+                char* devicesStr = Db_FindDevicesInGroup(entityId);
+                JSON* devices = parseGroupNormalDevices(devicesStr);
+                JSON_ForEach(d, devices) {
+                    JSON* newAction = JArr_AddObject(newActionsArray);
+                    JSON_SetText(newAction, "entityAddr", JSON_GetText(d, "deviceAddr"));
+                    JSON_SetText(newAction, "pid", JSON_GetText(d, "pid"));
+                    JSON_SetNumber(newAction, "dpId", dpId);
+                }
+                JSON_Delete(devices);
+            }
         } else {
             JSON_SetNumber(action, "actionType", EntityDevice);
             DeviceInfo deviceInfo;
@@ -1168,6 +1214,7 @@ bool Scene_GetFullInfo(JSON* packet) {
             }
         }
         JSON_SetNumber(action, "delaySeconds", delaySeconds);
+        i++;
     }
     JSON* conditionsArray = JSON_GetObject(packet, "conditions");
     JSON_ForEach(condition, conditionsArray) {
@@ -1205,6 +1252,16 @@ bool Scene_GetFullInfo(JSON* packet) {
         JSON_SetNumber(condition, "schMinutes", schMinutes);
         JSON_SetNumber(condition, "repeat", repeat);
     }
+
+    // For deviceGroupDpIssue: Copy new action of devices to current action array
+    JSON_ForEach(o, newActionsArray) {
+        JSON* newAction = JArr_AddObject(actionsArray);
+        JSON_SetText(newAction, "pid", JSON_GetText(o, "pid"));
+        JSON_SetText(newAction, "entityAddr", JSON_GetText(o, "entityAddr"));
+        JSON_SetNumber(newAction, "dpId", JSON_GetNumber(o, "dpId"));
+        JSON_SetNumber(newAction, "dpValue", JSON_GetNumber(o, "dpValue"));
+    }
+
     return true;
 }
 
@@ -1493,6 +1550,7 @@ JSON* parseGroupNormalDevices(const char* devices) {
         int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
         if (foundDevices) {
             JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+            JSON_SetText(arrayItem, "pid", deviceInfo.pid);
         }
         cJSON_AddItemToArray(devicesArray, arrayItem);
     }

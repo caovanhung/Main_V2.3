@@ -507,7 +507,7 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
     if (dpId >= 0) {
         sprintf(dpIdCondition, "AND dpId=%d", dpId);
     }
-    int offset = pageIndex * limit;
+    int offset = (pageIndex - 1) * limit;
     int count = 0;
     // get number of rows
     sprintf(sqlCmd, "SELECT count(*) FROM device_histories WHERE time >= %lld AND time <= %lld AND deviceId='%s' %s", startTime, endTime, deviceId, dpIdCondition);
@@ -523,7 +523,7 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
     {Sql_Query(sqlCmd, row) {
         JSON* r = JArr_AddObject(rows);
         JSON_SetNumber(r, "id",         sqlite3_column_int(row, 0));
-        JSON_SetNumber(r, "time",       sqlite3_column_int(row, 1));
+        JSON_SetNumber(r, "time",       sqlite3_column_int64(row, 1));
         JSON_SetNumber(r, "causeType",  sqlite3_column_int(row, 2));
         JSON_SetText  (r, "causeId",    sqlite3_column_text(row, 3));
         JSON_SetNumber(r, "statusType", sqlite3_column_int(row, 4));
