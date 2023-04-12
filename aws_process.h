@@ -39,121 +39,142 @@
 #include "core_process_t.h"
 #include "mosquitto.h"
 
+
+#define MQTT_TOPIC_COMMON                  "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name"
+
 typedef struct  
 {
-	char *deviceID;
-	char *name;
-	char *Service;
-	char *MAC;
-	char *Unicast;
-	char *IDgateway;
-	char *deviceKey;
-	int provider;
-	char *pid;
-	char *lock;
+    char *deviceID;
+    char *name;
+    char *Service;
+    char *MAC;
+    char *Unicast;
+    char *IDgateway;
+    char *deviceKey;
+    int provider;
+    char *pid;
+    char *lock;
 
-	int ledDim;
-	int State;
-	int created;
-	int modified;
-	int last_updated;
-	char *firmware;
-	
-	char *dictMeta;
-	char *dictDPs;
-	char *dictName;
-	char *senderId;
-	int pageIndex;
+    int ledDim;
+    int State;
+    int created;
+    int modified;
+    int last_updated;
+    char *firmware;
+
+    char *dictMeta;
+    char *dictDPs;
+    char *dictName;
+    char *senderId;
+    int pageIndex;
 }Info_device;
 
-typedef struct  
+typedef struct
 {
-	char *deviceID;
-	char *name;
-	char *Service;
-	char *MAC;
-	char *Unicast;
-	char *IDgateway;
-	char *deviceKey;
-	int provider;
-	char *pid;
+    char *deviceID;
+    char *name;
+    char *Service;
+    char *MAC;
+    char *Unicast;
+    char *IDgateway;
+    char *deviceKey;
+    int provider;
+    char *pid;
 
-	int loops;
-	int delay;
+    int loops;
+    int delay;
 
-	int State;
-	int created;
-	int modified;
-	int last_updated;
-	char *firmware;
-	
-	char *dictMeta;
-	char *dictDPs;
-	char *dictName;
+    int State;
+    int created;
+    int modified;
+    int last_updated;
+    char *firmware;
+
+    char *dictMeta;
+    char *dictDPs;
+    char *dictName;
 }Info_device_Debug;
 
 
-typedef struct  
+typedef struct
 {
-	char *sceneId;
-	char *name;
-	int isLocal;
-	int  sceneState;
-	int sceneControl;
-	char *sceneType;
-	char *actions;
-	char *conditions;
+    char *sceneId;
+    char *name;
+    int isLocal;
+    int  sceneState;
+    int sceneControl;
+    char *sceneType;
+    char *actions;
+    char *conditions;
 }Info_scene;
 
-typedef struct  
+typedef struct
 {
-	const char *groupID;
-	const char *devices;
-	const char *pid;
-	int state;
-	int provider;
-	char *senderId;
-	char *dictDPs;
-	const char *name;
+    const char *groupID;
+    const char *devices;
+    const char *pid;
+    int state;
+    int provider;
+    char *senderId;
+    char *dictDPs;
+    const char *name;
 }Info_group;
 
-typedef struct  
+typedef struct
 {
-	const char *appkey;
-	const char *ivIndex;
-	const char *netkeyIndex;
-	const char *netkey;
-	const char *appkeyIndex;
-	const char *deviceKey;
-	const char *address1;
-	const char *address2;
+    const char *appkey;
+    const char *ivIndex;
+    const char *netkeyIndex;
+    const char *netkey;
+    const char *appkeyIndex;
+    const char *deviceKey;
+    const char *address1;
+    const char *address2;
 }InfoProvisonGateway;
 
-typedef struct  
+typedef struct
 {
-	int type;
-	int loops;
-	int delay;
-	int state;
-	
-	int sender;
-	char *senderId;
-	char *object;
-	int provider;
-	int pageIndex;
-	JSON_Object *JS_object;
-	JSON_Value *JS_value;
+    int type;
+    int loops;
+    int delay;
+    int state;
+
+    int sender;
+    char *senderId;
+    char *object;
+    int provider;
+    int pageIndex;
+    JSON_Object *JS_object;
+    JSON_Value *JS_value;
 }Pre_parse;
 
-typedef struct 
+typedef struct
 {
     char id[50];
     long long TimeCreat;
     long long TimeOut;
 }InfoReponse;
 
+typedef enum {
+    PAGE_MAIN,
+    PAGE_DEVICE,
+    PAGE_SCENE,
+    PAGE_GROUP
+} AwsPageType;
+
+typedef enum {
+    TOPIC_GET_PUB,      //     /get
+    TOPIC_GET_SUB,      //     /get/accepted
+    TOPIC_UPD_PUB,      //     /update
+    TOPIC_UPD_SUB,      //     /update/accepted
+    TOPIC_NOTI_PUB      //     /notify
+} AwsTopicType;
+
+void getHcInformation();
+char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType);
+
 //for pre-process
-bool AWS_short_message_received(char **result,char *value);
+bool AWS_short_message_received(char *value);
 bool AWS_pre_detect_message_received(Pre_parse *var,char *mess);
 bool AWS_detect_message_received_for_update(Pre_parse *var,char *mess);
 

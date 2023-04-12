@@ -20,7 +20,7 @@ extern int g_dbgLineNumber;
 
 #define GATEWAY_NUM             2
 //UART
-#define UART_GATEWAY1           "/dev/ttyS0"
+#define UART_GATEWAY1           "/dev/ttyS3"
 #define UART_GATEWAY2           "/dev/ttyS2"
 #define DELAY_SEND_UART_MS         250000
 #define _USE_DEBUG_UART //define for debug UART
@@ -89,6 +89,10 @@ extern int g_dbgLineNumber;
 #define TYPE_LOCK_AGENCY                (22U)
 #define TYPE_NOTIFI_REPONSE             (23U)
 #define TYPE_UPDATE_SERVICE             (25U)
+
+#define TYPE_GET_NUM_OF_PAGE            (45U)
+#define TYPE_UPDATE_INFO_DEVICES        (46U)
+#define TYPE_UPDATE_INFO_SCENES         (47U)
 
 #define TYPE_SYNC_DEVICE_STATE          (99U)
 #define TYPE_GET_DEVICE_STATUS          (100U)

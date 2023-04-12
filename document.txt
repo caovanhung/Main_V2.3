@@ -82,3 +82,17 @@ Testcases:
     Đồng bộ trạng thái thiết bị khi bật tắt nhóm đèn
     Đồng bộ trạng thái thiết bị khi bật tắt nhóm công tắc
     Đồng bộ trạng thái thiết bị khi điều khiển thiết bị bằng scene local
+
+
+
+1 page sẽ có các topics:
+    /get : dùng để yêu cầu aws đẩy toàn bộ data của page vào topic /get/accepted
+    /get/accepted : dùng để nhận toàn bộ data của page khi có ai đó publish vào topic /get
+    /update : dùng để update 1 phần data của page
+    /update/accepted: dùng để nhận thông tin khi có page có thay data
+
+Danh sách các page:
+    MAIN
+    DEVICE (pageIndex0)
+    SCENE  (pageIndex2)
+    GROUP  (pageIndex3)
