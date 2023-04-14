@@ -195,6 +195,7 @@ bool AWS_detect_message_received_for_update(Pre_parse *var,char *mess)
     {
         schema = json_parse_string(mess);
         var->type = (int)json_object_get_number(json_object(schema),KEY_TYPE);
+        var->sender = (int)json_object_get_number(json_object(schema),KEY_SENDER);
     }
     else
     {

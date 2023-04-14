@@ -612,9 +612,10 @@ bool getPayloadReponseDevicesGroupAWS(char** result,char *deviceID,char*  device
 }
 
 void sendNotiToUser(const char* message) {
-    char payload[200];
+    char* payload = malloc(strlen(message) + 200);
     sprintf(payload, "{\"type\": %d, \"sender\":%d,\"%s\": \"%s\" }", TYPE_NOTIFI_REPONSE, SENDER_HC_VIA_CLOUD, KEY_MESSAGE, message);
     sendToService(SERVICE_AWS, TYPE_NOTIFI_REPONSE, payload);
+    free(payload);
 }
 
 

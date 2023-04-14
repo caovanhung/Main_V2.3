@@ -3122,6 +3122,13 @@ CJSON_PUBLIC(void) cJSON_free(void *object)
 
 #include "helper.h"
 
+JSON* JSON_Clone(JSON* obj) {
+    char* str = cJSON_PrintUnformatted(obj);
+    JSON* cloneObj = JSON_Parse(str);
+    free(str);
+    return cloneObj;
+}
+
 char* JSON_GetText(JSON* obj, const char* name) {
     JSON* c = cJSON_GetObjectItem(obj, name);
     if (!cJSON_IsString(c)) {

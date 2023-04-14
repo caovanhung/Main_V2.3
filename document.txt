@@ -22,7 +22,23 @@
         Khóa hãng
         Thời gian
         Nguyên nhân làm thay đổi trạng thái (senderId nếu điều khiển từ app, sceneId nếu điều khiển từ kịch bản)
-    Thời gian lưu tối đa:
+    Thông tin của từng lịch sử:
+        time: Số milliseconds tính từ năm 01/01/1970
+        eventType: Loại sự kiện của lịch sử:
+            1: Điều khiển thiết bị
+            2: Thiết bị online/offline (dpValue = 0: thiết bị offline, dpValue = 1: Thiết bị online)
+            3: Thêm thiết bị
+            4: Xoá thiết bị
+            5: Khóa trẻ em (dpValue là index của hạt bị khóa (1, 2, 3, 4))
+            6: Khóa hãng
+        causeType: Nguyên nhân làm thay đổi sự kiện
+            0: Người dùng bật tắt trực tiếp từ thiết bị
+            1: Người dùng điều khiển từ app, trong trường hợp này causeId sẽ chứa senderId tác động
+            2: Có nhóm đèn hoặc nhóm công tắc tác động, trong trường hợp này causeId sẽ chứa groupId tác động
+            3: Có scene tác động, trong trường hợp này causeId sẽ chứa sceneId tác động
+        causeId: chứa senderId, groupId hoặc sceneId tùy theo causeType
+        deviceId: Id của thiết bị
+
 
 
 # Chức năng enable/disable kịch bản:

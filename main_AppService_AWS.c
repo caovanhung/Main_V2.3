@@ -854,7 +854,7 @@ void Aws_BuildSubscriptionTopics() {
         g_awsSubscriptionCount = 0;
     }
     // Each page type need 2 topics for getting all page and get an update)
-    int topicNum = (g_awsDevicePageNum + g_awsGroupPageNum + g_awsScenePageNum) * 2 + 1;
+    int topicNum = (g_awsDevicePageNum + g_awsGroupPageNum + g_awsScenePageNum) * 2 + 2;
     int topicIdx = 0;
     g_awsSubscriptionList = malloc(sizeof(MQTTSubscribeInfo_t) * topicNum);
     for (int i = 0; i < g_awsDevicePageNum; i++) {
@@ -893,6 +893,12 @@ void Aws_BuildSubscriptionTopics() {
     g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_MAIN, 0, TOPIC_NOTI_PUB);
     g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
     topicIdx++;
+
+    g_awsSubscriptionList[topicIdx].qos = MQTTQoS0;
+    g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_MAIN, 0, TOPIC_UPD_SUB);
+    g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
+    topicIdx++;
+
     g_awsSubscriptionCount = topicIdx;
 }
 
@@ -1048,7 +1054,6 @@ void Mosq_ProcessMessage() {
                 free(topic);
                 break;
             }
-            case TYPE_GET_DEVICE_HISTORY:
             case TYPE_NOTIFI_REPONSE: {
                 char* topic = Aws_GetTopic(PAGE_MAIN, 0, TOPIC_NOTI_PUB);
                 sendPacketToCloud(topic, payload);
@@ -1305,12 +1310,33 @@ int main( int argc,char ** argv ) {
                         break;
                     }
                     case TYPE_GET_DEVICES: {
+                        JSON* p = JSON_CreateObject();
+                        int pageIndex = JSON_GetNumber(reported, "pageIndex");
+                        JSON* devices = JSON_AddArray(p, "devices");
                         JSON_ForEach(item, reported) {
                             if (cJSON_IsObject(item)) {
-                                // logInfo(item->string);
+                                JSON* device = JArr_AddObject(devices);
+                                list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
+                                if (tmp->count >= 5) {
+                                    JSON_SetText(device, "deviceId", item->string);
+                                    JSON_SetText(device, KEY_NAME, JSON_GetText(item, "name"));
+                                    JSON_SetObject(device, "dictMeta", JSON_Clone(JSON_GetObject(item, "dictMeta")));
+                                    JSON_SetText(device, KEY_ID_GATEWAY, JSON_GetText(item, "gateWay"));
+                                    JSON_SetText(device, KEY_UNICAST, tmp->items[3]);
+                                    JSON_SetText(device, "deviceAddr", tmp->items[3]);
+                                    JSON_SetText(device, KEY_DEVICE_KEY, tmp->items[4]);
+                                    JSON_SetNumber(device, KEY_PROVIDER, atoi(tmp->items[0]));
+                                    JSON_SetText(device, KEY_PID, tmp->items[1]);
+                                    JSON_SetText(device, "devicePid", tmp->items[1]);
+                                    JSON_SetNumber(device, "pageIndex", pageIndex);
+                                }
+                                List_Delete(tmp);
                             }
                         }
+                        sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, p);
+                        JSON_Delete(p);
                         g_awsSyncDatabaseStep = 0;
+                        break;
                     }
                 }
                 free(val_input);
@@ -1323,6 +1349,9 @@ int main( int argc,char ** argv ) {
             else
             {
                 AWS_detect_message_received_for_update(pre_detect,val_input);
+                if (pre_detect->sender != SENDER_APP_VIA_CLOUD) {
+                    continue;
+                }
                 char *topic;
                 char *message;
                 switch (pre_detect->type)

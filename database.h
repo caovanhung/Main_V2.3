@@ -111,6 +111,7 @@ int Db_AddGateway(JSON* gatewayInfo);
 int Db_FindGatewayId(const char* gatewayAddr);
 
 int Db_AddDevice(JSON* deviceInfo);
+JSON* Db_GetAllDevices();
 int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand);
 int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId);
 int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr);
@@ -135,7 +136,7 @@ int Db_DeleteScene(const char* sceneId);
 int Db_EnableScene(const char* sceneId, int enableOrDisable);
 
 int Db_AddDeviceHistory(JSON* packet);
-JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char* deviceId, int dpId, int pageIndex);
+JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char* deviceId, char* dpIds, int causeType, int eventType, int limit);
 
 bool open_database(const char *filename, sqlite3 **db);
 bool close_database(sqlite3 **db);

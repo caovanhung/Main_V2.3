@@ -154,6 +154,18 @@ int Db_AddDevice(JSON* deviceInfo) {
     return 0;
 }
 
+JSON* Db_GetAllDevices() {
+    char sqlCmd[100];
+    JSON* arr = JSON_CreateArray();
+    sprintf(sqlCmd, "SELECT deviceId FROM devices_inf");
+    Sql_Query(sqlCmd, row) {
+        char* deviceId = sqlite3_column_text(row, 0);
+        JSON* item = JArr_AddObject(arr);
+        JSON_SetText(item, "deviceId", deviceId);
+    }
+    return arr;
+}
+
 int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand) {
     ASSERT(deviceInfo); ASSERT(sqlCommand);
     int rc = 0, rowCount = 0;
@@ -487,50 +499,47 @@ int Db_AddDeviceHistory(JSON* packet) {
     long long time = timeInMilliseconds();
     uint8_t causeType  = JSON_GetNumber(packet, "causeType");
     char*   causeId    = JSON_GetText(packet, "causeId");
-    uint8_t statusType = JSON_GetNumber(packet, "statusType");
+    uint8_t eventType = JSON_GetNumber(packet, "eventType");
     char*   deviceId   = JSON_GetText(packet, "deviceId");
     uint8_t dpId       = JSON_GetNumber(packet, "dpId");
     uint16_t dpValue    = JSON_GetNumber(packet, "dpValue");
     char sqlCmd[500];
-    sprintf(sqlCmd, "INSERT INTO device_histories(time  , causeType, causeId, statusType, deviceId, dpId, dpValue) \
-                                           VALUES('%lld', %d       , '%s'   , %d        , '%s'    , %d  , %d     )",
-                                                  time  , causeType, causeId, statusType, deviceId, dpId, dpValue);
+    sprintf(sqlCmd, "INSERT INTO device_histories(time  , causeType, causeId, eventType, deviceId, dpId, dpValue) \
+                                           VALUES('%lld', %d       , '%s'   , %d        , '%s'    , %d  , '%d'     )",
+                                                  time  , causeType, causeId, eventType, deviceId, dpId, dpValue);
     Sql_Exec(sqlCmd);
     return 1;
 }
 
-JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char* deviceId, int dpId, int pageIndex) {
+JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char* deviceId, char* dpIds, int causeType, int eventType, int limit) {
+    ASSERT(deviceId);
     JSON* histories = JSON_CreateObject();
+    JSON_SetNumber(histories, "type", TYPE_GET_DEVICE_HISTORY);
+    JSON_SetNumber(histories, "sender", SENDER_HC_VIA_CLOUD);
     char sqlCmd[500];
-    int limit = 50;
-    char dpIdCondition[50] = "";
-    if (dpId >= 0) {
-        sprintf(dpIdCondition, "AND dpId=%d", dpId);
+    char dpIdCondition[50], causeTypeCondition[50], eventTypeCondition[50];
+    if (dpIds) {
+        sprintf(dpIdCondition, "AND dpId IN (%s)", dpIds);
     }
-    int offset = (pageIndex - 1) * limit;
-    int count = 0;
-    // get number of rows
-    sprintf(sqlCmd, "SELECT count(*) FROM device_histories WHERE time >= %lld AND time <= %lld AND deviceId='%s' %s", startTime, endTime, deviceId, dpIdCondition);
-    Sql_Query(sqlCmd, row) {
-        count = sqlite3_column_int(row, 0);
+    if (causeType >= 0) {
+        sprintf(causeTypeCondition, "AND causeType=%d", causeType);
     }
-    JSON_SetNumber(histories, "totalRows", count);
-    JSON_SetNumber(histories, "pageIndex", pageIndex);
-    JSON_SetNumber(histories, "pageCount", ceil((float)count / limit));
+    if (eventType >= 0) {
+        sprintf(eventTypeCondition, "AND eventType=%d", eventType);
+    }
     JSON* rows = JSON_AddArray(histories, "rows");
     // get row details
-    sprintf(sqlCmd, "SELECT * FROM device_histories WHERE time >= %lld AND time <= %lld AND deviceId='%s' %s ORDER BY time DESC LIMIT %d OFFSET %d", startTime, endTime, deviceId, dpIdCondition, limit, offset);
-    {Sql_Query(sqlCmd, row) {
+    sprintf(sqlCmd, "SELECT * FROM device_histories WHERE time >= %lld AND time <= %lld AND deviceId='%s' %s %s %s ORDER BY time DESC LIMIT %d", startTime, endTime, deviceId, dpIdCondition, causeTypeCondition, eventTypeCondition, limit);
+    Sql_Query(sqlCmd, row) {
         JSON* r = JArr_AddObject(rows);
-        JSON_SetNumber(r, "id",         sqlite3_column_int(row, 0));
         JSON_SetNumber(r, "time",       sqlite3_column_int64(row, 1));
         JSON_SetNumber(r, "causeType",  sqlite3_column_int(row, 2));
         JSON_SetText  (r, "causeId",    sqlite3_column_text(row, 3));
-        JSON_SetNumber(r, "statusType", sqlite3_column_int(row, 4));
-        JSON_SetText  (r, "deviceId",   sqlite3_column_text(row, 5));
-        JSON_SetNumber(r, "dpId",       sqlite3_column_int(row, 6));
-        JSON_SetNumber(r, "dpValue",    sqlite3_column_int(row, 7));
-    }}
+        JSON_SetNumber(r, "eventType", sqlite3_column_int(row, 4));
+        JSON_SetText  (r, KEY_DEVICE_ID,   sqlite3_column_text(row, 5));
+        JSON_SetNumber(r, KEY_DP_ID,       sqlite3_column_int(row, 6));
+        JSON_SetText  (r, "dpValue",    sqlite3_column_text(row, 7));
+    }
     return histories;
 }
 
@@ -605,7 +614,7 @@ bool creat_table_database(sqlite3 **db)
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db, "DROP TABLE IF EXISTS DEVICE_HISTORIES;CREATE TABLE DEVICE_HISTORIES(id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER, causeType INTEGER, causeId TEXT, statusType INTEGER, deviceId TEXT, dpId INTEGER, dpValue REAL); CREATE INDEX device_histories_time_device_id ON DEVICE_HISTORIES(time, deviceId);");
+    check = sql_creat_table(db, "DROP TABLE IF EXISTS DEVICE_HISTORIES;CREATE TABLE DEVICE_HISTORIES(id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER, causeType INTEGER, causeId TEXT, eventType INTEGER, deviceId TEXT, dpId INTEGER, dpValue TEXT); CREATE INDEX device_histories_time_device_id ON DEVICE_HISTORIES(time, deviceId);");
     if(check != 0)
     {
         printf("DELETE SCENE_INF is error!\n");

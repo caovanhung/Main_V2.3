@@ -116,6 +116,7 @@ typedef struct
 int findAvailGatewayFd();
 bool ble_checkResponse();
 void ble_sendUartFrames();
+void addReqTypeToRespList(int reqType, const char* itemId);
 
 // Send request to get the device ON/OFF state
 bool BLE_GetDeviceOnOffState(const char* dpAddr);

@@ -1,3 +1,6 @@
+#ifndef __DEFINE_H
+#define __DEFINE_H
+
 
 #include "time_t.h"
 
@@ -94,7 +97,7 @@ extern int g_dbgLineNumber;
 #define TYPE_GET_DEVICES                (46U)
 #define TYPE_GET_SCENES                 (47U)
 #define TYPE_GET_GROUPS                 (48U)
-#define TYPE_SYNC_DEVICE                (49U)
+#define TYPE_SYNC_DB_DEVICES            (49U)
 
 #define TYPE_SYNC_DEVICE_STATE          (99U)
 #define TYPE_GET_DEVICE_STATUS          (100U)
@@ -559,3 +562,17 @@ extern int g_dbgLineNumber;
 
 
 #define KEY_SHADOWNAME_AWS              "ShadowName"
+
+
+// Event history type
+typedef enum {
+    EV_DEVICE_DP_CHANGED = 1,
+    EV_DEVICE_STATE_CHANGED = 2,
+    EV_DEVICE_ADDED = 3,
+    EV_DEVICE_DELETED = 4,
+    EV_LOCK_TOUCH = 5,
+    EV_LOCK_DEVICE = 6
+} HistoryEventType;
+
+
+#endif // __DEFINE_H

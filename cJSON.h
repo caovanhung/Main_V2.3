@@ -298,6 +298,7 @@ typedef struct cJSON JSON;
 #define JSON_Parse(str)                     cJSON_Parse(str)
 #define JSON_CreateObject()                 cJSON_CreateObject()
 #define JSON_CreateArray()                  cJSON_CreateArray()
+JSON*   JSON_Clone();
 
 char*   JSON_GetText(JSON* obj, const char* name);
 double  JSON_GetNumber(JSON* obj, const char* name);

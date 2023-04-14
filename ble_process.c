@@ -3,12 +3,17 @@
 #include "logging_stack.h"
 #include "time_t.h"
 #include "uart.h"
-
+#include "mosquitto.h"
 
 #define UART_SENDING_FRAME_BUFFER_SIZE     1000
 
+
+extern struct mosquitto * mosq;
+
 typedef struct {
     int      gwIndex;
+    uint8_t  reqType;
+    char     itemId[10];
     uint16_t addr;
     uint8_t  data[50];
     uint8_t  dataLength;
@@ -65,6 +70,13 @@ bool sendFrameToGwIndex(uint8_t gwIndex, uint16_t addr, uint8_t* data, size_t le
     return true;
 }
 
+void addReqTypeToRespList(int reqType, const char* itemId) {
+    ASSERT(itemId);
+    int addedFrameIdx = g_uartSendingFrameTail == 0? UART_SENDING_FRAME_BUFFER_SIZE - 1 : g_uartSendingFrameTail - 1;
+    g_uartSendingFrames[g_uartSendingFrameTail].reqType = reqType;
+    StringCopy(g_uartSendingFrames[g_uartSendingFrameTail].itemId, itemId);
+}
+
 void ble_sendUartFrames() {
     if (g_uartSendingFrameHead != g_uartSendingFrameTail) {
         uint16_t gwIndex = g_uartSendingFrames[g_uartSendingFrameHead].gwIndex;
@@ -103,6 +115,20 @@ bool ble_checkResponse() {
             } else if (currentTime - g_gatewayTick[i] > 1000) {
                 g_gatewayBusy[i] = 0;
                 logInfo("Sending to 0x%04X is TIMEOUT", g_gatewaySentAddr[i]);
+                // Send TIMEOUT response to CORE service
+                JSON* p = JSON_CreateObject();
+                int sendingFrameIdx = g_uartSendingFrameHead == 0? UART_SENDING_FRAME_BUFFER_SIZE - 1 : g_uartSendingFrameHead - 1;
+                int reqType = g_uartSendingFrames[sendingFrameIdx].reqType;
+                if (reqType == GW_RESPONSE_GROUP) {
+                    char* itemId = g_uartSendingFrames[sendingFrameIdx].itemId;
+                    char str[10];
+                    sprintf(str, "%04X", g_gatewaySentAddr[i]);
+                    JSON_SetText(p, "deviceAddr", str);
+                    JSON_SetText(p, "groupAddr", itemId);
+                    JSON_SetNumber(p, "status", 1);
+                    sendPacketTo(SERVICE_CORE, reqType, p);
+                }
+                JSON_Delete(p);
             }
         }
     }
@@ -913,11 +939,13 @@ char str[10];
 int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame)
 {
     ASSERT(temp); ASSERT(frame);
-    if (g_gatewayRecvAddr[0] == 0) {
-        g_gatewayRecvAddr[0] = frame->sendAddr;
-    }
-    if (g_gatewayRecvAddr[1] == 0) {
-        g_gatewayRecvAddr[1] = frame->sendAddr;
+    if (frame->flag != 0x919d) {
+        if (g_gatewayRecvAddr[0] == 0) {
+            g_gatewayRecvAddr[0] = frame->sendAddr;
+        }
+        if (g_gatewayRecvAddr[1] == 0) {
+            g_gatewayRecvAddr[1] = frame->sendAddr;
+        }
     }
     uint8_t len_uart = frame->frameSize + 2;
     sprintf(temp->address_element, "%04X", frame->sendAddr);
@@ -967,6 +995,11 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     } else if (frame->opcode == 0x8245 && frame->paramSize >= 1) {
         // Add scene LC
         return GW_RESPONSE_ADD_SCENE;
+    } else if (frame->opcode >> 8 == 0x5E && frame->paramSize >= 6) {
+        temp->dpValue =  frame->param[5];
+        temp->causeType = 3;
+        sprintf(temp->causeId, "%02X%02X", (frame->opcode & 0xFF), frame->param[0]);
+        return GW_RESPONSE_DEVICE_CONTROL;
     }
     // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0xE1 &&rcv_uart_buff[9] == 0x11 && rcv_uart_buff[10] == 0x02 && rcv_uart_buff[11] == 0x04 && rcv_uart_buff[12] == 0x00)
     // {
