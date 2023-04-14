@@ -761,7 +761,7 @@ int main( int argc,char ** argv )
                         JSON* devicesNeedRemove = JSON_CreateArray();
                         JSON* devicesNeedAdd = JSON_CreateArray();
                         JSON* localDevices = Db_GetAllDevices();
-                        JSON* cloudDevices = JSON_GetObject(payload, "devices");
+                        JSON* cloudDevices = payload;
                         // Find all devices that have in the local database but not have in the cloud database
                         JSON_ForEach(localDevice, localDevices) {
                             bool found = false;

@@ -106,6 +106,9 @@ static int g_awsSubscriptionCount = 0;
 static int g_awsDevicePageNum = 0, g_awsGroupPageNum = 0, g_awsScenePageNum = 0;
 static int g_awsSyncDatabaseStep = 0; // 1: getting number of pages;  2: syncing database
 
+// Array to save all devices, groups, scenes that need to synchronize from cloud
+static JSON* g_syncingItems;
+
 uint32_t generateRandomNumber();
 int connectToServerWithBackoffRetries( NetworkContext_t * pNetworkContext,MQTTContext_t * pMqttContext,bool * pClientSessionPresent,bool * pBrokerSessionPresent );
 void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdentifier );
@@ -947,7 +950,7 @@ void Aws_ProcessLoop() {
             g_awsSyncDatabaseStep = 1;
             g_awsDevicePageNum = 1;
         } else if (g_awsSyncDatabaseStep == 1 && g_awsGroupPageNum > 0) {
-            // Send request to get page 1 of devices
+            // Send request to get first page of devices
             char* topic = Aws_GetTopic(PAGE_DEVICE, 1, TOPIC_GET_PUB);
             mqttCloudPublish(topic, "");
             free(topic);
@@ -1312,10 +1315,15 @@ int main( int argc,char ** argv ) {
                     case TYPE_GET_DEVICES: {
                         JSON* p = JSON_CreateObject();
                         int pageIndex = JSON_GetNumber(reported, "pageIndex");
-                        JSON* devices = JSON_AddArray(p, "devices");
+                        if (pageIndex == 1) {
+                            JSON_Delete(g_syncingItems);
+                            g_syncingItems = JSON_CreateArray();
+                        }
+
+                        // Add devices from cloud to g_syncingItems array
                         JSON_ForEach(item, reported) {
                             if (cJSON_IsObject(item)) {
-                                JSON* device = JArr_AddObject(devices);
+                                JSON* device = JArr_AddObject(g_syncingItems);
                                 list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
                                 if (tmp->count >= 5) {
                                     JSON_SetText(device, "deviceId", item->string);
@@ -1333,9 +1341,16 @@ int main( int argc,char ** argv ) {
                                 List_Delete(tmp);
                             }
                         }
-                        sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, p);
-                        JSON_Delete(p);
-                        g_awsSyncDatabaseStep = 0;
+
+                        if (pageIndex < g_awsDevicePageNum) {
+                            // Send request to get next page
+                            char* topic = Aws_GetTopic(PAGE_DEVICE, pageIndex + 1, TOPIC_GET_PUB);
+                            mqttCloudPublish(topic, "");
+                            free(topic);
+                        } else {
+                            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, g_syncingItems);
+                            g_awsSyncDatabaseStep = 0;
+                        }
                         break;
                     }
                 }
