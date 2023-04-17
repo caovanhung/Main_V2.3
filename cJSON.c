@@ -3199,7 +3199,7 @@ JSON* JArr_AddText(JSON* arr, const char* value) {
     cJSON_AddItemToArray(arr, string_item);
 }
 
-JSON* JArr_AddObject(JSON* arr) {
+JSON* JArr_CreateObject(JSON* arr) {
     JSON *item = cJSON_CreateObject();
     cJSON_AddItemToArray(arr, item);
     return item;

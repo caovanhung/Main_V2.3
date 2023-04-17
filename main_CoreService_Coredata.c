@@ -379,7 +379,7 @@ void executeScenes() {
                 JSON_SetText(packet, "entityId", runningAction->entityId);
                 JSON_SetText(packet, "pid", runningAction->pid);
                 JSON* dpArray = JSON_AddArray(packet, "dictDPs");
-                JSON* dpItem = JArr_AddObject(dpArray);
+                JSON* dpItem = JArr_CreateObject(dpArray);
                 JSON_SetNumber(dpItem, "id", runningAction->dpId);
                 JSON_SetText(dpItem, "addr", runningAction->dpAddr);
                 JSON_SetNumber(dpItem, "value", runningAction->dpValue);
@@ -1207,14 +1207,14 @@ void addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr
     if (item == NULL) {
         char reqTypeStr[10];
         sprintf(reqTypeStr, "%d.%s", reqType, itemId);
-        item = JArr_AddObject(g_checkRespList);
+        item = JArr_CreateObject(g_checkRespList);
         JSON_SetText(item, "reqType", reqTypeStr);
         JSON_SetNumber(item, "createdTime", timeInMilliseconds());
         JSON* devices = JSON_AddArray(item, "devices");
     }
     JSON* devices = JSON_GetObject(item, "devices");
     if (JArr_FindByText(devices, "addr", deviceAddr) == NULL) {
-        JSON *device = JArr_AddObject(devices);
+        JSON *device = JArr_CreateObject(devices);
         JSON_SetText(device, "addr", deviceAddr);
         JSON_SetNumber(device, "status", -1);
     }
@@ -1297,7 +1297,7 @@ bool Scene_GetFullInfo(JSON* packet) {
                 char* devicesStr = Db_FindDevicesInGroup(entityId);
                 JSON* devices = parseGroupNormalDevices(devicesStr);
                 JSON_ForEach(d, devices) {
-                    JSON* newAction = JArr_AddObject(newActionsArray);
+                    JSON* newAction = JArr_CreateObject(newActionsArray);
                     JSON_SetText(newAction, "entityId", JSON_GetText(d, "deviceId"));
                     JSON_SetText(newAction, "entityAddr", JSON_GetText(d, "deviceAddr"));
                     JSON_SetText(newAction, "pid", JSON_GetText(d, "pid"));
@@ -1370,7 +1370,7 @@ bool Scene_GetFullInfo(JSON* packet) {
     // For deviceGroupDpIssue: Copy new action of devices to current action array
     if (isLocal) {
         JSON_ForEach(o, newActionsArray) {
-            JSON* newAction = JArr_AddObject(actionsArray);
+            JSON* newAction = JArr_CreateObject(actionsArray);
             JSON_SetText(newAction, "pid", JSON_GetText(o, "pid"));
             JSON_SetText(newAction, "actionType", EntityDevice);
             JSON_SetText(newAction, "entityID", JSON_GetText(o, "entityId"));
@@ -1493,7 +1493,7 @@ JSON* Scene_ToJson(Scene* scene) {
     JSON* actionsArray = JSON_AddArray(root, "actions");
     for (int i = 0; i < scene->actionCount; i++) {
         SceneAction* sceneAction = &scene->actions[i];
-        JSON* action = JArr_AddObject(actionsArray);
+        JSON* action = JArr_CreateObject(actionsArray);
         JSON_SetText(action, "entityId", sceneAction->entityId);
         JSON_SetNumber(action, "actionType", sceneAction->actionType);
         JSON_SetText(action, "pid", sceneAction->pid);
@@ -1508,7 +1508,7 @@ JSON* Scene_ToJson(Scene* scene) {
     JSON* conditionsArray = JSON_AddArray(root, "conditions");
     for (int i = 0; i < scene->conditionCount; i++) {
         SceneCondition* sceneCondition = &scene->conditions[i];
-        JSON* condition = JArr_AddObject(conditionsArray);
+        JSON* condition = JArr_CreateObject(conditionsArray);
         JSON_SetText(condition, "entityId", sceneCondition->entityId);
         JSON_SetNumber(condition, "conditionType", sceneCondition->conditionType);
         JSON_SetText(condition, "pid", sceneCondition->pid);

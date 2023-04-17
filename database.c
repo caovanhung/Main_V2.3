@@ -160,7 +160,7 @@ JSON* Db_GetAllDevices() {
     sprintf(sqlCmd, "SELECT deviceId FROM devices_inf");
     Sql_Query(sqlCmd, row) {
         char* deviceId = sqlite3_column_text(row, 0);
-        JSON* item = JArr_AddObject(arr);
+        JSON* item = JArr_CreateObject(arr);
         JSON_SetText(item, "deviceId", deviceId);
     }
     return arr;
@@ -533,7 +533,7 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
     // get row details
     sprintf(sqlCmd, "SELECT * FROM device_histories WHERE time >= %lld AND time <= %lld AND deviceId='%s' %s %s %s ORDER BY time DESC LIMIT %d", startTime, endTime, deviceId, dpIdCondition, causeTypeCondition, eventTypeCondition, limit);
     Sql_Query(sqlCmd, row) {
-        JSON* r = JArr_AddObject(rows);
+        JSON* r = JArr_CreateObject(rows);
         JSON_SetNumber(r, "time",       sqlite3_column_int64(row, 1));
         JSON_SetNumber(r, "causeType",  sqlite3_column_int(row, 2));
         JSON_SetText  (r, "causeId",    sqlite3_column_text(row, 3));

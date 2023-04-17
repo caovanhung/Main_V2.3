@@ -146,9 +146,9 @@ void BLE_ReceivePacket() {
         if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
             return;
         }
-        // if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
-        //     return;
-        // }
+        if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
+            return;
+        }
         if (len_uart >= 10 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x5d && rcv_uart_buff[9] == 0x00) {
             return;
         }
@@ -165,9 +165,9 @@ void BLE_ReceivePacket() {
         if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
             return;
         }
-        // if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
-        //     return;
-        // }
+        if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
+            return;
+        }
         if (len_uart >= 10 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x5d && rcv_uart_buff[9] == 0x00) {
             return;
         }
@@ -214,12 +214,12 @@ void Ble_ProcessPacket()
                 case GW_RESPONSE_DEVICE_STATE: {
                     JSON* packet = JSON_CreateObject();
                     JSON* devicesArray = JSON_AddArray(packet, "devices");
-                    JSON* arrayItem = JArr_AddObject(devicesArray);
+                    JSON* arrayItem = JArr_CreateObject(devicesArray);
                     JSON_SetText(arrayItem, "deviceAddr", tmp->address_element);
                     int onlineState = bleFrames[i].onlineState? TYPE_DEVICE_ONLINE : TYPE_DEVICE_OFFLINE;
                     JSON_SetNumber(arrayItem, "deviceState", onlineState);
                     if (bleFrames[i].sendAddr2 != 0) {
-                        arrayItem = JArr_AddObject(devicesArray);
+                        arrayItem = JArr_CreateObject(devicesArray);
                         char str[5];
                         sprintf(str, "%04X", bleFrames[i].sendAddr2);
                         JSON_SetText(arrayItem, "deviceAddr", str);
@@ -398,7 +398,7 @@ void Ble_ProcessPacket()
 // Add device that need to check response to response list
 void addDeviceToRespList(int reqType, const char* itemId, const char* addr) {
     ASSERT(itemId); ASSERT(addr);
-    JSON* item = JArr_AddObject(g_checkRespList);
+    JSON* item = JArr_CreateObject(g_checkRespList);
     JSON_SetNumber(item, "reqType", reqType);
     JSON_SetNumber(item, "reqTime", timeInMilliseconds());
     JSON_SetText(item, "itemId", itemId);
@@ -738,7 +738,7 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                 dpParam = dpParam << 24;
                 JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
                 if (mergedActionItem == NULL) {
-                    mergedActionItem = JArr_AddObject(mergedActions);
+                    mergedActionItem = JArr_CreateObject(mergedActions);
                     JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
                     JSON_SetNumber(mergedActionItem, "param", dpParam);
                     JSON_SetNumber(mergedActionItem, "dpCount", 1);
@@ -814,7 +814,7 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
                 dpParam = dpParam << 24;
                 JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
                 if (mergedActionItem == NULL) {
-                    mergedActionItem = JArr_AddObject(mergedActions);
+                    mergedActionItem = JArr_CreateObject(mergedActions);
                     JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
                     JSON_SetNumber(mergedActionItem, "param", dpParam);
                     JSON_SetNumber(mergedActionItem, "dpCount", 1);

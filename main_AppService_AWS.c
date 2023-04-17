@@ -109,6 +109,8 @@ static int g_awsSyncDatabaseStep = 0; // 1: getting number of pages;  2: syncing
 // Array to save all devices, groups, scenes that need to synchronize from cloud
 static JSON* g_syncingItems;
 
+static JSON* g_mergePayloads;
+
 uint32_t generateRandomNumber();
 int connectToServerWithBackoffRetries( NetworkContext_t * pNetworkContext,MQTTContext_t * pMqttContext,bool * pClientSessionPresent,bool * pBrokerSessionPresent );
 void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdentifier );
@@ -1011,7 +1013,36 @@ void Mosq_ProcessMessage() {
         int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
         JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
         switch (reqType) {
-            case GW_RESPONSE_DEVICE_CONTROL:
+            case GW_RESPONSE_DEVICE_CONTROL: {
+                if (pageIndex >= 0) {
+                    char* deviceId = JSON_GetText(payload, "deviceId");
+                    char str[50];
+                    sprintf(str, "%d", pageIndex);
+                    JSON* page = JSON_GetObject(g_mergePayloads, str);
+                    if (page == NULL) {
+                        page = JSON_CreateObject();
+                        JSON_SetObject(g_mergePayloads, str, page);
+                    }
+                    JSON* deviceInfo = JSON_GetObject(page, deviceId);
+                    if (deviceInfo == NULL) {
+                        deviceInfo = JSON_CreateObject();
+                        JSON_SetObject(page, deviceId, deviceInfo);
+                    }
+                    if (JSON_HasKey(payload, "state")) {
+                        JSON_SetNumber(deviceInfo, "state", JSON_GetNumber(payload, "state"));
+                    }
+                    JSON* dictDPs = JSON_GetObject(deviceInfo, "dictDPs");
+                    if (dictDPs == NULL) {
+                        dictDPs = JSON_CreateObject();
+                        JSON_SetObject(deviceInfo, "dictDPs", dictDPs);
+                    }
+                    int dpId = JSON_GetNumber(payload, "dpId");
+                    sprintf(str, "%d", dpId);
+                    JSON_SetNumber(dictDPs, str, JSON_GetNumber(payload, "dpValue"));
+                    // logInfo(cJSON_PrintUnformatted(g_mergePayloads));
+                }
+                break;
+            }
             case GW_RESPONSE_DEVICE_KICKOUT:
             case GW_RESPONSE_DEVICE_STATE: {
                 if (pageIndex >= 0) {
@@ -1070,12 +1101,42 @@ void Mosq_ProcessMessage() {
     }
 }
 
+
+void Aws_SendMergePayload() {
+    static long long time = 0;
+    if (timeInMilliseconds() - time > 300) {
+        time = timeInMilliseconds();
+
+        JSON_ForEach(page, g_mergePayloads) {
+            int pageIndex = atoi(page->string);
+            JSON* p = JSON_CreateObject();
+            JSON* state = JSON_CreateObject();
+            JSON* reported = JSON_CreateObject();
+            JSON_SetObject(state, "reported", reported);
+            JSON_SetObject(p, "state", state);
+            JSON_SetNumber(reported, "type", TYPE_UPDATE_DEVICE);
+            JSON_SetNumber(reported, "sender", SENDER_HC_VIA_CLOUD);
+            JSON_ForEach(d, page) {
+                JSON_SetObject(reported, d->string, d);
+            }
+            char* topic = Aws_GetTopic(PAGE_DEVICE, pageIndex, TOPIC_UPD_PUB);
+            sendPacketToCloud(topic, p);
+            char str[10];
+            sprintf(str, "%d", pageIndex);
+            JSON_RemoveKey(g_mergePayloads, str);
+            free(topic);
+            return;
+        }
+    }
+}
+
 int main( int argc,char ** argv ) {
     pthread_t thr[3];
     int xRun = 1;
 
     queue_received_aws = newQueue(QUEUE_SIZE);
     queue_mos_sub = newQueue(QUEUE_SIZE);
+    g_mergePayloads = JSON_CreateObject();
 
     getHcInformation();
     Aws_Init();
@@ -1085,6 +1146,7 @@ int main( int argc,char ** argv ) {
     bool check_flag = false;
     while (xRun!=0) {
         Aws_ProcessLoop();
+        Aws_SendMergePayload();
         Mosq_ProcessLoop();
         Mosq_ProcessMessage();
 
@@ -1324,7 +1386,7 @@ int main( int argc,char ** argv ) {
                         // Add devices from cloud to g_syncingItems array
                         JSON_ForEach(item, reported) {
                             if (cJSON_IsObject(item)) {
-                                JSON* device = JArr_AddObject(g_syncingItems);
+                                JSON* device = JArr_CreateObject(g_syncingItems);
                                 list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
                                 if (tmp->count >= 5) {
                                     JSON_SetText(device, "deviceId", item->string);

@@ -952,7 +952,7 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
 
     if (frame->flag == 0x919d) {
         // Online/Offline
-        return GW_RESPONSE_DEVICE_STATE;
+        return 0;// GW_RESPONSE_DEVICE_STATE;
     } else if (frame->opcode == 0x804a) {
         // Device is kicked out from mesh network
         return GW_RESPONSE_DEVICE_KICKOUT;

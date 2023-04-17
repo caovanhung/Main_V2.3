@@ -112,3 +112,26 @@ Danh sách các page:
     DEVICE (pageIndex0)
     SCENE  (pageIndex2)
     GROUP  (pageIndex3)
+
+
+Tính năng gộp bản tin update thiết bị trước khi đẩy lên aws:
+    Khi thực hiện các chức năng như điều khiển nhóm, chạy kịch bản,... sẽ có rất nhiều thiết
+    bị thực hiện đồng thời và gửi bản tin báo trạng thái thiết bị về HC cùng 1 lúc. Lúc này
+    HC cần thực hiện gộp các bản tin lại để tránh gửi quá nhiều bản tin lên cloud cùng lúc.
+    Tính năng này sẽ thực hiện trên service AWS như sau:
+        - Dùng 1 JSON object g_mergePayloads để lưu trữ toàn các bản tin update device do
+          service CORE gửi lên. object này có cấu trúc như sau:
+            {
+                "1": {
+                    "A4C1383C8031": {"state": 2, "dictDPs" : {"1":1, "2":0, "3":1}},
+                    "A4C1383C8032": {"state": 2, "dictDPs" : {"1":1, "2":0, "3":1}}
+                },
+                "2": {
+                    "A4C1383C8033": {"state": 2, "dictDPs" : {"1":1, "2":0, "3":1}},
+                    "A4C1383C8034": {"state": 2, "dictDPs" : {"1":1, "2":0, "3":1}}
+                },
+            }
+        - Mỗi khi có bản tin do service CORE gửi lên, service AWS sẽ gộp các bản tin này theo
+          từng pageIndex và từng deviceId theo cấu trúc trên.
+        - Dùng 1 task Aws_SendMergePayload chạy mỗi 300ms để đọc và gửi tất cả các bản tin
+          trong object g_mergePayloads lên cloud

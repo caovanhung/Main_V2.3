@@ -315,7 +315,8 @@ char*   JArr_GetText(JSON* arr, int index);
 double  JArr_GetNumber(JSON* arr, int index);
 #define JArr_GetObject(arr, index)          cJSON_GetArrayItem(arr, index)
 JSON*   JArr_AddText(JSON* arr, const char* value);
-JSON*   JArr_AddObject(JSON* arr);
+#define JArr_AddObject(arr, obj)            cJSON_AddItemToArray(arr, obj)
+JSON*   JArr_CreateObject(JSON* arr);
 #define JArr_RemoveIndex(arr, index)        cJSON_DeleteItemFromArray(arr, index)
 JSON*   JArr_FindByText(JSON* array, const char* key, const char* value);
 

@@ -554,7 +554,7 @@ void Aws_SaveDeviceState(const char* deviceId, int state, int pageIndex) {
 void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex) {
     ASSERT(deviceId);
     char payload[200];
-    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":2, \"dictDPs\":{\"%d\":%d}}}}}", TYPE_UPDATE_DEVICE, SENDER_HC_VIA_CLOUD, deviceId, dpId, value);
+    sprintf(payload,"{\"deviceId\":\"%s\", \"state\":2, \"dpId\":%d, \"dpValue\":%d}", deviceId, dpId, value);
     sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_CONTROL, pageIndex, payload);
 }
 
