@@ -243,6 +243,11 @@ void checkResponseLoop() {
                             List_PushString(failedDevices, str);
                         }
                     }
+                } else if (reqType == TYPE_ADD_SCENE || reqType == TYPE_UPDATE_SCENE) {
+                    int status = JSON_GetNumber(device, "status");
+                    if (status != 0) {
+                        Db_RemoveSceneAction(itemId, JSON_GetText(device, "addr"));
+                    }
                 }
             }
             if (reqType == TYPE_ADD_GROUP_NORMAL || reqType == TYPE_UPDATE_GROUP_NORMAL ||
@@ -962,12 +967,35 @@ int main( int argc,char ** argv )
                                     JSON_SetObject(packet, "conditionNeedAdd", newCondition);
                                 }
                                 sendPacketTo(SERVICE_BLE, reqType, packet);
+
+                                // Add this request to response list for checking response
+                                JSON_ForEach(action, newActionsArray) {
+                                    if (JSON_HasKey(action, "pid")) {
+                                        char* sceneId = JSON_GetText(payload, "id");
+                                        char* deviceAddr = JSON_GetText(action, "entityAddr");
+                                        addDeviceToRespList(reqType, sceneId, deviceAddr);
+                                        bool found = false;
+                                        JSON_ForEach(newAction, actionsNeedAdd) {
+                                            if (compareDevice(action, newAction)) {
+                                                found = true;
+                                                break;
+                                            }
+                                        }
+                                        if (!found) {
+                                            // Set SUCCESS status of devices without any update to skip checking response for them
+                                            updateDeviceRespStatus(reqType, sceneId, deviceAddr, 0);
+                                        }
+                                    }
+                                }
+
                                 JSON_Delete(packet);
                             }
                             // Save new scene to database
                             Db_DeleteScene(sceneId);
                             Db_AddScene(newScene);
-                            sendNotiToUser("Cập nhật kịch bản thành công");
+                            if (!isLocal) {
+                                sendNotiToUser("Cập nhật kịch bản HC thành công");
+                            }
                         } else {
                             logInfo("Scene %s is not found", sceneId);
                         }

@@ -352,30 +352,32 @@ int Db_LoadSceneToRam() {
         int actionCount = 0;
         JSON_ForEach(act, actionsArray) {
             SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
-            action->actionType = JSON_GetNumber(act, "actionType");
-            action->delaySeconds = JSON_HasKey(act, "delaySeconds")? JSON_GetNumber(act, "delaySeconds") : 0;
-            StringCopy(action->entityId, JSON_GetText(act, "entityId"));
-            action->dpId = JSON_HasKey(act, "dpId")? JSON_GetNumber(act, "dpId") : 0;
-            action->dpValue = JSON_HasKey(act, "dpValue")? JSON_GetNumber(act, "dpValue") : 0;
-            if (action->actionType == EntityDevice) {
-                StringCopy(action->pid, JSON_GetText(act, "pid"));
-                StringCopy(action->dpAddr, JSON_GetText(act, "dpAddr"));
-            }
-            // Load 'code' field for controlling tuya
-            if (JSON_HasKey(act, "code")) {
-                JSON* executorProperty = JSON_GetObject(act, "executorProperty");
-                JSON_ForEach(o, executorProperty) {
-                    action->dpValue = o->valueint;
+            if (JSON_HasKey(act, "actionType")) {
+                action->actionType = JSON_GetNumber(act, "actionType");
+                action->delaySeconds = JSON_HasKey(act, "delaySeconds")? JSON_GetNumber(act, "delaySeconds") : 0;
+                StringCopy(action->entityId, JSON_GetText(act, "entityId"));
+                action->dpId = JSON_HasKey(act, "dpId")? JSON_GetNumber(act, "dpId") : 0;
+                action->dpValue = JSON_HasKey(act, "dpValue")? JSON_GetNumber(act, "dpValue") : 0;
+                if (action->actionType == EntityDevice) {
+                    StringCopy(action->pid, JSON_GetText(act, "pid"));
+                    StringCopy(action->dpAddr, JSON_GetText(act, "dpAddr"));
                 }
-                StringCopy(action->dpAddr, JSON_GetText(act, "code"));
+                // Load 'code' field for controlling tuya
+                if (JSON_HasKey(act, "code")) {
+                    JSON* executorProperty = JSON_GetObject(act, "executorProperty");
+                    JSON_ForEach(o, executorProperty) {
+                        action->dpValue = o->valueint;
+                    }
+                    StringCopy(action->dpAddr, JSON_GetText(act, "code"));
+                }
+                int isWifi = JSON_HasKey(act, "isWifi")? JSON_GetNumber(act, "isWifi") : 0;
+                if (isWifi) {
+                    StringCopy(action->serviceName, SERVICE_TUYA);  // Service for controlling Tuya device
+                } else {
+                    StringCopy(action->serviceName, SERVICE_BLE);   // Service for controlling BLE device
+                }
+                actionCount++;
             }
-            int isWifi = JSON_HasKey(act, "isWifi")? JSON_GetNumber(act, "isWifi") : 0;
-            if (isWifi) {
-                StringCopy(action->serviceName, SERVICE_TUYA);  // Service for controlling Tuya device
-            } else {
-                StringCopy(action->serviceName, SERVICE_BLE);   // Service for controlling BLE device
-            }
-            actionCount++;
         }
         g_sceneList[g_sceneCount].actionCount = actionCount;
 
@@ -495,6 +497,39 @@ int Db_EnableScene(const char* sceneId, int enableOrDisable) {
     Sql_Exec(sqlCmd);
     Db_LoadSceneToRam();
     return 1;
+}
+
+int Db_RemoveSceneAction(const char* sceneId, const char* deviceAddr) {
+    ASSERT(sceneId); ASSERT(deviceAddr);
+    // Get actions of scene
+    char* actionStr;
+    char sqlCmd[300];
+    sprintf(sqlCmd, "SELECT actions FROM scene_inf WHERE sceneId='%s' AND isLocal='1';", sceneId);
+    Sql_Query(sqlCmd, row) {
+        char* str = sqlite3_column_text(row, 0);
+        if (str) {
+            actionStr = malloc(strlen(str));
+            StringCopy(actionStr, str);
+        }
+    }
+    if (actionStr) {
+        JSON* actions = JSON_Parse(actionStr);
+        int i = 0;
+        JSON_ForEach(action, actions) {
+            char* addr = JSON_GetText(action, "dpAddr");
+            if (StringCompare(addr, deviceAddr)) {
+                JArr_RemoveIndex(actions, i);
+                break;
+            }
+            i++;
+        }
+        // Save actions
+        sprintf(sqlCmd, "UPDATE scene_inf SET actions='%s' WHERE sceneId='%s'", sceneId);
+        Sql_Exec(sqlCmd);
+        Db_LoadSceneToRam();
+        return 1;
+    }
+    return 0;
 }
 
 int Db_AddDeviceHistory(JSON* packet) {

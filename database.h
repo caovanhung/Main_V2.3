@@ -135,6 +135,7 @@ int Db_AddScene(JSON* sceneInfo);
 JSON* Db_FindScene(const char* sceneId);
 int Db_DeleteScene(const char* sceneId);
 int Db_EnableScene(const char* sceneId, int enableOrDisable);
+int Db_RemoveSceneAction(const char* sceneId, const char* deviceAddr);
 
 int Db_AddDeviceHistory(JSON* packet);
 JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char* deviceId, char* dpIds, int causeType, int eventType, int limit);

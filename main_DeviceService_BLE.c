@@ -727,33 +727,35 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
     JSON* mergedActions = JSON_CreateArray();
     for (i = 0; i < actionCount; i++) {
         JSON* action = JArr_GetObject(actions, i);
-        char* pid = JSON_GetText(action, "pid");
-        char* deviceAddr = JSON_GetText(action, "entityAddr");
-        int dpId = JSON_GetNumber(action, "dpId");
-        int dpValue = JSON_GetNumber(action, "dpValue");
+        if (JSON_HasKey(action, "pid")) {
+            char* pid = JSON_GetText(action, "pid");
+            char* deviceAddr = JSON_GetText(action, "entityAddr");
+            int dpId = JSON_GetNumber(action, "dpId");
+            int dpValue = JSON_GetNumber(action, "dpValue");
 
-        if (pid != NULL) {
-            if (isContainString(HG_BLE_SWITCH, pid)) {
-                int dpParam = (dpId - 1)*0x10 + dpValue;
-                dpParam = dpParam << 24;
-                JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
-                if (mergedActionItem == NULL) {
-                    mergedActionItem = JArr_CreateObject(mergedActions);
-                    JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
-                    JSON_SetNumber(mergedActionItem, "param", dpParam);
-                    JSON_SetNumber(mergedActionItem, "dpCount", 1);
-                } else {
-                    uint32_t newParam = (uint32_t)JSON_GetNumber(mergedActionItem, "param");
-                    newParam = dpParam | (newParam >> 8);
-                    JSON_SetNumber(mergedActionItem, "param", newParam);
-                    JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
+            if (pid != NULL) {
+                if (isContainString(HG_BLE_SWITCH, pid)) {
+                    int dpParam = (dpId - 1)*0x10 + dpValue;
+                    dpParam = dpParam << 24;
+                    JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
+                    if (mergedActionItem == NULL) {
+                        mergedActionItem = JArr_CreateObject(mergedActions);
+                        JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
+                        JSON_SetNumber(mergedActionItem, "param", dpParam);
+                        JSON_SetNumber(mergedActionItem, "dpCount", 1);
+                    } else {
+                        uint32_t newParam = (uint32_t)JSON_GetNumber(mergedActionItem, "param");
+                        newParam = dpParam | (newParam >> 8);
+                        JSON_SetNumber(mergedActionItem, "param", newParam);
+                        JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
+                    }
+                } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
+                    ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x00");
+                } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
+                    ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x01");
+                } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
+                    ble_setSceneLocalToDeviceLightCCT_HOMEGY(deviceAddr, sceneId);
                 }
-            } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
-                ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x00");
-            } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
-                ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x01");
-            } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
-                ble_setSceneLocalToDeviceLightCCT_HOMEGY(deviceAddr, sceneId);
             }
         }
     }
@@ -804,32 +806,34 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
     JSON* mergedActions = JSON_CreateArray();
     for (i = 0; i < actionCount; i++) {
         JSON* action = JArr_GetObject(actions, i);
-        char* pid = JSON_GetText(action, "pid");
-        char* deviceAddr = JSON_GetText(action, "entityAddr");
-        int dpId = JSON_GetNumber(action, "dpId");
+        if (JSON_HasKey(action, "pid")) {
+            char* pid = JSON_GetText(action, "pid");
+            char* deviceAddr = JSON_GetText(action, "entityAddr");
+            int dpId = JSON_GetNumber(action, "dpId");
 
-        if (pid != NULL) {
-            if (isContainString(HG_BLE_SWITCH, pid)) {
-                int dpParam = (dpId - 1)*0x10 + 2;
-                dpParam = dpParam << 24;
-                JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
-                if (mergedActionItem == NULL) {
-                    mergedActionItem = JArr_CreateObject(mergedActions);
-                    JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
-                    JSON_SetNumber(mergedActionItem, "param", dpParam);
-                    JSON_SetNumber(mergedActionItem, "dpCount", 1);
-                } else {
-                    uint32_t newParam = (uint32_t)JSON_GetNumber(mergedActionItem, "param");
-                    newParam = dpParam | (newParam >> 8);
-                    JSON_SetNumber(mergedActionItem, "param", newParam);
-                    JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
+            if (pid != NULL) {
+                if (isContainString(HG_BLE_SWITCH, pid)) {
+                    int dpParam = (dpId - 1)*0x10 + 2;
+                    dpParam = dpParam << 24;
+                    JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
+                    if (mergedActionItem == NULL) {
+                        mergedActionItem = JArr_CreateObject(mergedActions);
+                        JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
+                        JSON_SetNumber(mergedActionItem, "param", dpParam);
+                        JSON_SetNumber(mergedActionItem, "dpCount", 1);
+                    } else {
+                        uint32_t newParam = (uint32_t)JSON_GetNumber(mergedActionItem, "param");
+                        newParam = dpParam | (newParam >> 8);
+                        JSON_SetNumber(mergedActionItem, "param", newParam);
+                        JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
+                    }
+                } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
+                    ble_delSceneLocalToDevice(deviceAddr, sceneId);
+                } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
+                    ble_delSceneLocalToDevice(deviceAddr, sceneId);
+                } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
+                    ble_delSceneLocalToDevice(deviceAddr, sceneId);
                 }
-            } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
-                ble_delSceneLocalToDevice(deviceAddr, sceneId);
-            } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
-                ble_delSceneLocalToDevice(deviceAddr, sceneId);
-            } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
-                ble_delSceneLocalToDevice(deviceAddr, sceneId);
             }
         }
     }
