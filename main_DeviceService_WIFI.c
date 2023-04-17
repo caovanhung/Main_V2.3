@@ -223,6 +223,7 @@ int main( int argc,char ** argv )
                 case TYPE_CTR_SCENE:
                 {
                     LogInfo((get_localtime_now()),("TYPE_CTR_SCENE_HC"));
+                    int state = JSON_GetNumber(payload, "state");
                     if(!strlen(access_token))
                     {
                         get_access_token(access_token);
@@ -230,17 +231,12 @@ int main( int argc,char ** argv )
                     }
                     memset(body,'\0',1000);
                     memset(message,'\0',1000);
-                    if(isMatchString(deviceID,KEY_RULE_ENABLE))
-                    {
-                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/enable", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
-                    }
-                    else if(isMatchString(deviceID,KEY_RULE_DISABLE))
-                    {
-                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/disable", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
-                    }
-                    else
-                    {
-                        sprintf(message, "/v1.0/homes/%s/scenes/%s/trigger", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
+                    if (state == 1) {
+                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/enable", g_homeId, deviceID);
+                    } else if(state == 0) {
+                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/disable", g_homeId, deviceID);
+                    } else {
+                        sprintf(message, "/v1.0/homes/%s/scenes/%s/trigger", g_homeId, deviceID);
                     }
                     LogInfo((get_localtime_now()),("message = %s", message));
                     send_commands(access_token,CTR_SCENE,message, "\0");

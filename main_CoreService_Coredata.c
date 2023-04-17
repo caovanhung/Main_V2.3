@@ -392,12 +392,47 @@ void executeScenes() {
                     scene->runningActionIndex = -1;     // No other actions need to execute, move scene to idle state
                 }
             } else if (runningAction->actionType == EntityScene) {
-                // Action type is "run another scene"
-                for (int s = 0; s < g_sceneCount; s++) {
-                    if (strcmp(g_sceneList[s].id, runningAction->entityId) == 0) {
-                        markSceneToRun(&g_sceneList[s]);
-                        break;
+                // Action type is "run or enable/disable another scene"
+                if (StringCompare(runningAction->serviceName, SERVICE_BLE)) {
+                    // HC or BLE scene, check if this scene is HC or BLE
+                    for (int s = 0; s < g_sceneCount; s++) {
+                        if (StringCompare(g_sceneList[s].id, runningAction->entityId)) {
+                            // HC scene
+                            if (!g_sceneList[s].isLocal) {
+                                if (runningAction->dpValue == 0) {
+                                    // Disable scene
+                                    Db_EnableScene(runningAction->entityId, 0);
+                                } else if (runningAction->dpValue == 1) {
+                                    // Enable scene
+                                    Db_EnableScene(runningAction->entityId, 1);
+                                } else {
+                                    markSceneToRun(&g_sceneList[s]);
+                                }
+                            } else {
+                                // BLE scene: Send request to BLE service
+                                JSON* packet = JSON_CreateObject();
+                                JSON_SetText(packet, "entityId", runningAction->entityId);
+                                JSON_SetNumber(packet, "state", runningAction->dpValue);
+                                if (runningAction->dpValue == 2 && g_sceneList[s].conditionCount > 0) {
+                                    // this action is run a BLE scene, we need to send the device of condition of this scene
+                                    // to BLE service
+                                    JSON_SetText(packet, "pid", g_sceneList[s].conditions[0].pid);
+                                    JSON_SetText(packet, "dpAddr", g_sceneList[s].conditions[0].dpAddr);
+                                    JSON_SetNumber(packet, "dpValue", g_sceneList[s].conditions[0].dpValue);
+                                }
+                                sendPacketTo(runningAction->serviceName, TYPE_CTR_SCENE, packet);
+                                JSON_Delete(packet);
+                            }
+                            break;
+                        }
                     }
+                } else {
+                    // Wifi scene: send request to WIFI service
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "entityId", runningAction->entityId);
+                    JSON_SetNumber(packet, "state", runningAction->dpValue);
+                    sendPacketTo(runningAction->serviceName, TYPE_CTR_SCENE, packet);
+                    JSON_Delete(packet);
                 }
                 // Move to next action
                 scene->delayStart = timeInMilliseconds();
@@ -708,7 +743,10 @@ int main( int argc,char ** argv )
                             }
                         }
                         if (isLocal) {
-                            sendPacketTo(SERVICE_BLE, TYPE_CTR_SCENE, payload);
+                            if (sceneType == SceneTypeManual) {
+                                JSON_SetNumber(payload, "state", 2);
+                            }
+                            sendPacketTo(SERVICE_BLE, reqType, payload);
                         }
                         break;
                     }
@@ -1221,6 +1259,7 @@ int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr)
 
 bool Scene_GetFullInfo(JSON* packet) {
     JSON* actionsArray = JSON_GetObject(packet, "actions");
+    int isLocal = JSON_GetNumber(packet, "isLocal");
     JSON* newActionsArray = JSON_CreateArray();
     int i = 0;
     JSON_ForEach(action, actionsArray) {
@@ -1228,28 +1267,42 @@ bool Scene_GetFullInfo(JSON* packet) {
         char* actionExecutor = JSON_GetText(action, "actionExecutor");
         char* entityId = JSON_GetText(action, "entityId");
         int delaySeconds = 0;
-        if (strcmp(entityId, "delay") == 0) {
+        if (StringCompare(entityId, "delay")) {
             int minutes = atoi(JSON_GetText(executorProperty, "minutes"));
             delaySeconds = atoi(JSON_GetText(executorProperty, "seconds"));
             delaySeconds = minutes * 60 + delaySeconds;
             JSON_SetNumber(action, "actionType", EntityDelay);
-        } else if (strcmp(actionExecutor, "ruleTrigger") == 0) {
+        } else if (StringCompare(actionExecutor, "ruleTrigger")) {
             JSON_SetNumber(action, "actionType", EntityScene);
-        } else if (strcmp(actionExecutor, "deviceGroupDpIssue") == 0) {
+            JSON_SetNumber(action, "dpValue", 2);
+        } else if (StringCompare(actionExecutor, "ruleEnable")) {
+            JSON_SetNumber(action, "actionType", EntityScene);
+            JSON_SetNumber(action, "dpValue", 1);
+        } else if (StringCompare(actionExecutor, "ruleDisable")) {
+            JSON_SetNumber(action, "actionType", EntityScene);
+            JSON_SetNumber(action, "dpValue", 0);
+        } else if (StringCompare(actionExecutor, "deviceGroupDpIssue")) {
             int dpId = 0, dpValue = 0;
             JSON_ForEach(o, executorProperty) {
                 dpId = atoi(o->string);
                 dpValue = o->valueint;
             }
             if (dpId == 20) {
+                JSON_SetText(action, "entityAddr", JSON_GetText(action, "entityID"));
+                JSON_SetText(action, "dpAddr", JSON_GetText(action, "entityID"));
+                JSON_SetNumber(action, "actionType", EntityDevice);
+                JSON_SetNumber(action, "dpId", 20);
+                JSON_SetNumber(action, "dpValue", dpValue);
                 // Get all devices in this group
                 char* devicesStr = Db_FindDevicesInGroup(entityId);
                 JSON* devices = parseGroupNormalDevices(devicesStr);
                 JSON_ForEach(d, devices) {
                     JSON* newAction = JArr_AddObject(newActionsArray);
+                    JSON_SetText(newAction, "entityId", JSON_GetText(d, "deviceId"));
                     JSON_SetText(newAction, "entityAddr", JSON_GetText(d, "deviceAddr"));
                     JSON_SetText(newAction, "pid", JSON_GetText(d, "pid"));
                     JSON_SetNumber(newAction, "dpId", dpId);
+                    JSON_SetNumber(newAction, "dpValue", dpValue);
                 }
                 JSON_Delete(devices);
             }
@@ -1315,12 +1368,17 @@ bool Scene_GetFullInfo(JSON* packet) {
     }
 
     // For deviceGroupDpIssue: Copy new action of devices to current action array
-    JSON_ForEach(o, newActionsArray) {
-        JSON* newAction = JArr_AddObject(actionsArray);
-        JSON_SetText(newAction, "pid", JSON_GetText(o, "pid"));
-        JSON_SetText(newAction, "entityAddr", JSON_GetText(o, "entityAddr"));
-        JSON_SetNumber(newAction, "dpId", JSON_GetNumber(o, "dpId"));
-        JSON_SetNumber(newAction, "dpValue", JSON_GetNumber(o, "dpValue"));
+    if (isLocal) {
+        JSON_ForEach(o, newActionsArray) {
+            JSON* newAction = JArr_AddObject(actionsArray);
+            JSON_SetText(newAction, "pid", JSON_GetText(o, "pid"));
+            JSON_SetText(newAction, "actionType", EntityDevice);
+            JSON_SetText(newAction, "entityID", JSON_GetText(o, "entityId"));
+            JSON_SetText(newAction, "entityAddr", JSON_GetText(o, "entityAddr"));
+            JSON_SetText(newAction, "dpAddr", JSON_GetText(o, "entityAddr"));
+            JSON_SetNumber(newAction, "dpId", JSON_GetNumber(o, "dpId"));
+            JSON_SetNumber(newAction, "dpValue", JSON_GetNumber(o, "dpValue"));
+        }
     }
 
     return true;
@@ -1611,6 +1669,7 @@ JSON* parseGroupNormalDevices(const char* devices) {
         DeviceInfo deviceInfo;
         int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
         if (foundDevices) {
+            JSON_SetText(arrayItem, "deviceId", deviceInfo.id);
             JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
             JSON_SetText(arrayItem, "pid", deviceInfo.pid);
         }

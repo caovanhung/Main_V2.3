@@ -24,5 +24,5 @@
 #define MAX_FRAME_SIZE              ( 50U )     // Maximum number of bytes in a single frame
 #define MAX_PACKAGE_SIZE            ( 1000U )   // Maximum number of bytes in an UART package (contains multiple single frame)
 #define MAX_FRAME_COUNT             ( 20U )     // Maximum number of single frame in a received UART package
-#define MAX_SIZE_ELEMENT_QUEUE      ( 10000U )
+#define MAX_SIZE_ELEMENT_QUEUE      ( 1000000U )
 #define MAX_SIZE_NUMBER_QUEUE       ( 1000U )

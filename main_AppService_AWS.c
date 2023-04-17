@@ -664,17 +664,18 @@ int subscribeToTopic( MQTTContext_t * pMqttContext ) {
     MQTTStatus_t mqttStatus;
 
     assert( pMqttContext != NULL );
-    globalSubscribePacketIdentifier = MQTT_GetPacketId( pMqttContext );
     /* Send SUBSCRIBE packet. */
-    mqttStatus = MQTT_Subscribe( pMqttContext,
-                                 g_awsSubscriptionList,
-                                 g_awsSubscriptionCount,
-                                 globalSubscribePacketIdentifier );
+    for (int i = 0; i < g_awsSubscriptionCount; i++) {
+        globalSubscribePacketIdentifier = MQTT_GetPacketId( pMqttContext );
+        mqttStatus = MQTT_Subscribe(pMqttContext,
+                                    &g_awsSubscriptionList[i],
+                                    1,
+                                    globalSubscribePacketIdentifier );
 
-    if (mqttStatus != MQTTSuccess ) {
-        LogError( (get_localtime_now()),( "Failed to send SUBSCRIBE packet to broker with error = %s.",
-                    MQTT_Status_strerror( mqttStatus ) ) );
-        returnStatus = EXIT_FAILURE;
+        if (mqttStatus != MQTTSuccess ) {
+            logError("Failed to send SUBSCRIBE packet to broker with error = %s", MQTT_Status_strerror(mqttStatus));
+            returnStatus = EXIT_FAILURE;
+        }
     }
 
     return returnStatus;

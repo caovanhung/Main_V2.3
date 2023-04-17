@@ -30,7 +30,7 @@
 #endif
 
 #ifndef NETWORK_BUFFER_SIZE
-    #define NETWORK_BUFFER_SIZE    ( 100000U )
+    #define NETWORK_BUFFER_SIZE    ( 1000000U )
 #endif
 
 #ifndef OS_NAME

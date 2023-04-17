@@ -38,7 +38,7 @@ int findAvailGatewayFd(int gwIndex) {
         }
     }
 
-    for (int i = 0; i < GATEWAY_NUM; i++) {
+    for (int i = 0; i < 1; i++) {
         if (g_gatewayBusy[i] == 0) {
             return i;
         }

@@ -43,6 +43,7 @@ typedef enum {
 typedef enum {
     EntityDevice,
     EntityScene,
+    EntityGroup,
     EntityDelay,
     EntitySchedule
 } EntityType;
@@ -67,7 +68,7 @@ typedef struct {
     char            dpAddr[100];    // Address của dp nếu entityType = Thiết bị
     double          dpValue;        // dpValue của thiết bị nếu entityType = Thiết bị
     int             delaySeconds;   // Giá trị thời gian trễ tính bằng giây nếu entityType = Độ trễ
-    char            serviceName[10];// Service điều khiển cho action BLE, TUYA, XIAOMI, HOMEKIT, chỉ áp dụng khi actionType = EntityDevice
+    char            serviceName[10];// Service điều khiển cho action BLE, TUYA, XIAOMI, HOMEKIT, chỉ áp dụng khi actionType = EntityDevice, EntityScene
 } SceneAction;
 
 typedef struct {

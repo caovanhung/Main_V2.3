@@ -550,13 +550,16 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_CTR_SCENE: {
                     char* sceneId = JSON_GetText(payload, "sceneId");
-                    int sceneType = JSON_GetNumber(payload, "sceneType");
                     int state = JSON_GetNumber(payload, "state");
-                    if (sceneType == SceneTypeManual) {
+                    if (state >= 2) {
                         logInfo("Executing LC scene %s", sceneId);
                         ble_callSceneLocalToHC("FFFF", sceneId);
                     } else {
                         // Enable/Disable scene
+                        char* pid = JSON_GetText(payload, "pid");
+                        char* dpAddr = JSON_GetText(payload, "dpAddr");
+                        double dpValue = JSON_GetNumber(payload, "dpValue");
+                        ble_callSceneLocalToDevice(dpAddr, sceneId, "00", dpValue);
                     }
                     break;
                 }
@@ -848,11 +851,7 @@ bool addSceneCondition(const char* sceneId, JSON* condition) {
         char *dpAddr = JSON_GetText(condition, "dpAddr");
         int dpValue   = JSON_GetNumber(condition, "dpValue");
         if (isMatchString(pid, HG_BLE_SENSOR_MOTION)) {
-            if (dpValue == 0) {
-                ble_callSceneLocalToDevice(dpAddr, sceneId, "00", 0);
-            } else {
-                ble_callSceneLocalToDevice(dpAddr, sceneId, "01", 0);
-            }
+            ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
         } else {
             ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
         }

@@ -1317,7 +1317,7 @@ static MQTTStatus_t receiveSingleIteration( MQTTContext_t * pContext,
                                                   pContext->transportInterface.pNetworkContext,
                                                   &incomingPacket );
 
-    if (status == MQTTBadResponse) {
+    if (status == MQTTRecvFailed) {
         int a = 1;
     }
     if( status == MQTTNoDataAvailable )
@@ -1327,6 +1327,9 @@ static MQTTStatus_t receiveSingleIteration( MQTTContext_t * pContext,
             /* Assign status so an error can be bubbled up to application,
              * but reset it on success. */
             status = handleKeepAlive( pContext );
+            if (status == MQTTRecvFailed) {
+                int a = 1;
+            }
         }
 
         if( status == MQTTSuccess )
@@ -1346,7 +1349,7 @@ static MQTTStatus_t receiveSingleIteration( MQTTContext_t * pContext,
         /* Receive packet. Remaining time is recalculated before calling this
          * function. */
         status = receivePacket( pContext, incomingPacket, remainingTimeMs );
-        if (status == MQTTBadResponse) {
+        if (status == MQTTRecvFailed) {
             int a = 1;
         }
     }
@@ -1361,14 +1364,14 @@ static MQTTStatus_t receiveSingleIteration( MQTTContext_t * pContext,
         if( ( incomingPacket.type & 0xF0U ) == MQTT_PACKET_TYPE_PUBLISH )
         {
             status = handleIncomingPublish( pContext, &incomingPacket );
-            if (status == MQTTBadResponse) {
+            if (status == MQTTRecvFailed) {
                 int a = 1;
             }
         }
         else
         {
             status = handleIncomingAck( pContext, &incomingPacket, manageKeepAlive );
-            if (status == MQTTBadResponse) {
+            if (status == MQTTRecvFailed) {
                 int a = 1;
             }
         }

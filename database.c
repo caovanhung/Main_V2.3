@@ -338,7 +338,6 @@ int Db_SaveDpValue(const char* dpAddr, int dpId, double value) {
 int Db_LoadSceneToRam() {
     g_sceneCount = 0;
     char* sqlCmd = "SELECT * FROM scene_inf";
-    JSON* sceneInfo = JSON_CreateObject();
     Sql_Query(sqlCmd, row) {
         g_sceneList = realloc(g_sceneList, (g_sceneCount + 1) * sizeof(Scene));
         g_sceneList[g_sceneCount].isLocal = sqlite3_column_int(row, 1);
@@ -354,13 +353,13 @@ int Db_LoadSceneToRam() {
         JSON_ForEach(act, actionsArray) {
             SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
             action->actionType = JSON_GetNumber(act, "actionType");
-            action->delaySeconds = JSON_GetNumber(act, "delaySeconds");
+            action->delaySeconds = JSON_HasKey(act, "delaySeconds")? JSON_GetNumber(act, "delaySeconds") : 0;
             StringCopy(action->entityId, JSON_GetText(act, "entityId"));
+            action->dpId = JSON_HasKey(act, "dpId")? JSON_GetNumber(act, "dpId") : 0;
+            action->dpValue = JSON_HasKey(act, "dpValue")? JSON_GetNumber(act, "dpValue") : 0;
             if (action->actionType == EntityDevice) {
                 StringCopy(action->pid, JSON_GetText(act, "pid"));
                 StringCopy(action->dpAddr, JSON_GetText(act, "dpAddr"));
-                action->dpId = JSON_GetNumber(act, "dpId");
-                action->dpValue = JSON_GetNumber(act, "dpValue");
             }
             // Load 'code' field for controlling tuya
             if (JSON_HasKey(act, "code")) {
@@ -369,6 +368,9 @@ int Db_LoadSceneToRam() {
                     action->dpValue = o->valueint;
                 }
                 StringCopy(action->dpAddr, JSON_GetText(act, "code"));
+            }
+            int isWifi = JSON_HasKey(act, "isWifi")? JSON_GetNumber(act, "isWifi") : 0;
+            if (isWifi) {
                 StringCopy(action->serviceName, SERVICE_TUYA);  // Service for controlling Tuya device
             } else {
                 StringCopy(action->serviceName, SERVICE_BLE);   // Service for controlling BLE device
@@ -517,8 +519,8 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
     JSON_SetNumber(histories, "type", TYPE_GET_DEVICE_HISTORY);
     JSON_SetNumber(histories, "sender", SENDER_HC_VIA_CLOUD);
     char sqlCmd[500];
-    char dpIdCondition[50], causeTypeCondition[50], eventTypeCondition[50];
-    if (dpIds) {
+    char dpIdCondition[50] = "", causeTypeCondition[50] = "", eventTypeCondition[50] = "";
+    if (dpIds && strlen(dpIds) > 0) {
         sprintf(dpIdCondition, "AND dpId IN (%s)", dpIds);
     }
     if (causeType >= 0) {
