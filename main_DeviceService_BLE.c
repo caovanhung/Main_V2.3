@@ -197,9 +197,6 @@ void Ble_ProcessPacket()
         String2HexArr(recvPackage, msgHex);
         printf("\n\r");
         logInfo("Received package from UART: %s", recvPackage);
-        for (int i = 0; i < MAX_FRAME_COUNT; i++) {
-            bleFrames[i].opcode = 0;
-        }
         int frameCount = GW_SplitFrame(bleFrames, msgHex, strlen(recvPackage) / 2);
         logInfo("Parsing package. Found %d frames:", frameCount);
         for (int i = 0; i < frameCount; i++) {
@@ -210,6 +207,7 @@ void Ble_ProcessPacket()
             InfoDataUpdateDevice *InfoDataUpdateDevice_t = malloc(sizeof(InfoDataUpdateDevice));
             int frameType = check_form_recived_from_RX(tmp, &bleFrames[i]);
             logInfo("Frame #%d: type: %d, %s", i, frameType, str);
+            BLE_AddDeviceResp(frameType, bleFrames[i].sendAddr);
             switch(frameType) {
                 case GW_RESPONSE_DEVICE_STATE: {
                     JSON* packet = JSON_CreateObject();
@@ -480,9 +478,7 @@ int main( int argc,char ** argv )
     // sleep(3);
     // set_inf_DV_for_GW(1, "6C03", "BLEHGAA0103", "9DC4CBCC70599BD602F8CFF9106E3C8C");
     while (xRun!=0) {
-        ble_sendUartFrames();
-        // checkResponseLoop();
-        ble_checkResponse();
+        BLE_SendUartFrameLoop();
         BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue
         Ble_ProcessPacket();  // Get BLE frames from bleFrameQueue => publish message to CORE service
         Mosq_ProcessLoop();   // Receive mqtt message from CORE service => Push to mqttMsgQueue
@@ -576,7 +572,7 @@ int main( int argc,char ** argv )
                             ble_deleteDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, deviceAddr);
                         }
                         // Add this device to response list to check TIMEOUT later
-                        addReqTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
+                        addRespTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
                     }
                     break;
                 }
@@ -594,7 +590,7 @@ int main( int argc,char ** argv )
                         char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
                         ble_addDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, deviceAddr);
                         // Add this device to response list to check TIMEOUT later
-                        addReqTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
+                        addRespTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
                     }
                     break;
                 }
@@ -612,7 +608,7 @@ int main( int argc,char ** argv )
                             ble_deleteDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, dpAddr);
                         }
                         // Add this device to response list to check TIMEOUT later
-                        addReqTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
+                        addRespTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
                     }
                     break;
                 }
@@ -632,7 +628,7 @@ int main( int argc,char ** argv )
                         char* dpAddr = JSON_GetText(dpNeedAdd, "dpAddr");
                         ble_addDeviceToGroupLink(gwIndex, groupAddr, deviceAddr, dpAddr);
                         // Add this device to response list to check TIMEOUT later
-                        addReqTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
+                        addRespTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
                     }
                     break;
                 }
@@ -751,10 +747,16 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                     }
                 } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
                     ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x00");
+                    // Add this device to response list to check TIMEOUT later
+                    addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
                 } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
                     ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x01");
+                    // Add this device to response list to check TIMEOUT later
+                    addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
                 } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
                     ble_setSceneLocalToDeviceLightCCT_HOMEGY(deviceAddr, sceneId);
+                    // Add this device to response list to check TIMEOUT later
+                    addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
                 }
             }
         }
@@ -766,6 +768,8 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
             int dpCount = JSON_GetNumber(item, "dpCount");
             uint32_t param = (uint32_t)JSON_GetNumber(item, "param");
             ble_setSceneLocalToDeviceSwitch(sceneId, addr, dpCount, param);
+            // Add this device to response list to check TIMEOUT later
+            addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
         }
     }
 
@@ -856,8 +860,12 @@ bool addSceneCondition(const char* sceneId, JSON* condition) {
         int dpValue   = JSON_GetNumber(condition, "dpValue");
         if (isMatchString(pid, HG_BLE_SENSOR_MOTION)) {
             ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
+            // Add this device to response list to check TIMEOUT later
+            addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
         } else {
             ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
+            // Add this device to response list to check TIMEOUT later
+            addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
         }
     }
     return true;

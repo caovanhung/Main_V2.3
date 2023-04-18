@@ -5,133 +5,166 @@
 #include "uart.h"
 #include "mosquitto.h"
 
-#define UART_SENDING_FRAME_BUFFER_SIZE     1000
-
+#define UART_SENDING_FRAME_SIZE     1000
+#define UART_DEVICE_RESP_SIZE       100
 
 extern struct mosquitto * mosq;
 
 typedef struct {
+    uint8_t  priority;
     int      gwIndex;
-    uint8_t  reqType;
+    int      respType;
     char     itemId[10];
     uint16_t addr;
     uint8_t  data[50];
     uint8_t  dataLength;
 } UartSendingFrame;
-static UartSendingFrame g_uartSendingFrames[UART_SENDING_FRAME_BUFFER_SIZE];
-static int g_uartSendingFrameHead = 0, g_uartSendingFrameTail;
 
-// Variables to wait response after send a packet
+typedef struct {
+    int respType;
+    uint16_t deviceAddr;
+} UartDeviceResp;
+
+
+static UartSendingFrame g_uartSendingFrames[UART_SENDING_FRAME_SIZE];
+static UartDeviceResp   g_uartDeviceResps[UART_DEVICE_RESP_SIZE];
 int g_gatewayFds[GATEWAY_NUM] = { 0, 0 };
-int g_gatewayBusy[GATEWAY_NUM] = { 0, 0 };
-uint16_t g_gatewayRecvAddr[GATEWAY_NUM] = { 0, 0 };
-uint16_t g_gatewaySentAddr[GATEWAY_NUM] = { 0, 0 };
-long long int g_gatewayTick[GATEWAY_NUM] = { 0, 0 };
-int g_uartSendingIdx;
+int g_uartSendingFramesIdx = 0;
+int g_uartSendingIdx = 0;
 
-int findAvailGatewayFd(int gwIndex) {
-    if (gwIndex >= 0 && gwIndex < GATEWAY_NUM) {
-        if (g_gatewayBusy[gwIndex] == 0) {
-            return gwIndex;
-        } else {
-            return -1;
+void BLE_AddDeviceResp(int respType, uint16_t deviceAddr) {
+    for (int i = 0; i < UART_DEVICE_RESP_SIZE; i++) {
+        if (g_uartDeviceResps[i].respType == 0) {
+            g_uartDeviceResps[i].respType = respType;
+            g_uartDeviceResps[i].deviceAddr = deviceAddr;
+            return;
         }
     }
-
-    for (int i = 0; i < 1; i++) {
-        if (g_gatewayBusy[i] == 0) {
-            return i;
-        }
-    }
-    return -1;
 }
 
-bool sendFrameToGw(uint16_t addr, uint8_t* data, size_t len) {
-    g_uartSendingFrames[g_uartSendingFrameTail].gwIndex = -1;
-    g_uartSendingFrames[g_uartSendingFrameTail].addr = addr;
-    memcpy(g_uartSendingFrames[g_uartSendingFrameTail].data, data, len);
-    g_uartSendingFrames[g_uartSendingFrameTail].dataLength = len;
-    g_uartSendingFrameTail++;
-    if (g_uartSendingFrameTail >= UART_SENDING_FRAME_BUFFER_SIZE) {
-        g_uartSendingFrameTail = 0;
-    }
-    return true;
-}
-
-bool sendFrameToGwIndex(uint8_t gwIndex, uint16_t addr, uint8_t* data, size_t len) {
-    g_uartSendingFrames[g_uartSendingFrameTail].gwIndex = gwIndex;
-    g_uartSendingFrames[g_uartSendingFrameTail].addr = addr;
-    memcpy(g_uartSendingFrames[g_uartSendingFrameTail].data, data, len);
-    g_uartSendingFrames[g_uartSendingFrameTail].dataLength = len;
-    g_uartSendingFrameTail++;
-    if (g_uartSendingFrameTail >= UART_SENDING_FRAME_BUFFER_SIZE) {
-        g_uartSendingFrameTail = 0;
-    }
-    return true;
-}
-
-void addReqTypeToRespList(int reqType, const char* itemId) {
+void addRespTypeToRespList(int respType, const char* itemId) {
     ASSERT(itemId);
-    int addedFrameIdx = g_uartSendingFrameTail == 0? UART_SENDING_FRAME_BUFFER_SIZE - 1 : g_uartSendingFrameTail - 1;
-    g_uartSendingFrames[g_uartSendingFrameTail].reqType = reqType;
-    StringCopy(g_uartSendingFrames[g_uartSendingFrameTail].itemId, itemId);
+    if (respType >= 0) {
+        g_uartSendingFrames[g_uartSendingFramesIdx].respType = respType;
+        StringCopy(g_uartSendingFrames[g_uartSendingFramesIdx].itemId, itemId);
+    }
 }
 
-void ble_sendUartFrames() {
-    if (g_uartSendingFrameHead != g_uartSendingFrameTail) {
-        uint16_t gwIndex = g_uartSendingFrames[g_uartSendingFrameHead].gwIndex;
-        int fdIdx = findAvailGatewayFd(gwIndex);
-        if (fdIdx >= 0) {
-            uint16_t addr = g_uartSendingFrames[g_uartSendingFrameHead].addr;
-            uint8_t* data = g_uartSendingFrames[g_uartSendingFrameHead].data;
-            uint8_t dataLength = g_uartSendingFrames[g_uartSendingFrameHead].dataLength;
-            g_gatewayBusy[fdIdx] = 1;
-            g_gatewayRecvAddr[fdIdx] = 0;
-            g_gatewaySentAddr[fdIdx] = addr;
-            g_gatewayTick[fdIdx] = timeInMilliseconds();
-            g_uartSendingIdx = fdIdx == 1? 2 : 0;
-            UART0_Send(g_gatewayFds[fdIdx], data, dataLength);
-            g_uartSendingFrameHead++;
-            if (g_uartSendingFrameHead >= UART_SENDING_FRAME_BUFFER_SIZE) {
-                g_uartSendingFrameHead = 0;
+bool sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
+    ASSERT(data);
+    for (int i = 0; i < UART_SENDING_FRAME_SIZE; i++) {
+        if (g_uartSendingFrames[i].respType == 0) {
+            g_uartSendingFrames[i].respType = 0xff;
+            g_uartSendingFrames[i].gwIndex = gwIndex;
+            g_uartSendingFrames[i].addr = addr;
+            memcpy(g_uartSendingFrames[i].data, data, len);
+            g_uartSendingFrames[i].dataLength = len;
+            g_uartSendingFramesIdx = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool sendFrameToAnyGw(uint16_t addr, uint8_t* data, size_t len) {
+    ASSERT(data);
+    return sendFrameToGwIndex(-1, addr, data, len);
+}
+
+UartSendingFrame* findFrameToSend(int gwIndex) {
+    for (uint8_t priority = 0; priority < 5; priority++) {
+        for (int i = 0; i < UART_SENDING_FRAME_SIZE; i++) {
+            if (g_uartSendingFrames[i].respType > 0) {
+                if ((g_uartSendingFrames[i].gwIndex == -1) || (g_uartSendingFrames[i].gwIndex == gwIndex)) {
+                    if (g_uartSendingFrames[i].priority == priority) {
+                        return &g_uartSendingFrames[i];
+                    }
+                }
             }
         }
     }
+    return NULL;
 }
 
-bool ble_checkResponse() {
-    long long int currentTime = timeInMilliseconds();
-    for (int i = 0; i < GATEWAY_NUM; i++) {
-        if (g_gatewayBusy[i]) {
-            if (g_gatewayRecvAddr[0] == g_gatewaySentAddr[i] || g_gatewayRecvAddr[1] == g_gatewaySentAddr[i]) {
-                g_gatewayBusy[i] = 0;
-                if (g_gatewayRecvAddr[0] == g_gatewaySentAddr[i]) {
-                    g_gatewayRecvAddr[0] = 0;
-                }
-                if (g_gatewayRecvAddr[1] == g_gatewaySentAddr[i]) {
-                    g_gatewayRecvAddr[1] = 0;
-                }
-                logInfo("Sending to 0x%04X took %d ms", g_gatewaySentAddr[i], currentTime - g_gatewayTick[i]);
-            } else if (currentTime - g_gatewayTick[i] > 1000) {
-                g_gatewayBusy[i] = 0;
-                logInfo("Sending to 0x%04X is TIMEOUT", g_gatewaySentAddr[i]);
+void BLE_SendToGateway(int gwIndex) {
+    static uint8_t  state[2] = {0, 0};
+    static long long int sentTime[2] = {0, 0};
+    static UartSendingFrame sentFrame[2];
+    static uint8_t failedCount[2] = {0, 0};
+
+    switch (state[gwIndex]) {
+    case 0: {
+        // Find frame to send
+        UartSendingFrame* frame = findFrameToSend(gwIndex);
+        if (frame != NULL) {
+            sentFrame[gwIndex].respType = frame->respType;
+            sentFrame[gwIndex].addr = frame->addr;
+            sentFrame[gwIndex].dataLength = frame->dataLength;
+            StringCopy(sentFrame[gwIndex].itemId, frame->itemId);
+            memcpy(sentFrame[gwIndex].data, frame->data, frame->dataLength);
+            frame->respType = 0;
+            state[gwIndex] = 1;
+        }
+        break;
+    }
+    case 1: {
+        // Send frame to gateway
+        g_uartSendingIdx = gwIndex == 0? 3 : 2;
+        UART0_Send(g_gatewayFds[gwIndex], sentFrame[gwIndex].data, sentFrame[gwIndex].dataLength);
+        sentTime[gwIndex] = timeInMilliseconds();
+        state[gwIndex] = 2;
+        break;
+    }
+    case 2: {
+        // Wait for response
+        long long int currentTime = timeInMilliseconds();
+        for (int i = 0; i < UART_DEVICE_RESP_SIZE; i++) {
+            if ((sentFrame[gwIndex].respType == 0xff || g_uartDeviceResps[i].respType == sentFrame[gwIndex].respType)
+                && g_uartDeviceResps[i].deviceAddr == sentFrame[gwIndex].addr) {
+                logInfo("Sending to 0x%04X took %d ms", sentFrame[gwIndex].addr, currentTime - sentTime[gwIndex]);
+                g_uartDeviceResps[i].respType = 0;
+                g_uartDeviceResps[i].deviceAddr = 0;
+                state[gwIndex] = 0;  // Command is success. Goto step 0 to process next frame
+            }
+        }
+
+        // Timeout handling
+        if (timeInMilliseconds() - sentTime[gwIndex] > 1000) {
+            failedCount[gwIndex]++;
+            if (failedCount[gwIndex] < 2) {
+                state[gwIndex] = 1;      // Goto step 1 to retry sending
+            } else {
+                // TIMEOUT occurs
+                logInfo("Sending to 0x%04X is TIMEOUT", sentFrame[gwIndex].addr);
                 // Send TIMEOUT response to CORE service
                 JSON* p = JSON_CreateObject();
-                int sendingFrameIdx = g_uartSendingFrameHead == 0? UART_SENDING_FRAME_BUFFER_SIZE - 1 : g_uartSendingFrameHead - 1;
-                int reqType = g_uartSendingFrames[sendingFrameIdx].reqType;
-                if (reqType == GW_RESPONSE_GROUP) {
-                    char* itemId = g_uartSendingFrames[sendingFrameIdx].itemId;
-                    char str[10];
-                    sprintf(str, "%04X", g_gatewaySentAddr[i]);
+                if (sentFrame[gwIndex].respType == GW_RESPONSE_GROUP) {
+                    char str[50];
+                    sprintf(str, "%04X", sentFrame[gwIndex].addr);
                     JSON_SetText(p, "deviceAddr", str);
-                    JSON_SetText(p, "groupAddr", itemId);
+                    JSON_SetText(p, "groupAddr", sentFrame[gwIndex].itemId);
                     JSON_SetNumber(p, "status", 1);
-                    sendPacketTo(SERVICE_CORE, reqType, p);
+                    sendPacketTo(SERVICE_CORE, sentFrame[gwIndex].respType, p);
+                } else if (sentFrame[gwIndex].respType == GW_RESPONSE_ADD_SCENE) {
+                    char str[50];
+                    sprintf(str, "%04X", sentFrame[gwIndex].addr);
+                    JSON_SetText(p, "deviceAddr", str);
+                    JSON_SetText(p, "sceneAddr", sentFrame[gwIndex].itemId);
+                    JSON_SetNumber(p, "status", 1);
+                    sendPacketTo(SERVICE_CORE, sentFrame[gwIndex].respType, p);
                 }
                 JSON_Delete(p);
+                state[gwIndex] = 0;      // Goto step 0 to process next frame
             }
         }
+        break;
     }
+    }
+}
+
+void BLE_SendUartFrameLoop() {
+    BLE_SendToGateway(0);
+    BLE_SendToGateway(1);
 }
 
 void BLE_PrintFrame(char* str, ble_rsp_frame_t* frame) {
@@ -167,7 +200,7 @@ bool BLE_GetDeviceOnOffState(const char* dpAddr) {
     data[9] = dpAddrHex & (0xFF);
     data[8] = (dpAddrHex >> 8) & 0xFF;
 
-    return sendFrameToGw(dpAddrHex, data, 12);
+    return sendFrameToAnyGw(dpAddrHex, data, 12);
 }
 
 bool ble_bindGateWay(int gwIndex, provison_inf *PRV)
@@ -175,7 +208,7 @@ bool ble_bindGateWay(int gwIndex, provison_inf *PRV)
     ASSERT(gwIndex < GATEWAY_NUM); ASSERT(PRV);
     int i = 0;
     int tmp_len = 0;
-    g_uartSendingIdx = gwIndex == 1 ? 2 : 0;
+    g_uartSendingIdx = gwIndex == 0 ? 3 : 2;
 
     char *appkey;
     char *ivIndex;
@@ -599,7 +632,7 @@ void get_string_add_DV_write_GW(char **result,const char* address_device,const c
 int set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,const char* deviceKey)
 {
     ASSERT(gwIndex < GATEWAY_NUM); ASSERT(address_device); ASSERT(pid); ASSERT(deviceKey);
-    g_uartSendingIdx = gwIndex == 1 ? 2 : 0;
+    g_uartSendingIdx = gwIndex == 0 ? 3 : 2;
     char *str_send_uart = (char*) malloc(1000 * sizeof(char));
     unsigned char *hex_send_uart;
     int check = 0;
@@ -660,7 +693,7 @@ bool ble_controlOnOFF_SW(const char* dpAddr, uint8_t dpValue)
     data[8] = (dpAddrHex >> 8) & 0xFF;
     data[12] = dpValue;
 
-    return sendFrameToGw(dpAddrHex, data, 13);
+    return sendFrameToAnyGw(dpAddrHex, data, 13);
 }
 
 
@@ -702,7 +735,7 @@ bool ble_controlOnOFF(const char *address_element,const char *state)
     int len_str = (int)strlen(str_send_uart);
     hex_send_uart  = (char*) malloc(len_str * sizeof(char));
     String2HexArr(str_send_uart,hex_send_uart);
-    sendFrameToGw(dpAddrHex, hex_send_uart, len_str/2);
+    sendFrameToAnyGw(dpAddrHex, hex_send_uart, len_str/2);
     free(hex_send_uart);
     free(str_send_uart);
     return true;
@@ -729,7 +762,7 @@ bool ble_dimLedSwitch_HOMEGY(const char *address_device,int lightness)
     SET_DIM[13] = *hex_lightness;
     SET_DIM[12] = *(hex_lightness+1);
 
-    return sendFrameToGw(addrHex, SET_DIM, 14);
+    return sendFrameToAnyGw(addrHex, SET_DIM, 14);
 }
 
 bool ble_addDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *address_group,const char *address_device,const char *address_element)
@@ -844,7 +877,7 @@ bool ble_controlCTL(const char *dpAddr, int lightness, int colorTemperature)
     SET_CT[15] = hex_colorTemperature[0];
     SET_CT[14] = hex_colorTemperature[1];
 
-    return sendFrameToGw(dpAddrHex, SET_CT, 16);
+    return sendFrameToAnyGw(dpAddrHex, SET_CT, 16);
 }
 
 bool ble_controlHSL(const char *dpAddr, const char *HSL)
@@ -869,7 +902,7 @@ bool ble_controlHSL(const char *dpAddr, const char *HSL)
     SET_HSL[17] = hex_HSL[4];
     SET_HSL[16] = hex_HSL[5];
 
-    return sendFrameToGw(dpAddrHex, SET_HSL, 18);
+    return sendFrameToAnyGw(dpAddrHex, SET_HSL, 18);
 }
 
 
@@ -891,13 +924,18 @@ bool ble_controlModeBlinkRGB(const char *dpAddr, const char *modeBlinkRgb)
 
     SET_BLINK[14] = hex_modeBlinkRgb[0];
 
-    return sendFrameToGw(dpAddrHex, SET_BLINK, 15);
+    return sendFrameToAnyGw(dpAddrHex, SET_BLINK, 15);
 }
 
 int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* originPackage, size_t size) {
     ASSERT(originPackage);
     int frameCount = 0;
+    if (size < 10) {
+        resultFrames[frameCount].opcode = 0;
+        return 0;
+    }
     for (int i = 2; i < size - 1; i++) {
+        resultFrames[frameCount].opcode = 0;
         // Find the position of FLAG mark (2 bytes: 0x9181)
         if (originPackage[i] == 0x91) {
             // Calculate length of a single frame (2 bytes before FLAG mark)
@@ -939,14 +977,6 @@ char str[10];
 int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame)
 {
     ASSERT(temp); ASSERT(frame);
-    if (frame->flag != 0x919d) {
-        if (g_gatewayRecvAddr[0] == 0) {
-            g_gatewayRecvAddr[0] = frame->sendAddr;
-        }
-        if (g_gatewayRecvAddr[1] == 0) {
-            g_gatewayRecvAddr[1] = frame->sendAddr;
-        }
-    }
     uint8_t len_uart = frame->frameSize + 2;
     sprintf(temp->address_element, "%04X", frame->sendAddr);
 
@@ -1057,7 +1087,7 @@ bool setResetDeviceSofware(const char *addressDevice)
     int len_str = (int)strlen(str_send_uart);
     hex_send_uart  = (char*) malloc(len_str * sizeof(char));
     String2HexArr(str_send_uart,hex_send_uart);
-    sendFrameToGw(addrHex, hex_send_uart, len_str/2);
+    sendFrameToAnyGw(addrHex, hex_send_uart, len_str/2);
     free(str_send_uart);
     free(hex_send_uart);
     return true;
@@ -1079,7 +1109,7 @@ bool ble_setSceneLocalToDeviceSwitch(const char* sceneId, const char* deviceAddr
     data[17] = (uint8_t)(param >> 16);
     data[18] = (uint8_t)(param >> 8);
     data[19] = (uint8_t)(param);
-    return sendFrameToGw(dpAddrHex, data, 16 + dpCount);
+    return sendFrameToAnyGw(dpAddrHex, data, 16 + dpCount);
 }
 
 bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const char* sceneID)
@@ -1099,7 +1129,7 @@ bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const c
     SceneLocalToDevice[12] = *hex_sceneID;
     SceneLocalToDevice[13] = *(hex_sceneID+1);
 
-    return sendFrameToGw(dpAddrHex, SceneLocalToDevice, 14);
+    return sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice, 14);
 }
 
 bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID,const char* modeBlinkRgb )
@@ -1123,7 +1153,7 @@ bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const ch
 
     SceneLocalToDevice[14] = hex_modeBlinkRgb[0];
 
-    return sendFrameToGw(dpAddrHex, SceneLocalToDevice,17);
+    return sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice,17);
 }
 
 bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue)
@@ -1149,7 +1179,7 @@ bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, 
     CallSceneLocalToDevice[19] = hex_state[0];
     CallSceneLocalToDevice[20] = dpValue;
 
-    return sendFrameToGw(deviceAddrHex, CallSceneLocalToDevice, 21);
+    return sendFrameToAnyGw(deviceAddrHex, CallSceneLocalToDevice, 21);
 }
 
 bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID)
@@ -1169,7 +1199,7 @@ bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID)
     DelLocalToDevice[12] = hex_sceneID[0];
     DelLocalToDevice[13] = hex_sceneID[1];
 
-    return sendFrameToGw(deviceAddrHex, DelLocalToDevice, 14);
+    return sendFrameToAnyGw(deviceAddrHex, DelLocalToDevice, 14);
 }
 
 bool ble_callSceneLocalToHC(const char* address_device,const char* sceneID)
@@ -1190,7 +1220,7 @@ bool ble_callSceneLocalToHC(const char* address_device,const char* sceneID)
     CallSceneLocalToHC[12] = hex_sceneID[0];
     CallSceneLocalToHC[13] = hex_sceneID[1];
 
-    return sendFrameToGw(deviceAddrHex, CallSceneLocalToHC, 14);
+    return sendFrameToAnyGw(deviceAddrHex, CallSceneLocalToHC, 14);
 }
 
 bool ble_setTimeForSensorPIR(const char* address_device,const char* time)
@@ -1210,7 +1240,7 @@ bool ble_setTimeForSensorPIR(const char* address_device,const char* time)
     setTimeForSensorPIR[17] = *(hex_time+1);
     setTimeForSensorPIR[18] = *(hex_time);
 
-    return sendFrameToGw(deviceAddrHex, setTimeForSensorPIR, 19);
+    return sendFrameToAnyGw(deviceAddrHex, setTimeForSensorPIR, 19);
 }
 
 char *get_dpid(const char *code)
@@ -1231,7 +1261,7 @@ int ble_logDeivce(const char *address_element,int state)
     LOG_DEVICE[8] = *hex_address;
     LOG_DEVICE[9] = *(hex_address+1);
     LOG_DEVICE[17] = state? 1 : 0;
-    return sendFrameToGw(addrHex, LOG_DEVICE, 18);
+    return sendFrameToAnyGw(addrHex, LOG_DEVICE, 18);
 }
 
 int ble_logTouch(const char *address_element, uint8_t dpId, int state)
@@ -1244,5 +1274,5 @@ int ble_logTouch(const char *address_element, uint8_t dpId, int state)
     LOG_TOUCH[8] = (*hex_address) + (dpId - 1);
     LOG_TOUCH[9] = *(hex_address+1);
     LOG_TOUCH[17] = state;
-    return sendFrameToGw(addrHex, LOG_TOUCH, 18);
+    return sendFrameToAnyGw(addrHex, LOG_TOUCH, 18);
 }

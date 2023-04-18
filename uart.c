@@ -250,7 +250,7 @@ int UART0_Recv(int fd, char *rcv_buf,int data_len)
 *               data_len: the length of the data frame
 * out param:    return 0 if success, or 1 if fail
 *******************************************************************/
-int g_uartSendingIdx = 0;
+extern int g_uartSendingIdx;
 bool UART0_Send(int fd, char *send_buf,int data_len)
 {
     char tmp[100];

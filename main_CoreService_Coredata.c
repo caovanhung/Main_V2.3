@@ -920,30 +920,38 @@ int main( int argc,char ** argv )
                                 // Find all actions that are need to be removed
                                 JSON* actionsNeedRemove = JSON_CreateArray();
                                 JSON_ForEach(oldAction, oldActionsArray) {
-                                    bool found = false;
-                                    JSON_ForEach(newAction, newActionsArray) {
-                                        if (compareSceneEntity(oldAction, newAction)) {
-                                            found = true;
-                                            break;
+                                    if (JSON_HasKey(oldAction, "pid")) {
+                                        bool found = false;
+                                        JSON_ForEach(newAction, newActionsArray) {
+                                            if (JSON_HasKey(newAction, "pid")) {
+                                                if (compareSceneEntity(oldAction, newAction)) {
+                                                    found = true;
+                                                    break;
+                                                }
+                                            }
                                         }
-                                    }
-                                    if (!found) {
-                                        cJSON_AddItemReferenceToArray(actionsNeedRemove, oldAction);
+                                        if (!found) {
+                                            cJSON_AddItemReferenceToArray(actionsNeedRemove, oldAction);
+                                        }
                                     }
                                 }
 
                                 // Find all actions that are need to be added
                                 JSON* actionsNeedAdd = JSON_CreateArray();
                                 JSON_ForEach(newAction, newActionsArray) {
-                                    bool found = false;
-                                    JSON_ForEach(oldAction, oldActionsArray) {
-                                        if (compareSceneEntity(oldAction, newAction)) {
-                                            found = true;
-                                            break;
+                                    if (JSON_HasKey(newAction, "pid")) {
+                                        bool found = false;
+                                        JSON_ForEach(oldAction, oldActionsArray) {
+                                            if (JSON_HasKey(oldAction, "pid")) {
+                                                if (compareSceneEntity(oldAction, newAction)) {
+                                                    found = true;
+                                                    break;
+                                                }
+                                            }
                                         }
-                                    }
-                                    if (!found) {
-                                        cJSON_AddItemReferenceToArray(actionsNeedAdd, newAction);
+                                        if (!found) {
+                                            cJSON_AddItemReferenceToArray(actionsNeedAdd, newAction);
+                                        }
                                     }
                                 }
 
@@ -976,9 +984,11 @@ int main( int argc,char ** argv )
                                         addDeviceToRespList(reqType, sceneId, deviceAddr);
                                         bool found = false;
                                         JSON_ForEach(newAction, actionsNeedAdd) {
-                                            if (compareDevice(action, newAction)) {
-                                                found = true;
-                                                break;
+                                            if (JSON_HasKey(newAction, "pid")) {
+                                                if (compareSceneEntity(action, newAction)) {
+                                                    found = true;
+                                                    break;
+                                                }
                                             }
                                         }
                                         if (!found) {
@@ -1289,7 +1299,6 @@ bool Scene_GetFullInfo(JSON* packet) {
     JSON* actionsArray = JSON_GetObject(packet, "actions");
     int isLocal = JSON_GetNumber(packet, "isLocal");
     JSON* newActionsArray = JSON_CreateArray();
-    int i = 0;
     JSON_ForEach(action, actionsArray) {
         JSON* executorProperty = JSON_GetObject(action, "executorProperty");
         char* actionExecutor = JSON_GetText(action, "actionExecutor");
@@ -1356,7 +1365,6 @@ bool Scene_GetFullInfo(JSON* packet) {
             }
         }
         JSON_SetNumber(action, "delaySeconds", delaySeconds);
-        i++;
     }
     JSON* conditionsArray = JSON_GetObject(packet, "conditions");
     JSON_ForEach(condition, conditionsArray) {

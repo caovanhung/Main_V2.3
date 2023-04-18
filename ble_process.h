@@ -113,10 +113,9 @@ typedef struct
     char* value;
 }InfoDataUpdateDevice;
 
-int findAvailGatewayFd();
-bool ble_checkResponse();
-void ble_sendUartFrames();
-void addReqTypeToRespList(int reqType, const char* itemId);
+void addRespTypeToRespList(int reqType, const char* itemId);
+void BLE_AddDeviceResp(int respType, uint16_t deviceAddr);
+void BLE_SendUartFrameLoop();
 
 // Send request to get the device ON/OFF state
 bool BLE_GetDeviceOnOffState(const char* dpAddr);
