@@ -1104,7 +1104,7 @@ void Mosq_ProcessMessage() {
 
 void Aws_SendMergePayload() {
     static long long time = 0;
-    if (timeInMilliseconds() - time > 300) {
+    if (timeInMilliseconds() - time > 500) {
         time = timeInMilliseconds();
 
         JSON_ForEach(page, g_mergePayloads) {
@@ -1355,6 +1355,10 @@ int main( int argc,char ** argv ) {
                         getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_UPDATE_SERVICE,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
                         get_topic(&topic,MOSQ_LayerService_Manager,MOSQ_NameService_Manager_ServieceManager,TYPE_UPDATE_SERVICE,MOSQ_ActResponse);
                         mqttLocalPublish(topic, message);
+                        break;
+                    }
+                    case TYPE_SET_GROUP_TTL: {
+                        sendPacketTo(SERVICE_CORE, pre_detect->type, reported);
                         break;
                     }
                     case TYPE_GET_NUM_OF_PAGE: {

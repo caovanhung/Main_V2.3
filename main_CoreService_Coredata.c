@@ -637,9 +637,7 @@ int main( int argc,char ** argv )
                         char* sceneId = JSON_GetText(payload, "sceneId");
                         char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                         int status = JSON_GetNumber(payload, "status");
-                        if (requestIsInRespList(TYPE_ADD_SCENE, sceneId)) {
-                            updateDeviceRespStatus(TYPE_ADD_SCENE, sceneId, deviceAddr, status);
-                        }
+                        updateDeviceRespStatus(TYPE_ADD_SCENE, sceneId, deviceAddr, status);
                         break;
                     }
                     case GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE: {
@@ -653,6 +651,11 @@ int main( int argc,char ** argv )
                             Db_DeleteDevice(deviceInfo.id);
                             Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
                         }
+                        break;
+                    }
+                    case GW_RESPONSE_SET_TTL: {
+                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                        updateDeviceRespStatus(GW_RESPONSE_SET_TTL, "0", deviceAddr, 0);
                         break;
                     }
                     case TYPE_SYNC_DEVICE_STATE: {
@@ -1046,7 +1049,6 @@ int main( int argc,char ** argv )
                         char* devicesStr = Db_FindDevicesInGroup(groupAddr);
                         if (devicesStr) {
                             JSON* oldDevices = parseGroupNormalDevices(devicesStr);
-                            char* t1 = cJSON_PrintUnformatted(oldDevices);
                             JSON* newDevices = JSON_GetObject(localPacket, "devices");
                             // Find all devices that are need to be removed
                             JSON* dpsNeedRemove = JSON_CreateArray();
@@ -1223,6 +1225,21 @@ int main( int argc,char ** argv )
                         if (foundDevices == 1) {
                             JSON_SetText(payload, "deviceAddr", deviceInfo.addr);
                             sendPacketTo(SERVICE_BLE, reqType, payload);
+                        }
+                        break;
+                    }
+                    case TYPE_SET_GROUP_TTL: {
+                        JSON_ForEach(item, payload) {
+                            if (item->string && cJSON_IsObject(item)) {
+                                int ttl = JSON_GetNumber(item, "ttl");
+                                char* deviceStr = Db_FindDevicesInGroup(item->string);
+                                JSON* devices = parseGroupNormalDevices(deviceStr);
+                                JSON_ForEach(d, devices) {
+                                    char* deviceAddr = JSON_GetText(d, "deviceAddr");
+                                    Ble_SetTTL(deviceAddr, ttl);
+                                    addDeviceToRespList(GW_RESPONSE_SET_TTL, "0", deviceAddr);
+                                }
+                            }
                         }
                         break;
                     }

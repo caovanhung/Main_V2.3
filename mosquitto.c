@@ -594,6 +594,16 @@ void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const 
     free(str);
 }
 
+
+void Ble_SetTTL(const char* deviceAddr, uint8_t ttl) {
+    JSON* p = JSON_CreateObject();
+    JSON_SetText(p, "deviceAddr", deviceAddr);
+    JSON_SetNumber(p, "ttl", ttl);
+    sendPacketTo(SERVICE_BLE, TYPE_SET_DEVICE_TTL, p);
+    JSON_Delete(p);
+}
+
+
 bool getPayloadReponseDevicesGroupAWS(char** result,char *deviceID,char*  devices)
 {
     if(devices == NULL)

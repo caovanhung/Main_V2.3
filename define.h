@@ -98,6 +98,8 @@ extern int g_dbgLineNumber;
 #define TYPE_GET_SCENES                 (47U)
 #define TYPE_GET_GROUPS                 (48U)
 #define TYPE_SYNC_DB_DEVICES            (49U)
+#define TYPE_SET_DEVICE_TTL             (50U)
+#define TYPE_SET_GROUP_TTL              (51U)
 
 #define TYPE_SYNC_DEVICE_STATE          (99U)
 #define TYPE_GET_DEVICE_STATUS          (100U)
@@ -135,11 +137,12 @@ extern int g_dbgLineNumber;
 #define GW_RESPONSE_DIM_LED_SWITCH_HOMEGY               (75U)
 #define GW_RESPONSE_ADD_GROUP_NORMAL                    (76U)
 #define GW_RESPONSE_DEL_GROUP_NORMAL                    (77U)
-#define GW_RESPONSE_ADD_GROUP_LINK                      (78)
-#define GW_RESPONSE_DEL_GROUP_LINK                      (79)
-#define GW_RESPONSE_SET_TIME_SENSOR_PIR                 (80)
-#define GW_RESPONSE_UPDATE_SCENE                        (81)
-#define GW_RESPONSE_UPDATE_GROUP                        (82)
+#define GW_RESPONSE_ADD_GROUP_LINK                      (78U)
+#define GW_RESPONSE_DEL_GROUP_LINK                      (79U)
+#define GW_RESPONSE_SET_TIME_SENSOR_PIR                 (80U)
+#define GW_RESPONSE_UPDATE_SCENE                        (81U)
+#define GW_RESPONSE_UPDATE_GROUP                        (82U)
+#define GW_RESPONSE_SET_TTL                             (83U)
 
 
 #define GW_RESPONSE_NOTIFI                              ( 111U)

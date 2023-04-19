@@ -114,7 +114,7 @@ typedef struct
 }InfoDataUpdateDevice;
 
 void addRespTypeToRespList(int reqType, const char* itemId);
-void BLE_AddDeviceResp(int respType, uint16_t deviceAddr);
+void BLE_SetDeviceResp(int respType, uint16_t deviceAddr, int status);
 void BLE_SendUartFrameLoop();
 
 // Send request to get the device ON/OFF state
@@ -245,6 +245,6 @@ void getStringResetDeviveSofware(char **result,const char* addressDevice);
 bool setResetDeviceSofware(const char *addressDevice);
 
 char *get_dpid(const char *code);
-
+int GW_SetTTL(const char *deviceAddr, uint8_t ttl);
 
 #endif

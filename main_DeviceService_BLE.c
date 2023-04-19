@@ -138,7 +138,7 @@ void Mosq_ProcessLoop() {
 void BLE_ReceivePacket() {
     char givenStr[MAX_PACKAGE_SIZE];
     int len_uart = UART0_Recv(g_gatewayFds[0], rcv_uart_buff, MAX_PACKAGE_SIZE);
-    if ( len_uart > 0) {
+    if ( len_uart > 0 && len_uart < MAX_PACKAGE_SIZE) {
         if (len_uart == 1 || len_uart > 998) {
             return;
         }
@@ -157,7 +157,7 @@ void BLE_ReceivePacket() {
     }
 
     len_uart = UART0_Recv(g_gatewayFds[1], rcv_uart_buff, MAX_PACKAGE_SIZE);
-    if ( len_uart > 0) {
+    if ( len_uart > 0 && len_uart < MAX_PACKAGE_SIZE) {
         if (len_uart == 1 || len_uart > 998) {
             return;
         }
@@ -207,7 +207,7 @@ void Ble_ProcessPacket()
             InfoDataUpdateDevice *InfoDataUpdateDevice_t = malloc(sizeof(InfoDataUpdateDevice));
             int frameType = check_form_recived_from_RX(tmp, &bleFrames[i]);
             logInfo("Frame #%d: type: %d, %s", i, frameType, str);
-            BLE_AddDeviceResp(frameType, bleFrames[i].sendAddr);
+            BLE_SetDeviceResp(frameType, bleFrames[i].sendAddr, 0);
             switch(frameType) {
                 case GW_RESPONSE_DEVICE_STATE: {
                     JSON* packet = JSON_CreateObject();
@@ -385,6 +385,14 @@ void Ble_ProcessPacket()
                     JSON_Delete(packet);
                     break;
                 }
+                case GW_RESPONSE_SET_TTL: {
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    JSON_SetNumber(packet, "status", 0);
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    JSON_Delete(packet);
+                    break;
+                }
                 default:
                     logError("Packet type is not supported: %d", frameType);
                     break;
@@ -474,9 +482,6 @@ int main( int argc,char ** argv )
     usleep(50000);
     Mosq_Init(SERVICE_BLE);
     sleep(3);
-    // set_inf_DV_for_GW(0, "6C03", "BLEHGAA0103", "9DC4CBCC70599BD602F8CFF9106E3C8C");
-    // sleep(3);
-    // set_inf_DV_for_GW(1, "6C03", "BLEHGAA0103", "9DC4CBCC70599BD602F8CFF9106E3C8C");
     while (xRun!=0) {
         BLE_SendUartFrameLoop();
         BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue
@@ -699,6 +704,9 @@ int main( int argc,char ** argv )
                 case TYPE_GET_DEVICE_STATUS: {
                     char* addr = JSON_GetText(payload, "addr");
                     BLE_GetDeviceOnOffState(addr);
+                }
+                case TYPE_SET_DEVICE_TTL: {
+                    GW_SetTTL(JSON_GetText(payload, "deviceAddr"), JSON_GetNumber(payload, "ttl"));
                 }
             }
         } else {

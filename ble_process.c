@@ -23,6 +23,7 @@ typedef struct {
 typedef struct {
     int respType;
     uint16_t deviceAddr;
+    int status;
 } UartDeviceResp;
 
 
@@ -32,11 +33,11 @@ int g_gatewayFds[GATEWAY_NUM] = { 0, 0 };
 int g_uartSendingFramesIdx = 0;
 int g_uartSendingIdx = 0;
 
-void BLE_AddDeviceResp(int respType, uint16_t deviceAddr) {
+void BLE_SetDeviceResp(int respType, uint16_t deviceAddr, int status) {
     for (int i = 0; i < UART_DEVICE_RESP_SIZE; i++) {
-        if (g_uartDeviceResps[i].respType == 0) {
-            g_uartDeviceResps[i].respType = respType;
-            g_uartDeviceResps[i].deviceAddr = deviceAddr;
+        if ((g_uartDeviceResps[i].respType == 0xff || g_uartDeviceResps[i].respType == respType)
+            && g_uartDeviceResps[i].deviceAddr == deviceAddr) {
+            g_uartDeviceResps[i].status = status;
             return;
         }
     }
@@ -91,6 +92,7 @@ void BLE_SendToGateway(int gwIndex) {
     static long long int sentTime[2] = {0, 0};
     static UartSendingFrame sentFrame[2];
     static uint8_t failedCount[2] = {0, 0};
+    static uint8_t respIdx[2] = {0, 0};
 
     switch (state[gwIndex]) {
     case 0: {
@@ -113,19 +115,27 @@ void BLE_SendToGateway(int gwIndex) {
         UART0_Send(g_gatewayFds[gwIndex], sentFrame[gwIndex].data, sentFrame[gwIndex].dataLength);
         sentTime[gwIndex] = timeInMilliseconds();
         state[gwIndex] = 2;
+
+        for (int i = 0; i < UART_DEVICE_RESP_SIZE; i++) {
+            if (g_uartDeviceResps[i].respType == 0) {
+                g_uartDeviceResps[i].respType = sentFrame[gwIndex].respType;
+                g_uartDeviceResps[i].deviceAddr = sentFrame[gwIndex].addr;
+                g_uartDeviceResps[i].status = -1;
+                respIdx[gwIndex] = i;
+                break;
+            }
+        }
+
         break;
     }
     case 2: {
         // Wait for response
         long long int currentTime = timeInMilliseconds();
-        for (int i = 0; i < UART_DEVICE_RESP_SIZE; i++) {
-            if ((sentFrame[gwIndex].respType == 0xff || g_uartDeviceResps[i].respType == sentFrame[gwIndex].respType)
-                && g_uartDeviceResps[i].deviceAddr == sentFrame[gwIndex].addr) {
-                logInfo("Sending to 0x%04X took %d ms", sentFrame[gwIndex].addr, currentTime - sentTime[gwIndex]);
-                g_uartDeviceResps[i].respType = 0;
-                g_uartDeviceResps[i].deviceAddr = 0;
-                state[gwIndex] = 0;  // Command is success. Goto step 0 to process next frame
-            }
+        if (g_uartDeviceResps[respIdx[gwIndex]].status == 0) {
+            g_uartDeviceResps[respIdx[gwIndex]].respType = 0;
+            g_uartDeviceResps[respIdx[gwIndex]].deviceAddr = 0;
+            logInfo("Sending to 0x%04X took %d ms", sentFrame[gwIndex].addr, currentTime - sentTime[gwIndex]);
+            state[gwIndex] = 0;  // Command is success. Goto step 0 to process next frame
         }
 
         // Timeout handling
@@ -135,6 +145,8 @@ void BLE_SendToGateway(int gwIndex) {
                 state[gwIndex] = 1;      // Goto step 1 to retry sending
             } else {
                 // TIMEOUT occurs
+                g_uartDeviceResps[respIdx[gwIndex]].respType = 0;
+                g_uartDeviceResps[respIdx[gwIndex]].deviceAddr = 0;
                 logInfo("Sending to 0x%04X is TIMEOUT", sentFrame[gwIndex].addr);
                 // Send TIMEOUT response to CORE service
                 JSON* p = JSON_CreateObject();
@@ -726,6 +738,7 @@ void ble_getStringControlOnOff(char **result,const char* strAddress,const char* 
 bool ble_controlOnOFF(const char *address_element,const char *state)
 {
     ASSERT(address_element); ASSERT(state);
+    static uint8_t tid = 0;
 
     char *str_send_uart;
     unsigned char *hex_send_uart;
@@ -733,9 +746,10 @@ bool ble_controlOnOFF(const char *address_element,const char *state)
     ble_getStringControlOnOff(&str_send_uart,address_element,state);
 
     int len_str = (int)strlen(str_send_uart);
-    hex_send_uart  = (char*) malloc(len_str * sizeof(char));
+    hex_send_uart  = (char*) malloc(len_str * sizeof(char) + 1);
     String2HexArr(str_send_uart,hex_send_uart);
-    sendFrameToAnyGw(dpAddrHex, hex_send_uart, len_str/2);
+    hex_send_uart[len_str/2] = tid++;
+    sendFrameToAnyGw(dpAddrHex, hex_send_uart, len_str/2 + 1);
     free(hex_send_uart);
     free(str_send_uart);
     return true;
@@ -1030,6 +1044,8 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         temp->causeType = 3;
         sprintf(temp->causeId, "%02X%02X", (frame->opcode & 0xFF), frame->param[0]);
         return GW_RESPONSE_DEVICE_CONTROL;
+    } else if (frame->opcode == 0x800E && frame->paramSize >= 1) {
+        return GW_RESPONSE_SET_TTL;
     }
     // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0xE1 &&rcv_uart_buff[9] == 0x11 && rcv_uart_buff[10] == 0x02 && rcv_uart_buff[11] == 0x04 && rcv_uart_buff[12] == 0x00)
     // {
@@ -1275,4 +1291,14 @@ int ble_logTouch(const char *address_element, uint8_t dpId, int state)
     LOG_TOUCH[9] = *(hex_address+1);
     LOG_TOUCH[17] = state;
     return sendFrameToAnyGw(addrHex, LOG_TOUCH, 18);
+}
+
+int GW_SetTTL(const char *deviceAddr, uint8_t ttl) {
+    ASSERT(deviceAddr); ASSERT(ttl > 0);
+    long int addrHex = strtol(deviceAddr, NULL, 16);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0x80,0x0D,0x00};
+    data[8] = (addrHex >> 8) & 0x00FF;
+    data[9] = (addrHex & 0x00FF);
+    data[12] = ttl;
+    return sendFrameToGwIndex(1, addrHex, data, 13);
 }

@@ -192,6 +192,9 @@ void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex);
 void Aws_updateGroupState(const char* groupAddr, int state);
 void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const list_t* failedDevices);
 
+
+void Ble_SetTTL(const char* deviceAddr, uint8_t ttl);
+
 /**
  * @brief The timer query function.
  *
