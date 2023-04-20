@@ -40,7 +40,7 @@
 #include "mosquitto.h"
 
 
-#define MQTT_TOPIC_COMMON                  "$aws/things/14617152b6a74e608b44def3c3e6dce7/shadow/name"
+#define MQTT_TOPIC_COMMON                  "$aws/things/%s/shadow/name"
 
 typedef struct  
 {
@@ -181,7 +181,6 @@ bool AWS_detect_message_received_for_update(Pre_parse *var,char *mess);
 //for add device
 bool AWS_get_info_device(Info_device *inf_device,Pre_parse *pre_detect);
 bool MOSQ_getTemplateAddDevice(char **result,Info_device *inf_device);
-bool MOSQ_getTemplateReponseAWSAddDevice(char **result,char *deviceID);
 //dor add scene
 bool AWS_getInfoScene(Info_scene *inf_scene,Pre_parse *pre_detect);
 bool MOSQ_getTemplateAddScene(char **result,Info_scene *inf_scene);
@@ -233,11 +232,4 @@ bool MOSQ_getTemplateControlGroupNormal(char **result,Info_group *info_group_t);
 //for delete group normal
 bool AWS_getInfoDeleteGroupNormal(Info_group *info_group_t,Pre_parse *pre_detect);
 bool MOSQ_getTemplateDeleteGroupNormal(char **result,Info_group *info_group_t);
-
-//for reponse device
-bool AWS_getTemplateFeedbackAddGateway(char **result,const char* ID, const char* IDgateway, int state );
 JSON* Aws_CreateCloudPacket(JSON* localPacket);
-
-bool AWS_getTemplateReponseStateDevice(char **result,const char* deviceID, const char* dpid, const char* dpvalue);
-bool AWS_getTemplateReponseValueDevice(char **result,const char* deviceID, const char* dpid, int dpvalue);
-bool AWS_getTemplateReponseHistoryDevice(char **result,int sender,int type,const char* payload);

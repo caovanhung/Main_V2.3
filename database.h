@@ -121,6 +121,7 @@ int Db_DeleteDevice(const char* deviceId);
 
 int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, int pageIndex);
 int Db_DeleteGroup(const char* groupAddr);
+int Db_DeleteAllGroup();
 char* Db_FindDevicesInGroup(const char* groupAddr);
 int Db_SaveGroupDevices(const char* groupAddr, const char* devices);
 
@@ -135,6 +136,7 @@ int Db_SaveSceneCondRepeat(const char* sceneId, int conditionIndex, uint8_t repe
 int Db_AddScene(JSON* sceneInfo);
 JSON* Db_FindScene(const char* sceneId);
 int Db_DeleteScene(const char* sceneId);
+int Db_DeleteAllScene();
 int Db_EnableScene(const char* sceneId, int enableOrDisable);
 int Db_RemoveSceneAction(const char* sceneId, const char* deviceAddr);
 

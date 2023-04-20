@@ -589,6 +589,33 @@ int main( int argc,char ** argv )
                         }
                         break;
                     }
+                    case GW_RESPONSE_IR: {
+                        uint16_t brandId = JSON_GetNumber(payload, "brandId");
+                        uint8_t  remoteId = JSON_GetNumber(payload, "remoteId");
+                        uint8_t  temp = JSON_GetNumber(payload, "temp");
+                        uint8_t  mode = JSON_GetNumber(payload, "mode");
+                        uint8_t  fan = JSON_GetNumber(payload, "fan");
+                        uint8_t  swing = JSON_GetNumber(payload, "swing");
+                        // Find device with brandId and remoteId
+                        char sql[500];
+                        sprintf(sql, "select * from devices where dpId=1 AND CAST(dpValue as INTEGER)=%d", brandId);
+                        Sql_Query(sql, row) {
+                            char* deviceId = sqlite3_column_text(row, 0);
+                            sprintf(sql, "select * from devices where deviceId='%s' and dpId=2 and CAST(dpValue as INTEGER)=%d", deviceId, remoteId);
+                            Sql_Query(sql, r) {
+                                int pageIndex = sqlite3_column_int(r, 4);
+                                Db_SaveDpValue(deviceId, 103, temp);
+                                Db_SaveDpValue(deviceId, 102, mode);
+                                Db_SaveDpValue(deviceId, 104, fan);
+                                Db_SaveDpValue(deviceId, 105, swing);
+                                Aws_SaveDpValue(deviceId, 103, temp, pageIndex);
+                                Aws_SaveDpValue(deviceId, 102, mode, pageIndex);
+                                Aws_SaveDpValue(deviceId, 104, fan, pageIndex);
+                                Aws_SaveDpValue(deviceId, 105, swing, pageIndex);
+                            }
+                        }
+                        break;
+                    }
                     case GW_RESPONSE_SENSOR_BATTERY:
                     case GW_RESPONSE_SMOKE_SENSOR:
                     case GW_RESPONSE_SENSOR_PIR_DETECT:
@@ -789,6 +816,11 @@ int main( int argc,char ** argv )
                             int gatewayId = Db_FindGatewayId(gatewayAddr);
                             if (gatewayId >= 0) {
                                 // Send packet to BLE to save device information in to gateway
+                                JSON* protParam = JSON_GetObject(payload, "protocol_para");
+                                JSON* dictDPs = JSON_GetObject(protParam, "dictDPs");
+                                if (JSON_HasKey(dictDPs, "106")) {
+                                    JSON_SetText(localPacket, "command", JSON_GetText(dictDPs, "106"));
+                                }
                                 JSON_SetNumber(localPacket, "gatewayId", gatewayId);
                                 sendPacketTo(SERVICE_BLE, TYPE_ADD_DEVICE, localPacket);
                                 JSON_Delete(localPacket);
@@ -890,6 +922,27 @@ int main( int argc,char ** argv )
                                 Db_AddDevice(d);
                                 logInfo("Added device %s to database", deviceId);
                             }
+                        }
+                        break;
+                    }
+                    case TYPE_SYNC_DB_GROUPS: {
+                        logInfo("TYPE_SYNC_DB_GROUPS");
+                        Db_DeleteAllGroup();
+                        JSON_ForEach(group, payload) {
+                            char* groupAddr = JSON_GetText(group, "groupAddr");
+                            char* groupName = JSON_GetText(group, "groupName");
+                            char* devices = JSON_GetObject(group, "devices");
+                            int isLight = JSON_GetNumber(group, "isLight");
+                            int pageIndex = JSON_GetNumber(group, "pageIndex");
+                            Db_AddGroup(groupAddr, groupName, devices, isLight, pageIndex);
+                        }
+                        break;
+                    }
+                    case TYPE_SYNC_DB_SCENES: {
+                        logInfo("TYPE_SYNC_DB_SCENES");
+                        Db_DeleteAllScene();
+                        JSON_ForEach(scene, payload) {
+                            Db_AddScene(scene);
                         }
                         break;
                     }

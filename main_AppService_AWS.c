@@ -107,7 +107,7 @@ static int g_awsDevicePageNum = 0, g_awsGroupPageNum = 0, g_awsScenePageNum = 0;
 static int g_awsSyncDatabaseStep = 0; // 1: getting number of pages;  2: syncing database
 
 // Array to save all devices, groups, scenes that need to synchronize from cloud
-static JSON* g_syncingItems;
+static JSON* g_syncingDevices;
 
 static JSON* g_mergePayloads;
 
@@ -400,19 +400,22 @@ void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIden
     strncpy(aws_buff, pPublishInfo->pPayload, pPublishInfo->payloadLength);
     aws_buff[(int)pPublishInfo->payloadLength] = '\0';
     AWS_short_message_received(aws_buff);
-    if (isContainString(pPublishInfo->pTopicName, "get")) {
+    char* topic = malloc(pPublishInfo->topicNameLength + 1);
+    memcpy(topic, pPublishInfo->pTopicName, pPublishInfo->topicNameLength);
+    topic[pPublishInfo->topicNameLength] = 0;
+    if (isContainString(topic, "get")) {
         flag = true;
         JSON* recvPacket = JSON_Parse(aws_buff);
         JSON* state = JSON_GetObject(recvPacket, "state");
         JSON* reported = JSON_GetObject(state, "reported");
 
-        if (isContainString(pPublishInfo->pTopicName, "d_")) {
+        if (isContainString(topic, "d_")) {
             JSON_SetNumber(reported, "type", TYPE_GET_DEVICES);
             JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
-        } else if(isContainString(pPublishInfo->pTopicName, "s_")) {
+        } else if(isContainString(topic, "s_")) {
             JSON_SetNumber(reported, "type", TYPE_GET_SCENES);
             JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
-        } else if(isContainString(pPublishInfo->pTopicName, "g_")) {
+        } else if(isContainString(topic, "g_")) {
             JSON_SetNumber(reported, "type", TYPE_GET_GROUPS);
             JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
         } else {
@@ -1383,14 +1386,14 @@ int main( int argc,char ** argv ) {
                         JSON* p = JSON_CreateObject();
                         int pageIndex = JSON_GetNumber(reported, "pageIndex");
                         if (pageIndex == 1) {
-                            JSON_Delete(g_syncingItems);
-                            g_syncingItems = JSON_CreateArray();
+                            JSON_Delete(g_syncingDevices);
+                            g_syncingDevices = JSON_CreateArray();
                         }
 
-                        // Add devices from cloud to g_syncingItems array
+                        // Add devices from cloud to g_syncingDevices array
                         JSON_ForEach(item, reported) {
                             if (cJSON_IsObject(item)) {
-                                JSON* device = JArr_CreateObject(g_syncingItems);
+                                JSON* device = JArr_CreateObject(g_syncingDevices);
                                 list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
                                 if (tmp->count >= 5) {
                                     JSON_SetText(device, "deviceId", item->string);
@@ -1415,9 +1418,98 @@ int main( int argc,char ** argv ) {
                             mqttCloudPublish(topic, "");
                             free(topic);
                         } else {
-                            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, g_syncingItems);
+                            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, g_syncingDevices);
+                            // // Send request to get first page of groups
+                            // char* topic = Aws_GetTopic(PAGE_GROUP, 1, TOPIC_GET_PUB);
+                            // mqttCloudPublish(topic, "");
+                            // free(topic);
                             g_awsSyncDatabaseStep = 0;
                         }
+                        break;
+                    }
+                    case TYPE_GET_GROUPS: {
+                        // JSON* p = JSON_CreateObject();
+                        // int pageIndex = JSON_GetNumber(reported, "pageIndex");
+                        // if (pageIndex == 1) {
+                        //     JSON_Delete(g_syncingGroups);
+                        //     g_syncingGroups = JSON_CreateArray();
+                        // }
+
+                        // // Add groups from cloud to g_syncingGroups array
+                        // JSON_ForEach(item, reported) {
+                        //     if (cJSON_IsObject(item)) {
+                        //         JSON* group = JArr_CreateObject(g_syncingGroups);
+                        //         list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
+                        //         if (tmp->count >= 5) {
+                        //             JSON_SetText(group, "deviceId", item->string);
+                        //             JSON_SetText(group, KEY_NAME, JSON_GetText(item, "name"));
+                        //             JSON_SetObject(group, "dictMeta", JSON_Clone(JSON_GetObject(item, "dictMeta")));
+                        //             JSON_SetText(group, KEY_ID_GATEWAY, JSON_GetText(item, "gateWay"));
+                        //             JSON_SetText(group, KEY_UNICAST, tmp->items[3]);
+                        //             JSON_SetText(group, "deviceAddr", tmp->items[3]);
+                        //             JSON_SetText(group, KEY_DEVICE_KEY, tmp->items[4]);
+                        //             JSON_SetNumber(group, KEY_PROVIDER, atoi(tmp->items[0]));
+                        //             JSON_SetText(group, KEY_PID, tmp->items[1]);
+                        //             JSON_SetText(group, "devicePid", tmp->items[1]);
+                        //             JSON_SetNumber(group, "pageIndex", pageIndex);
+                        //         }
+                        //         List_Delete(tmp);
+                        //     }
+                        // }
+
+                        // if (pageIndex < g_awsGroupPageNum) {
+                        //     // Send request to get next page
+                        //     char* topic = Aws_GetTopic(PAGE_GROUP, pageIndex + 1, TOPIC_GET_PUB);
+                        //     mqttCloudPublish(topic, "");
+                        //     free(topic);
+                        // } else {
+                        //     sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, g_syncingGroups);
+                        //     // Send request to get first page of scenes
+                        //     char* topic = Aws_GetTopic(PAGE_SCENE, 1, TOPIC_GET_PUB);
+                        //     mqttCloudPublish(topic, "");
+                        //     free(topic);
+                        // }
+                        break;
+                    }
+                    case TYPE_GET_SCENES: {
+                        // JSON* p = JSON_CreateObject();
+                        // int pageIndex = JSON_GetNumber(reported, "pageIndex");
+                        // if (pageIndex == 1) {
+                        //     JSON_Delete(g_syncingScenes);
+                        //     g_syncingScenes = JSON_CreateArray();
+                        // }
+
+                        // // Add groups from cloud to g_syncingScenes array
+                        // JSON_ForEach(item, reported) {
+                        //     if (cJSON_IsObject(item)) {
+                        //         JSON* scene = JArr_CreateObject(g_syncingScenes);
+                        //         list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
+                        //         if (tmp->count >= 5) {
+                        //             JSON_SetText(device, "deviceId", item->string);
+                        //             JSON_SetText(device, KEY_NAME, JSON_GetText(item, "name"));
+                        //             JSON_SetObject(device, "dictMeta", JSON_Clone(JSON_GetObject(item, "dictMeta")));
+                        //             JSON_SetText(device, KEY_ID_GATEWAY, JSON_GetText(item, "gateWay"));
+                        //             JSON_SetText(device, KEY_UNICAST, tmp->items[3]);
+                        //             JSON_SetText(device, "deviceAddr", tmp->items[3]);
+                        //             JSON_SetText(device, KEY_DEVICE_KEY, tmp->items[4]);
+                        //             JSON_SetNumber(device, KEY_PROVIDER, atoi(tmp->items[0]));
+                        //             JSON_SetText(device, KEY_PID, tmp->items[1]);
+                        //             JSON_SetText(device, "devicePid", tmp->items[1]);
+                        //             JSON_SetNumber(device, "pageIndex", pageIndex);
+                        //         }
+                        //         List_Delete(tmp);
+                        //     }
+                        // }
+
+                        // if (pageIndex < g_awsScenePageNum) {
+                        //     // Send request to get next page
+                        //     char* topic = Aws_GetTopic(PAGE_SCENE, pageIndex + 1, TOPIC_GET_PUB);
+                        //     mqttCloudPublish(topic, "");
+                        //     free(topic);
+                        // } else {
+                        //     sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, g_syncingScenes);
+                        //     g_awsSyncDatabaseStep = 0;
+                        // }
                         break;
                     }
                 }

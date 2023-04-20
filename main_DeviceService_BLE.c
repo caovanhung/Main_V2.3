@@ -393,24 +393,25 @@ void Ble_ProcessPacket()
                     JSON_Delete(packet);
                     break;
                 }
-                case GW_RESPONSE_CTR_IR: {
-                    logInfo("GW_RESPONSE_CTR_IR");
-                    uint8_t isState = bleFrames[i].param[1];
+                case GW_RESPONSE_IR: {
+                    logInfo("GW_RESPONSE_IR");
+                    uint16_t brandId = ((uint16_t)bleFrames[i].param[4] << 8) + bleFrames[i].param[3];
+                    uint8_t  remoteId = bleFrames[i].param[5];
+                    uint8_t  temp = bleFrames[i].param[6];
+                    uint8_t  mode = bleFrames[i].param[7];
+                    uint8_t  fan = bleFrames[i].param[8] >> 4;
+                    uint8_t  swing = bleFrames[i].param[8] & 0x0F;
+                    logInfo("brandId=%d, remoteId=%d, temp=%d, mode=%d, fan=%d, swing=%d", brandId, remoteId, temp, mode, fan, swing);
 
                     JSON* packet = JSON_CreateObject();
-                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                    JSON_SetText(packet, "dpAddr", tmp->address_element);
-                    JSON_SetNumber(packet, "dpValue", isState);
-                    if (g_senderId[0] != 0) {
-                        JSON_SetNumber(packet, "causeType", 1);
-                        JSON_SetText(packet, "causeId", g_senderId);
-                    } else {
-                        JSON_SetNumber(packet, "causeType", tmp->causeType);
-                        JSON_SetText(packet, "causeId", tmp->causeId);
-                    }
+                    JSON_SetNumber(packet, "brandId", brandId);
+                    JSON_SetNumber(packet, "remoteId", remoteId);
+                    JSON_SetNumber(packet, "temp", temp);
+                    JSON_SetNumber(packet, "mode", mode);
+                    JSON_SetNumber(packet, "fan", fan);
+                    JSON_SetNumber(packet, "swing", swing);
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
-                    g_senderId[0] = 0;
                     break;
                 }
                 default:
@@ -596,8 +597,7 @@ int main( int argc,char ** argv )
                             ble_controlCTL(dpAddr, lightness, colorTemperature);
                         }
                     }
-                    if (isContainString(HG_BLE_IR_TV, pid)) {
-                        irCommandType = 2;
+                    if (irCommandType > 0 && irBrandId > 0 && irRemoteId > 0) {
                         GW_ControlIR(dpAddr, irCommandType, irBrandId, irRemoteId, irTemp, irMode, irFan, irSwing);
                     }
                     break;
@@ -696,6 +696,9 @@ int main( int argc,char ** argv )
                     char* deviceKey = JSON_GetText(payload, "deviceKey");
                     int gatewayId = JSON_GetNumber(payload, "gatewayId");
                     set_inf_DV_for_GW(gatewayId, deviceAddr, devicePid, deviceKey);
+                    if (JSON_HasKey(payload, "command")) {
+                        GW_ControlIRCmd(JSON_GetText(payload, "command"));
+                    }
                     break;
                 }
                 case TYPE_DEL_DEVICE: {

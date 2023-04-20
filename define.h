@@ -98,8 +98,10 @@ extern int g_dbgLineNumber;
 #define TYPE_GET_SCENES                 (47U)
 #define TYPE_GET_GROUPS                 (48U)
 #define TYPE_SYNC_DB_DEVICES            (49U)
-#define TYPE_SET_DEVICE_TTL             (50U)
-#define TYPE_SET_GROUP_TTL              (51U)
+#define TYPE_SYNC_DB_GROUPS             (50U)
+#define TYPE_SYNC_DB_SCENES             (51U)
+#define TYPE_SET_DEVICE_TTL             (52U)
+#define TYPE_SET_GROUP_TTL              (53U)
 
 #define TYPE_SYNC_DEVICE_STATE          (99U)
 #define TYPE_GET_DEVICE_STATUS          (100U)
@@ -143,7 +145,7 @@ extern int g_dbgLineNumber;
 #define GW_RESPONSE_UPDATE_SCENE                        (81U)
 #define GW_RESPONSE_UPDATE_GROUP                        (82U)
 #define GW_RESPONSE_SET_TTL                             (83U)
-#define GW_RESPONSE_CTR_IR                              (84U)
+#define GW_RESPONSE_IR                              (84U)
 
 
 #define GW_RESPONSE_NOTIFI                              ( 111U)

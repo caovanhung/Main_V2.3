@@ -270,6 +270,15 @@ int Db_DeleteGroup(const char* groupAddr) {
     return 1;
 }
 
+int Db_DeleteAllGroup() {
+    char sqlCmd[100];
+    sprintf(sqlCmd, "DELETE FROM group_inf");
+    Sql_Exec(sqlCmd);
+    sprintf(sqlCmd, "DELETE FROM devices WHERE deviceId = address");
+    Sql_Exec(sqlCmd);
+    return 1;
+}
+
 int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex) {
     ASSERT(deviceId); ASSERT(addr);
     char sqlCmd[500];
@@ -495,6 +504,14 @@ JSON* Db_FindScene(const char* sceneId) {
 int Db_DeleteScene(const char* sceneId) {
     char sqlCmd[100];
     sprintf(sqlCmd, "DELETE FROM scene_inf WHERE sceneId = '%s'", sceneId);
+    Sql_Exec(sqlCmd);
+    Db_LoadSceneToRam();
+    return 1;
+}
+
+int Db_DeleteAllScene() {
+    char sqlCmd[100];
+    sprintf(sqlCmd, "DELETE FROM scene_inf");
     Sql_Exec(sqlCmd);
     Db_LoadSceneToRam();
     return 1;

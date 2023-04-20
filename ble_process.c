@@ -987,7 +987,6 @@ int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* origin
     return frameCount;
 }
 
-char str[10];
 int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame)
 {
     ASSERT(temp); ASSERT(frame);
@@ -1046,38 +1045,12 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         return GW_RESPONSE_DEVICE_CONTROL;
     } else if (frame->opcode == 0x800E && frame->paramSize >= 1) {
         return GW_RESPONSE_SET_TTL;
+    } else if (frame->opcode == 0xE511 && frame->paramSize >= 9 && frame->param[0] == 0x02) {
+        if (frame->param[1] == 0x0A) {
+            return GW_RESPONSE_IR;
+        }
     }
-    // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0xE1 &&rcv_uart_buff[9] == 0x11 && rcv_uart_buff[10] == 0x02 && rcv_uart_buff[11] == 0x04 && rcv_uart_buff[12] == 0x00)
-    // {
-    //     printf("GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE\n");
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     temp->address_element=address_t;
-    //     temp->value = KEY_TRUE;
-    //     return GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE;
-    // }
 
-    // //GW_RESPONSE_DIM_LED_SWITCH_HOMEGY
-    // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x82 &&rcv_uart_buff[9] == 0x4E)
-    // {
-    //     printf("GW_RESPONSE_DIM_LED_SWITCH_HOMEGY\n");
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     sprintf(value_t, "%02X%02X%02X%02X%02X", rcv_uart_buff[10],rcv_uart_buff[11],rcv_uart_buff[12],rcv_uart_buff[13],rcv_uart_buff[14]);
-    //     temp->address_element=address_t;
-    //     temp->value = value_t;
-    //     return GW_RESPONSE_DIM_LED_SWITCH_HOMEGY;
-    // }
-
-
-    // //GW_RESPONSE_SET_TIME_SENSOR_PIR
-    // else if(rcv_uart_buff[2] == 0x91&& rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0xE1 &&rcv_uart_buff[9] == 0x11 && rcv_uart_buff[10] == 0x02 && rcv_uart_buff[11] == 0x45 && rcv_uart_buff[12] == 0x03)
-    // {
-    //     printf("GW_RESPONSE_SET_TIME_SENSOR_PIR\n");
-    //     sprintf(address_t, "%02X%02X", rcv_uart_buff[4],rcv_uart_buff[5]);
-    //     sprintf(value_t, "%02X%02X",rcv_uart_buff[14],rcv_uart_buff[13]);
-    //     temp->address_element=address_t;
-    //     temp->value = value_t;
-    //     return GW_RESPONSE_SET_TIME_SENSOR_PIR;
-    // }
     return GW_RESPONSE_UNKNOW;
 }
 

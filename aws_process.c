@@ -2,7 +2,8 @@
 #include "time_t.h"
 
 
-static char g_homeId[30] = {0};
+static char* g_homeId;
+static char* g_thingId;
 
 void getHcInformation() {
     myLogInfo("Getting HC parameters");
@@ -11,8 +12,15 @@ void getHcInformation() {
     fread(buff, sizeof(char), 1000, f);
     fclose(f);
     JSON* setting = JSON_Parse(buff);
-    StringCopy(g_homeId, JSON_GetText(setting, "homeId"));
-    myLogInfo("HomeId: %s", g_homeId);
+    char* homeId = JSON_GetText(setting, "homeId");
+    char* thingId = JSON_GetText(setting, "thingId");
+    free(g_homeId);
+    free(g_thingId);
+    g_homeId = malloc(StringLength(homeId));
+    g_thingId = malloc(StringLength(thingId));
+    StringCopy(g_homeId, homeId);
+    StringCopy(g_thingId, thingId);
+    myLogInfo("HomeId: %s, ThingId: %s", g_homeId, g_thingId);
 }
 
 char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType) {
@@ -41,11 +49,11 @@ char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType) 
     }
 
     if (topicTypeStr && pageTypeStr) {
-        topic = (char*)malloc(strlen(MQTT_TOPIC_COMMON) + strlen(g_homeId) + strlen(topicTypeStr) + 10);
+        topic = (char*)malloc(strlen(g_thingId) + strlen(g_homeId) + strlen(topicTypeStr) + 50);
         if (pageType == PAGE_MAIN) {
-            sprintf(topic, "%s/%s/%s", MQTT_TOPIC_COMMON, g_homeId, topicTypeStr);
+            sprintf(topic, "$aws/things/%s/shadow/name/%s/%s", g_thingId, g_homeId, topicTypeStr);
         } else {
-            sprintf(topic, "%s/%s_%s_%d/%s", MQTT_TOPIC_COMMON, pageTypeStr, g_homeId, pageIndex, topicTypeStr);
+            sprintf(topic, "$aws/things/%s/shadow/name/%s_%s_%d/%s", g_thingId, pageTypeStr, g_homeId, pageIndex, topicTypeStr);
         }
     }
     return topic;
@@ -299,39 +307,6 @@ bool MOSQ_getTemplateAddDevice(char **result,Info_device *inf_device)
     return true;
 }
 
-bool MOSQ_getTemplateReponseAWSAddDevice(char **result,char *deviceID)
-{
-    JSON_Value *root_value = json_value_init_object();
-
-    JSON_Object *root_object = json_value_get_object(root_value);
-    char *serialized_string = NULL;
-
-
-    char *temp_str;
-    temp_str = calloc(100,sizeof(char));
-    sprintf(temp_str,"%s.%s.%s",KEY_STATE,KEY_REPORT,KEY_SENDER);
-    json_object_dotset_number(root_object, temp_str,SENDER_HC_VIA_CLOUD);
-
-    free(temp_str);
-    temp_str = calloc(100,sizeof(char));
-    sprintf(temp_str,"%s.%s.%s",KEY_STATE,KEY_REPORT,KEY_TYPE);
-    json_object_dotset_number(root_object, temp_str,TYPE_ADD_DEVICE);
-
-    free(temp_str);
-    temp_str = calloc(100,sizeof(char));
-    sprintf(temp_str,"%s.%s.%s.%s",KEY_STATE,KEY_REPORT,deviceID,KEY_STATE);
-    json_object_dotset_number(root_object, temp_str,TYPE_DEVICE_REPONSE_ADD_FROM_APP);
-    free(temp_str);
-
-    serialized_string = json_serialize_to_string_pretty(root_value);
-    int size_t = strlen(serialized_string);
-    *result = malloc(size_t+1);
-    memset(*result,'\0',size_t+1);
-    strcpy(*result,serialized_string);
-    json_free_serialized_string(serialized_string);
-    json_value_free(root_value);
-    return true;
-}
 /*
 Note: Have optimite *result = malloc(max_size_message_received);
 */
@@ -787,21 +762,6 @@ bool MOSQ_getTemplateDeleteGroupNormal(char **result,Info_group *info_group_t)
     return true;
 }
 
-/*
-Note: Have optimite *result = malloc(max_size_message_received);
-*/
-bool AWS_getTemplateFeedbackAddGateway(char **result,const char* ID, const char* IDgateway, int state )
-{
-    char *serialized_string = malloc(1000);
-    sprintf(serialized_string,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":{\"state\": %d}}}}}",TYPE_FEEDBACK_GATEWAY,SENDER_HC_VIA_CLOUD,ID,IDgateway,state);
-    printf("serialized_string %s\n",serialized_string );
-    int size_t = strlen(serialized_string);
-    *result = malloc(size_t+1);
-    memset(*result,'\0',size_t+1);
-    strcpy(*result,serialized_string);
-    free(serialized_string);
-    return true;
-}
 
 JSON* Aws_CreateCloudPacket(JSON* localPacket)
 {
@@ -812,67 +772,5 @@ JSON* Aws_CreateCloudPacket(JSON* localPacket)
     sprintf(packetStr,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":{\"%d\": %f},\"state\":%d }}}}", TYPE_UPDATE_DEVICE, SENDER_HC_VIA_CLOUD, deviceId, KEY_DICT_DPS, dpId, dpValue, TYPE_DEVICE_ONLINE);
     return JSON_Parse(packetStr);
 }
-/*
-Note: Have optimite *result = malloc(max_size_message_received);
-*/
 
-/*
-Note: Have optimite *result = malloc(max_size_message_received);
-*/
-
-bool AWS_getTemplateReponseStateDevice(char **result,const char* deviceID, const char* dpid, const char* dpvalue)
-{
-    char *serialized_string = malloc(1000);
-    if(isMatchString(dpvalue,KEY_TRUE))
-    {
-        sprintf(serialized_string,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":{\"%s\": true}}}}}",TYPE_UPDATE_DEVICE,SENDER_HC_VIA_CLOUD,deviceID,KEY_DICT_DPS,dpid);
-    }
-    else
-    {
-        sprintf(serialized_string,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":{\"%s\": false}}}}}",TYPE_UPDATE_DEVICE,SENDER_HC_VIA_CLOUD,deviceID,KEY_DICT_DPS,dpid);
-    }
-
-    int size_t = strlen(serialized_string);
-    *result = malloc(size_t+1);
-    memset(*result,'\0',size_t+1);
-    strcpy(*result,serialized_string);
-    free(serialized_string);
-    return true;
-}
-
-bool AWS_getTemplateReponseValueDevice(char **result,const char* deviceID, const char* dpid, int dpvalue)
-{
-    char *serialized_string = malloc(1000);
-
-    sprintf(serialized_string,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":{\"%s\": %d}}}}}",TYPE_UPDATE_DEVICE,SENDER_HC_VIA_CLOUD,deviceID,KEY_DICT_DPS,dpid,dpvalue);
-    printf("serialized_string %s\n",serialized_string );
-    int size_t = strlen(serialized_string);
-    *result = malloc(size_t+1);
-    memset(*result,'\0',size_t+1);
-    strcpy(*result,serialized_string);
-    free(serialized_string);
-    return true;
-}
-
-
-bool AWS_getTemplateReponseHistoryDevice(char **result,int sender,int type,const char* payload)
-{
-    JSON_Value *root_value = NULL;
-    char *serialized_string = NULL;
-
-    root_value = json_parse_string(payload);
-
-
-    json_object_set_number(json_object(root_value),KEY_SENDER,sender);
-    json_object_set_number(json_object(root_value),KEY_TYPE,type);
-
-    serialized_string = json_serialize_to_string_pretty(root_value);
-    int size_t = strlen(serialized_string);
-    *result = malloc(size_t+1);
-    memset(*result,'\0',size_t+1);
-    strcpy(*result,serialized_string);
-    json_free_serialized_string(serialized_string);
-    json_value_free(root_value);
-    return true;
-}
 
