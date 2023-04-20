@@ -34,7 +34,7 @@ typedef struct
     uint16_t flag;
     uint16_t sendAddr;
     uint16_t recvAddr;
-    uint16_t opcode;
+    uint32_t opcode;
     uint8_t param[50];
     uint8_t paramSize;
 
@@ -246,5 +246,13 @@ bool setResetDeviceSofware(const char *addressDevice);
 
 char *get_dpid(const char *code);
 int GW_SetTTL(const char *deviceAddr, uint8_t ttl);
+
+/*
+ * Control IR
+ * Models:
+ */
+int GW_ControlIRCmd(const char* command);
+int GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remoteId, int temp, int mode, int fan, int swing);
+
 
 #endif

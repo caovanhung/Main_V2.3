@@ -143,6 +143,7 @@ extern int g_dbgLineNumber;
 #define GW_RESPONSE_UPDATE_SCENE                        (81U)
 #define GW_RESPONSE_UPDATE_GROUP                        (82U)
 #define GW_RESPONSE_SET_TTL                             (83U)
+#define GW_RESPONSE_CTR_IR                              (84U)
 
 
 #define GW_RESPONSE_NOTIFI                              ( 111U)
@@ -310,6 +311,10 @@ extern int g_dbgLineNumber;
 
 
 #define HG_BLE_IR               "BLEHGAA0301"
+#define HG_BLE_IR_TV            "BLEHGAA0302"
+#define HG_BLE_IR_FAN           "BLEHGAA0303"
+#define HG_BLE_IR_AC            "BLEHGAA0304"
+
 #define HG_BLE_LIGHT_WHITE      "BLEHGAA0201"
 #define HG_BLE_SENSOR_MOTION    "BLEHGAA0401"
 

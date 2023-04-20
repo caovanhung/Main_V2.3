@@ -393,6 +393,26 @@ void Ble_ProcessPacket()
                     JSON_Delete(packet);
                     break;
                 }
+                case GW_RESPONSE_CTR_IR: {
+                    logInfo("GW_RESPONSE_CTR_IR");
+                    uint8_t isState = bleFrames[i].param[1];
+
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    JSON_SetText(packet, "dpAddr", tmp->address_element);
+                    JSON_SetNumber(packet, "dpValue", isState);
+                    if (g_senderId[0] != 0) {
+                        JSON_SetNumber(packet, "causeType", 1);
+                        JSON_SetText(packet, "causeId", g_senderId);
+                    } else {
+                        JSON_SetNumber(packet, "causeType", tmp->causeType);
+                        JSON_SetText(packet, "causeId", tmp->causeId);
+                    }
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    JSON_Delete(packet);
+                    g_senderId[0] = 0;
+                    break;
+                }
                 default:
                     logError("Packet type is not supported: %d", frameType);
                     break;
@@ -523,6 +543,7 @@ int main( int argc,char ** argv )
                     char* pid = JSON_GetText(payload, "pid");
                     cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
                     int lightness = -1, colorTemperature = -1;
+                    int irCommandType = 0, irBrandId = 0, irRemoteId = 0, irTemp = 0, irMode = 0, irFan = 0, irSwing = 1;
                     JSON_ForEach(o, dictDPs) {
                         int dpId = JSON_GetNumber(o, "id");
                         dpAddr = JSON_GetText(o, "addr");
@@ -541,11 +562,43 @@ int main( int argc,char ** argv )
                             lightness = dpValue;
                         } else if (dpId == 23) {
                             colorTemperature = dpValue;
+                        } else if (dpId == 3) {
+                            irCommandType = dpValue;
+                            logInfo("[TYPE_CTR_DEVICE] CommandType = %d", irCommandType);
+                        } else if (dpId == 1) {
+                            irBrandId = dpValue;
+                            logInfo("[TYPE_CTR_DEVICE] BrandId = %d", irBrandId);
+                        } else if (dpId == 2) {
+                            irRemoteId = dpValue;
+                            logInfo("[TYPE_CTR_DEVICE] RemoteId = %d", irRemoteId);
+                        } else if (dpId == 103) {
+                            irTemp = dpValue;
+                            logInfo("[TYPE_CTR_DEVICE] TempOrParam = %d", irTemp);
+                        } else if (dpId == 102) {
+                            irMode = dpValue;
+                            logInfo("[TYPE_CTR_DEVICE] Mode = %d", irMode);
+                        } else if (dpId == 104) {
+                            irFan = dpValue;
+                            logInfo("[TYPE_CTR_DEVICE] Fan = %d", irFan);
+                        } else if (dpId == 105) {
+                            irSwing = dpValue;
+                            logInfo("[TYPE_CTR_DEVICE] Swing = %d", irSwing);
+                        } else if (dpId == 106) {
+                            char* command = JSON_GetText(o, "valueString");
+                            if (StringCompare(pid, HG_BLE_IR)) {
+                                GW_ControlIRCmd(command);
+                            } else {
+                                irTemp = atoi(command);
+                            }
                         }
 
                         if (lightness >= 0 && colorTemperature >= 0) {
                             ble_controlCTL(dpAddr, lightness, colorTemperature);
                         }
+                    }
+                    if (isContainString(HG_BLE_IR_TV, pid)) {
+                        irCommandType = 2;
+                        GW_ControlIR(dpAddr, irCommandType, irBrandId, irRemoteId, irTemp, irMode, irFan, irSwing);
                     }
                     break;
                 }
@@ -646,9 +699,12 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_DEL_DEVICE: {
+                    char* pid = JSON_GetText(payload, "devicePid");
                     char* deviceId = JSON_GetText(payload, "deviceId");
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
-                    if (deviceAddr) {
+                    if (deviceAddr && !StringCompare(pid, HG_BLE_IR_TV) &&
+                                      !StringCompare(pid, HG_BLE_IR_FAN) &&
+                                      !StringCompare(pid, HG_BLE_IR_AC)) {
                         setResetDeviceSofware(deviceAddr);
                         logInfo("Deleted deviceId: %s, address: %s", deviceId, deviceAddr);
                     }

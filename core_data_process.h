@@ -47,22 +47,4 @@ typedef struct {
 
 
 bool addNewDevice(sqlite3 **db, JSON* packet);
-bool delDevice(sqlite3 **db,const char *deviceID);
 
-char *delDeviceIntoGroups(sqlite3 **db,const char *deviceID);
-char *delDeviceIntoScenes(sqlite3 **db,const char *deviceID);
-
-bool addSceneInfoToDatabase(sqlite3 **db,const char *object_);
-bool DeleteSceneInDatabase(sqlite3 **db,const char *sceneID);
-bool deleteSceneListOfDeviceFromSceneID(sqlite3 **db,const char *sceneID);
-
-
-bool addGateway(sqlite3 **db,const char *object_);
-bool addNewGroupNormal(sqlite3 **db,const char *object_);
-bool addNewGroupLink(sqlite3 **db,const char *object_);
-
-bool getInfoDeviceFromDatabase(sqlite3 **db,char **result);
-bool getInfoTypeSceneFromDatabase(sqlite3 **db,char **result,int isLocal);
-bool getInfoSceneIdFromDatabase(sqlite3 **db,char **result,char *sceneID);
-bool getInfoGroupFromDatabase(sqlite3 **db,char **result,char *groupAddress);
-bool checkTypeSceneWithInfoIntoDatabase(sqlite3 **db,char *sceneID);

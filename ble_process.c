@@ -1302,3 +1302,30 @@ int GW_SetTTL(const char *deviceAddr, uint8_t ttl) {
     data[12] = ttl;
     return sendFrameToGwIndex(1, addrHex, data, 13);
 }
+
+int GW_ControlIRCmd(const char* command) {
+    ASSERT(command); ASSERT(strlen(command) >= 46);
+    uint8_t data[50];
+    String2HexArr(command, data);
+    uint16_t addr = ((uint16_t)data[9] << 8) + data[8];
+    return sendFrameToAnyGw(addr, data, strlen(command) / 2);
+}
+
+int GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remoteId, int temp, int mode, int fan, int swing)
+{
+    ASSERT(deviceAddr);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0xff,0xff,   0xE4,0x11,0x02,0x00,0x00,    0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[15] = (uint8_t)(commandType);
+    data[16] = (uint8_t)(brandId);
+    data[17] = (uint8_t)(brandId >> 8);
+    data[18] = (uint8_t)(remoteId);
+    data[19] = (uint8_t)(temp);
+    data[20] = (uint8_t)(mode);
+    data[21] = (uint8_t)(fan);
+    data[22] = (uint8_t)(swing);
+    return sendFrameToAnyGw(dpAddrHex, data, 23);
+}
+

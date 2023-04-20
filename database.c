@@ -326,11 +326,20 @@ int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr) {
     return rowCount;
 }
 
-int Db_SaveDpValue(const char* dpAddr, int dpId, double value) {
-    ASSERT(dpAddr);
+int Db_SaveDpValue(const char* deviceId, int dpId, double value) {
+    ASSERT(deviceId);
     char sqlCmd[200];
     long long int currentTime = timeInMilliseconds();
-    sprintf(sqlCmd, "UPDATE devices SET dpValue='%f', updateTime=%lld WHERE address='%s' AND dpId=%d", value, currentTime, dpAddr, dpId);
+    sprintf(sqlCmd, "UPDATE devices SET dpValue='%f', updateTime=%lld WHERE deviceId='%s' AND dpId=%d", value, currentTime, deviceId, dpId);
+    Sql_Exec(sqlCmd);
+    return 1;
+}
+
+int Db_SaveDpValueString(const char* deviceId, int dpId, const char* value) {
+    ASSERT(deviceId); ASSERT(value);
+    char sqlCmd[500];
+    long long int currentTime = timeInMilliseconds();
+    sprintf(sqlCmd, "UPDATE devices SET dpValue='%s', updateTime=%lld WHERE deviceId='%s' AND dpId=%d", value, currentTime, deviceId, dpId);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -671,239 +680,6 @@ bool creat_table_database_log(sqlite3 **db)
     return true;
 }
 
-bool sql_insertDataTableGateway(sqlite3 **db,const char* address,const char* appkey,const char* ivIndex,const char* netkeyIndex,const char* netkey,const char* appkeyIndex,const char* deviceKey)
-{
-    int check = 0;
-    char *sql =(char*) malloc(1024 * sizeof(char));
-    sprintf(sql,"INSERT INTO GATEWAY VALUES(\'%s\',\'%s\',\'%s\',\'%s\',\'%s\',\'%s\',\'%s\');",address,appkey,ivIndex,netkeyIndex,netkey,appkeyIndex,deviceKey);
-    check = sql_insert_data_table(db,sql);
-
-    sql = NULL;
-    free(sql);
-    if(check == -1)
-    {
-        return false;
-    }
-    return true;
-}
-
-bool sql_insertDataTableDevices(sqlite3 **db,const char* deviceID,const char* dpID,const char* address,const char* dpvalue,int state)
-{
-    int check = 0;
-    char *sql =(char*) malloc(1024 * sizeof(char));
-    sprintf(sql,"INSERT INTO DEVICES VALUES(\'%s\',\'%s\',\'%s\',\'%s\',%d);",deviceID,dpID,address,dpvalue,state);
-    check = sql_insert_data_table(db,sql);
-    sql = NULL;
-    free(sql);
-    if(check == -1)
-    {
-        return false;
-    }
-    return true;
-}
-
-bool sql_insertDataTableDevicesInf(sqlite3 **db,const char* deviceID,int status,const char* name,
-    const char* MAC,const char* Unicast,const char* IDgateway,const char* deviceKey,
-    int provider,const char* pid,int created,
-    int modified,int last_updated,const char* firmware,
-    const char* GroupList,const char* SceneList)
-{
-    int check = 0;
-    char *sql =(char*) malloc(1024 * sizeof(char));
-    sprintf(sql,"INSERT INTO DEVICES_INF VALUES(\'%s\',%d,\'%s\',\'%s\',\'%s\',\'%s\',\'%s\',%d,\'%s\',%d,%d,%d,\'%s\',\'%s\',\'%s\');",deviceID,status,name,MAC,Unicast,IDgateway,deviceKey,provider,pid,created,modified,last_updated,firmware,GroupList,SceneList);
-    check = sql_insert_data_table(db,sql);
-
-    sql = NULL;
-    free(sql);
-    if(check == -1)
-    {
-        return false;
-    }
-    return true;
-}
-
-bool sql_insertDataTableGroupInf(sqlite3 **db,const char* groupAdress, int state,const char* name,const char* pid,const char* devices)
-{
-
-    int check = 0;
-    char *sql =(char*) malloc(10000 * sizeof(char));
-    sprintf(sql,"INSERT INTO GROUP_INF VALUES(\'%s\',%d, \'%s\',\'%s\',\'%s\');",groupAdress,state,name,pid,devices);
-    check = sql_insert_data_table(db,sql);
-    sql = NULL;
-    free(sql);
-    if(check == -1)
-    {
-        return false;
-    }
-    return true;
-}
-
-bool sql_insertDataTableSceneInf(sqlite3 **db,const char* sceneId,int isLocal, int state,const char* name,const char* sceneType,const char* actions,const char* conditions, int created, int last_updated)
-{
-
-    int check = 0;
-    char *sql =(char*) malloc(10000 * sizeof(char));
-    sprintf(sql,"INSERT INTO SCENE_INF VALUES(\'%s\',%d, %d, \'%s\',\'%s\',\'%s\',\'%s\',%d,%d);",sceneId,isLocal,state,name,sceneType,actions,conditions,created,last_updated);
-    check = sql_insert_data_table(db,sql);
-    sql = NULL;
-    free(sql);
-    if(check == -1)
-    {
-        return false;
-    }
-    return true;
-
-}
-
-bool sql_insertDataTableDeviceLog(sqlite3 **db,const char* deviceID,const char* dpID,const char* dpvalue,long long TimeCreat)
-{
-    if(deviceID == NULL || dpID == NULL || dpvalue == NULL)
-    {
-        return false;
-    }
-    int check = 0;
-    char *sql =(char*) malloc(10000 * sizeof(char));
-    sprintf(sql,"INSERT INTO DEVICE_LOG VALUES(\'%s\',\'%s\',\'%s\',%lld);",deviceID,dpID,dpvalue,TimeCreat);
-    printf("sql %s\n",sql );
-    check = sql_insert_data_table(db,sql);
-    sql = NULL;
-    free(sql);
-    if(check == -1)
-    {
-        return false;
-    }
-    return true;
-}
-
-bool sql_updateStateDeviceTableDevices(sqlite3 **db,const char *deviceID,int state)
-{
-    if(deviceID == NULL)
-    {
-        return false;
-    }
-    char *err_msg = 0;
-    char *sql = (char*) malloc(1024 * sizeof(char));
-    sprintf(sql,"UPDATE DEVICES SET %s = '%d' WHERE %s = '%s';",KEY_STATE,state,KEY_DEVICE_ID,deviceID);
-    int rc = sqlite3_exec(*db, sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK )
-    {
-        printf("err_msg =  %s\n",err_msg );
-        free(sql);
-        sqlite3_free(err_msg);
-        return false;
-    }
-    free(sql);
-    return true;
-}
-
-bool sql_updateStateDeviceTableDevicesInf(sqlite3 **db,const char *deviceID,int state)
-{
-    if(deviceID == NULL)
-    {
-        return false;
-    }
-    char *err_msg = 0;
-    char *sql = (char*) malloc(1024 * sizeof(char));
-    sprintf(sql,"UPDATE DEVICES_INF SET %s = '%d' WHERE %s = '%s';",KEY_STATE,state,KEY_DEVICE_ID,deviceID);
-    int rc = sqlite3_exec(*db, sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK )
-    {
-        printf("err_msg =  %s\n",err_msg );
-        free(sql);
-        sqlite3_free(err_msg);
-        return false;
-    }
-    free(sql);
-    return true;
-}
-
-bool sql_updateStateInTableWithCondition(sqlite3 **db,const char *name_table,const char *key,int state,const char *key_condition,const char *value_condition)
-{
-    if(key == NULL || key_condition == NULL || value_condition == NULL)
-    {
-        return false;
-    }
-    char *err_msg = 0;
-    char *sql = (char*) malloc(1024 * sizeof(char));
-    sprintf(sql,"UPDATE %s SET %s = '%d' WHERE %s = '%s';",name_table,key,state,key_condition,value_condition);
-    int rc = sqlite3_exec(*db, sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK )
-    {
-        printf("err_msg =  %s\n",err_msg );
-        free(sql);
-        sqlite3_free(err_msg);
-        return false;
-    }
-    free(sql);
-    return true;
-}
-
-bool sql_updateStateInTableWithMultileCondition(sqlite3 **db,const char *name_table,const char *key,int state,const char *key_condition_1,const char *value_condition_1,const char *key_condition_2,const char *value_condition_2)
-{
-    if(key == NULL || key_condition_1 == NULL || value_condition_1 == NULL || key_condition_2 == NULL || value_condition_2 == NULL)
-    {
-        return false;
-    }
-    char *err_msg = 0;
-    char *sql = (char*) malloc(1024 * sizeof(char));
-    sprintf(sql,"UPDATE %s SET %s = '%d' WHERE %s = '%s' AND %s = '%s';",name_table,key,state,key_condition_1,value_condition_1,key_condition_2,value_condition_2);
-    int rc = sqlite3_exec(*db, sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK )
-    {
-        printf("err_msg =  %s\n",err_msg );
-        free(sql);
-        sqlite3_free(err_msg);
-        return false;
-    }
-    free(sql);
-    return true;
-}
-
-bool sql_updateValueInTableWithCondition(sqlite3 **db,const char *name_table,const char *key,const char *value,const char *key_condition,const char *value_condition)
-{
-    if(key == NULL || value == NULL || key_condition == NULL || value_condition == NULL)
-    {
-        return false;
-    }
-
-    size_t leng = strlen(value) + strlen(value_condition) + 300;
-
-
-    char *err_msg = 0;
-    char *sql = (char*) calloc(leng,sizeof(char));
-    sprintf(sql,"UPDATE %s SET %s = '%s' WHERE %s = '%s';",name_table,key,value,key_condition,value_condition);
-    int rc = sqlite3_exec(*db, sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK )
-    {
-        printf("err_msg =  %s\n",err_msg );
-        free(sql);
-        sqlite3_free(err_msg);
-        return false;
-    }
-    free(sql);
-    return true;
-}
-
-bool sql_updateValueInTableWithMultileCondition(sqlite3 **db,const char *name_table,const char *key,const char *value,const char *key_condition_1,const char *value_condition_1,const char *key_condition_2,const char *value_condition_2)
-{
-    if(key == NULL || value == NULL || key_condition_1 == NULL || value_condition_1 == NULL || key_condition_2 == NULL || value_condition_2 == NULL)
-    {
-        return false;
-    }
-    char *err_msg = 0;
-    char *sql = (char*) malloc(1024 * sizeof(char));
-    sprintf(sql,"UPDATE %s SET %s = '%s' WHERE %s = '%s' AND %s = '%s';",name_table,key,value,key_condition_1,value_condition_1,key_condition_2,value_condition_2);
-    int rc = sqlite3_exec(*db, sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK )
-    {
-        printf("err_msg =  %s\n",err_msg );
-        free(sql);
-        sqlite3_free(err_msg);
-        return false;
-    }
-    free(sql);
-    return true;
-}
 
 
 bool sql_deleteDeviceInTable(sqlite3 **db ,const char *name_table,const char *key,const char *value)

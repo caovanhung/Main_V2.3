@@ -127,7 +127,8 @@ int Db_SaveGroupDevices(const char* groupAddr, const char* devices);
 int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex);
 int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId);
 int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr);
-int Db_SaveDpValue(const char* dpAddr, int dpId, double value);
+int Db_SaveDpValue(const char* deviceId, int dpId, double value);
+int Db_SaveDpValueString(const char* deviceId, int dpId, const char* value);
 
 int Db_LoadSceneToRam();
 int Db_SaveSceneCondRepeat(const char* sceneId, int conditionIndex, uint8_t repeat);
@@ -149,22 +150,6 @@ int sql_insert_data_table(sqlite3 **db,char *sql);
 int sql_creat_table(sqlite3 **db,char *name_table);
 bool creat_table_database(sqlite3 **db);
 bool creat_table_database_log(sqlite3 **db);
-
-bool sql_insertDataTableGateway(sqlite3 **db,const char* address,const char* appkey,const char* ivIndex,const char* netkeyIndex,const char* netkey,const char* appkeyIndex,const char* deviceKey);
-bool sql_insertDataTableDevices(sqlite3 **db,const char* deviceID,const char* dpID,const char* address,const char* dpvalue,int state);
-bool sql_insertDataTableDevicesInf(sqlite3 **db,const char* deviceID,int status,const char* name,const char* MAC,const char* Unicast,const char* IDgateway,const char* deviceKey,int provider,const char* pid,int created,int modified,int last_updated,const char* firmware,const char* GroupList,const char* SceneList);
-bool sql_insertDataTableGroupInf(sqlite3 **db,const char* groupAdress, int state,const char* name,const char* pid,const char* devices);
-bool sql_insertDataTableSceneInf(sqlite3 **db,const char* sceneId,int isLocal, int state,const char* name,const char* sceneType,const char* actions,const char* conditions, int created, int last_updated);
-bool sql_insertDataTableDeviceLog(sqlite3 **db,const char* deviceID,const char* dpID,const char* dpvalue,long long TimeCreat);
-
-bool sql_updateStateDeviceTableDevices(sqlite3 **db,const char *deviceID,int state);
-bool sql_updateStateDeviceTableDevicesInf(sqlite3 **db,const char *deviceID,int state);
-
-bool sql_updateStateInTableWithCondition(sqlite3 **db,const char *name_table,const char *key,int state,const char *key_condition,const char *value_condition);
-bool sql_updateStateInTableWithMultileCondition(sqlite3 **db,const char *name_table,const char *key,int state,const char *key_condition_1,const char *value_condition_1,const char *key_condition_2,const char *value_condition_2);
-
-bool sql_updateValueInTableWithCondition(sqlite3 **db,const char *name_table,const char *key,const char *value,const char *key_condition,const char *value_condition);
-bool sql_updateValueInTableWithMultileCondition(sqlite3 **db,const char *name_table,const char *key,const char *value,const char *key_condition_1,const char *value_condition_1,const char *key_condition_2,const char *value_condition_2);
 
 bool sql_deleteDeviceInTable(sqlite3 **db ,const char *name_table,const char *key,const char *value);
 

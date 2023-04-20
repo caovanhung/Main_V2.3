@@ -135,3 +135,81 @@ Tính năng gộp bản tin update thiết bị trước khi đẩy lên aw
           từng pageIndex và từng deviceId theo cấu trúc trên.
         - Dùng 1 task Aws_SendMergePayload chạy mỗi 300ms để đọc và gửi tất cả các bản tin
           trong object g_mergePayloads lên cloud
+
+
+Tính năng IR:
+    1. Thao tác dữ liệu vùng nhớ  --> Device xử lý
+
+    2. Lệnh phát hồng ngoại theo dữ liệu vùng nhớ --> có phản hồi( đợi Quân bổ sung)
+    3. Lệnh phát hồng ngoại theo hàm điều khiển điều hòa --> phát theo hàm arduino ( chỉ dùng cho điều hòa), có phản hồi( đợi Quân bổ sung)
+
+    4. Lệnh cài đặt nhận diện điều khiển và khẩu lệnh --> gán nhãn điều khiển cho thiết bị, để nhận phản hồi khi thay đổi | khẩu lệnh : 30 độ ứng với điều hòa nào (có phàn hồi lệnh 10)
+    5. Lệnh xử lý tự học --->(setup) dùng tự học : vùng nhớ (2:20 tự lưu) (có phản hồi, lệnh 11)
+
+    6. Lệnh cài đặt kịch bản LC --> có phản hồi( đợi Quân bổ sung)
+
+    7. Lệnh cài đặt mạng wifi --> check lại với a Sỹ ( 32byte max)
+    8 Lệnh cập nhật phần mềm --> có phản hồi( đợi Quân bổ sung)
+    10. Phản hồi thông tin nhận diện hồng ngoại và giọng nói --> phản hồi cho lệnh 4
+    11. Phản hồi trạng thái tự học---> phản hồi cho lệnh 5
+    12. Cài đặt câu lệnh wakeup  --> có phản hồi( đợi Quân bổ sung)
+
+
+    13. Lệnh cài đặt địa chỉ gateway -->APP xử lý
+    17. Phản hồi trạng thái lưu địa chỉ gateway -->APP xử lý
+    14. Lệnh kích hoạt thiết bị -->APP xử lý
+    18. Phản hồi trạng thái kích hoạt thiết bị -->APP xử lý
+
+
+    15. Lệnh mở/khóa hãng  --> có phản hồi( đợi Quân bổ sung)
+    16. Lệnh mở/khóa người dùng(khóa trẻ em) --> có phản hồi
+    19. Phản hồi trạng thái người dùng --> phản hồi cho lệnh 16
+    20. Phải hồi kịch bản gióng nói LC --> phản hồi ID kịch bản được gọi từ giọng nói
+
+
+
+    Các bước thêm thiết bị IR:
+        1. cài đặt địa chỉ gateway và  kích hoạt thiết bị
+            ( đã có thể chạy được lệnh 2,3)
+        2. VOICE: Đã có wakeup mặc định là (NHẬN DIỆN GIỌNG NÓI)
+            2.1 Cài đặt nhận diện điều khiển và khẩu lệnh (A Sỹ chưa làm)
+        3. TỰ học
+            3.1 Lệnh xử lý tự học
+        4. KỊch bản:
+            4.1 Cài đặt kịch bản LC
+            4.2 kịch bản gióng nói LC
+        5. OTA
+            5.1 Cài wifi
+            5.2 Lệnh 8 cập nhật phần mềm
+
+
+        Them dieu hoa
+        {"state":{"reported":{"1681781011704":{"name":"Điều hoà","devices":"2|BLEHGAA0304|C049EF6A0C16|B206|B65195EFF91583B86CF09C6DD144985F|","parentID":"C049EF6A0C16","gateWay":"A000","dictDPs":{"4":true,"105":3,"103":0,"102":1,"106":"00000000","1":114,"3":3,"101":false,"104":2,"2":1},"dictMeta":{"3":"B206","104":"B206","101":"B206","105":"B206","4":"B206","102":"B206","103":"B206","106":"B206","1":"B206","2":"B206"},"led":1,"state":2},"pageIndex":1,"type":2,"sender":1,"senderid":"42C8FACD-C854-43C9-7959-FA3B527F81CB"}}}
+
+        DK dieuf hòa
+        {"state":{"reported":{"1681781011704":{"dictDPs":{"3":1,"2":1,"1":24,"102":2,"103":18,"105":3,"101":false,"104":2}},"type":4,"senderid":"36EB581C-F0F0-4DFD-BF71-34AC18D4DAB1","provider":2,"sender":1}}}
+
+        Lệnh cài đặt nhận diện điều khiển và khẩu lệnh (Mã 0x04)
+
+
+
+
+        Thư viện : chỉ diều hòa
+        Vùng nhớ : điều hòa, tivi, quạt
+
+        "1": "BrandId",
+        "2": "Remote",
+        "3": "Type Command", (1: điều khiển qua thư viện - lệnh 3 của IR, 2: điều khiển theo vùng nhớ - lệnh 2 của IR)
+        "4": "Voice",
+        "101": "OnOff",
+        "102": "Mode",
+        "103": "Temp",
+        "104": "Fan",
+        "105": "Swing",
+        "106": "Command"
+
+
+        Lệnh 3: E8 FF 00 00 00 00 00 00 ad ad E4 11 02 00 00 03 18 00 01 19 02
+
+        Lệnh 4: 04 02 05 18 00 01 00 00
+                04 02 03 18 00 01 00 00

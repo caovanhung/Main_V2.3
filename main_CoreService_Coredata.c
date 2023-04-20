@@ -563,7 +563,7 @@ int main( int argc,char ** argv )
                             JSON_SetNumber(payload, "dpId", dpInfo.id);
                             JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);
                             JSON_SetNumber(payload, "pageIndex", dpInfo.pageIndex);
-                            Db_SaveDpValue(dpAddr, dpInfo.id, dpValue);
+                            Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
                             Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
                             Db_AddDeviceHistory(payload);
                             Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
@@ -604,7 +604,7 @@ int main( int argc,char ** argv )
                         if (foundDevices == 1) {
                             JSON_SetText(payload, "deviceId", deviceInfo.id);
                             sendPacketTo(SERVICE_AWS, reqType, payload);
-                            Db_SaveDpValue(deviceAddr, dpId, dpValue);
+                            Db_SaveDpValue(deviceInfo.id, dpId, dpValue);
                             JSON_SetNumber(payload, "causeType", 0);
                             JSON_SetText(payload, "causeId", "");
                             JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);
@@ -702,7 +702,7 @@ int main( int argc,char ** argv )
                             JSON* packet = JSON_CreateObject();
                             JSON_SetText(packet, "pid", deviceInfo.pid);
                             JSON_SetText(packet, "senderId", senderId);
-                            cJSON* dictDPs = JSON_AddArray(packet, "dictDPs");
+                            JSON* dictDPs = JSON_AddArray(packet, "dictDPs");
                             JSON_ForEach(o, originDPs) {
                                 int dpId = atoi(o->string);
                                 DpInfo dpInfo;
@@ -712,7 +712,23 @@ int main( int argc,char ** argv )
                                     JSON_SetNumber(dp, "id", dpId);
                                     JSON_SetText(dp, "addr", dpInfo.addr);
                                     JSON_SetNumber(dp, "value", o->valueint);
+                                    JSON_SetText(dp, "valueString", o->valuestring);
                                     cJSON_AddItemToArray(dictDPs, dp);
+                                }
+                            }
+                            if (StringCompare(deviceInfo.pid, HG_BLE_IR_AC) ||
+                                StringCompare(deviceInfo.pid, HG_BLE_IR_TV) ||
+                                StringCompare(deviceInfo.pid, HG_BLE_IR_FAN)) {
+                                for (int dpId = 1; dpId <= 3; dpId++) {
+                                    DpInfo dpInfo;
+                                    int dpFound = Db_FindDp(&dpInfo, deviceId, dpId);
+                                    if (dpFound) {
+                                        cJSON* dp = JSON_CreateObject();
+                                        JSON_SetNumber(dp, "id", dpId);
+                                        JSON_SetText(dp, "addr", dpInfo.addr);
+                                        JSON_SetNumber(dp, "value", dpInfo.value);
+                                        cJSON_AddItemToArray(dictDPs, dp);
+                                    }
                                 }
                             }
                             sendPacketTo(SERVICE_BLE, reqType, packet);
@@ -853,21 +869,26 @@ int main( int argc,char ** argv )
 
                         // Add new devices if any
                         JSON_ForEach(d, devicesNeedAdd) {
-                            char* gatewayAddr = JSON_GetText(d, KEY_ID_GATEWAY);
+                            // logInfo(cJSON_PrintUnformatted(d));
                             int provider = JSON_GetNumber(d, KEY_PROVIDER);
-                            int gatewayId = Db_FindGatewayId(gatewayAddr);
-                            if (gatewayId >= 0 && provider == HOMEGY_BLE) {
-                                int pageIndex = JSON_GetNumber(d, "pageIndex");
-                                JSON_SetNumber(d, "gatewayId", gatewayId);
-                                sendPacketTo(SERVICE_BLE, TYPE_ADD_DEVICE, d);
-                                char* deviceId = JSON_GetText(d, "deviceId");
-                                JSON* dictMeta = JSON_GetObject(d, "dictMeta");
-                                JSON_ForEach(dp, dictMeta) {
-                                    int dpId = atoi(dp->string);
-                                    Db_AddDp(deviceId, dpId, dp->valuestring, pageIndex);
+                            char* deviceId = JSON_GetText(d, "deviceId");
+                            if (deviceId) {
+                                if (provider == HOMEGY_BLE) {
+                                    char* gatewayAddr = JSON_GetText(d, KEY_ID_GATEWAY);
+                                    int gatewayId = Db_FindGatewayId(gatewayAddr);
+                                    if (gatewayId >= 0) {
+                                        int pageIndex = JSON_GetNumber(d, "pageIndex");
+                                        JSON_SetNumber(d, "gatewayId", gatewayId);
+                                        sendPacketTo(SERVICE_BLE, TYPE_ADD_DEVICE, d);
+                                        JSON* dictMeta = JSON_GetObject(d, "dictMeta");
+                                        JSON_ForEach(dp, dictMeta) {
+                                            int dpId = atoi(dp->string);
+                                            Db_AddDp(deviceId, dpId, dp->valuestring, pageIndex);
+                                        }
+                                    }
                                 }
                                 Db_AddDevice(d);
-                                logInfo("Added device %s", deviceId);
+                                logInfo("Added device %s to database", deviceId);
                             }
                         }
                         break;
