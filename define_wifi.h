@@ -11,3 +11,6 @@
 
 #define CTR_DEVICE  "POST"
 #define CTR_SCENE   "PUT"
+
+#define MaxNumberRetry   (10U)
+#define MaxTimeGetToken_Second   (119U)

@@ -91,15 +91,17 @@ void List_ToString(list_t* l, const char* separator, char* resultStr) {
 
 list_t* String_Split(const char* str, const char* delim) {
     list_t* resultList = List_Create();
-    // Copy to temp string before split because strtok will modify the original string
-    char* tmpString = malloc(strlen(str) + 1);
-    strcpy(tmpString, str);
-    // Split string
-    char * token = strtok(tmpString, delim);
-    while (token != NULL) {
-        List_PushString(resultList, token);
-        token = strtok(NULL, delim);
+    if (str && delim) {
+        // Copy to temp string before split because strtok will modify the original string
+        char* tmpString = malloc(strlen(str) + 1);
+        strcpy(tmpString, str);
+        // Split string
+        char * token = strtok(tmpString, delim);
+        while (token != NULL) {
+            List_PushString(resultList, token);
+            token = strtok(NULL, delim);
+        }
+        free(tmpString);
     }
-    free(tmpString);
     return resultList;
 }

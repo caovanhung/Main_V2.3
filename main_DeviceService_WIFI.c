@@ -112,6 +112,9 @@ void* RUN_MQTT_LOCAL(void* p)
 
 int main( int argc,char ** argv )
 {
+    long long GetAccessTokenTime = 0;
+
+    int retry = 0;
     int size_queue = 0;
     bool check_flag = false;
     pthread_t thr[2];
@@ -128,11 +131,21 @@ int main( int argc,char ** argv )
     }
 
     char access_token[40] = {'\0'};
-    check_flag = get_access_token(access_token);
-    if(check_flag)
+    char access_token_refresh[40] = {'\0'};
+
+    do
     {
-        LogInfo((get_localtime_now()),("access_token = %s",access_token));
-    }
+        check_flag = get_access_token(access_token,access_token_refresh);
+        if(!check_flag){
+            LogError((get_localtime_now()),("Not get access token!!!"));
+        }
+        sleep(1);
+    } while (!check_flag);
+    GetAccessTokenTime = timeInMilliseconds();
+    LogInfo((get_localtime_now()),("GetAccessTokenTime = %lld",GetAccessTokenTime));
+    LogInfo((get_localtime_now()),("access_token = %s",access_token));
+    LogInfo((get_localtime_now()),("access_token_refresh = %s",access_token_refresh));
+
     char val_input[MAX_SIZE_ELEMENT_QUEUE] = {'\0'};
     char body[1000] = {'\0'};
     char message[MAX_SIZE_ELEMENT_QUEUE] = {'\0'};
@@ -145,9 +158,7 @@ int main( int argc,char ** argv )
         size_queue = get_sizeQueue(queue_received);
         if(size_queue > 0)
         {
-            int reponse = 0, type = 0;
             pthread_t t_thread;
-
             memset(val_input,'\0',MAX_SIZE_ELEMENT_QUEUE);
             strcpy(val_input,(char *)dequeue(queue_received));
             LogInfo((get_localtime_now()),("val_input = %s",val_input));
@@ -169,77 +180,78 @@ int main( int argc,char ** argv )
             JSON_ForEach(dp, dictDPs) {
                 code = JSON_GetText(dp, "addr");
             }
+            long long currentTime = timeInMilliseconds();
+            if((currentTime - GetAccessTokenTime)/1000/60 >= MaxTimeGetToken_Second)
+            {
+                do
+                {
+                    check_flag = refresh_token(access_token_refresh,access_token);
+                    if(!check_flag){
+                        LogError((get_localtime_now()),("Not get access token!!!"));
+                    }
+                    sleep(1);
+                } while (!check_flag);
+                GetAccessTokenTime = timeInMilliseconds();
+                LogInfo((get_localtime_now()),("GetAccessTokenTime = %lld",GetAccessTokenTime));
+                LogInfo((get_localtime_now()),("refresh_token = %s",access_token));
+                LogInfo((get_localtime_now()),("refresh_token = %s",access_token_refresh));
+            }
 
             switch(type_action_t)
             {
-                case TYPE_MANAGER_PING_ON_OFF:
-                {
-                    LogInfo((get_localtime_now()),("[TYPE_MANAGER_PING_ON_OFF] NameService = %s",NameService));
-                    break;
-                }
                 case TYPE_CTR_DEVICE:
                 {
                     memset(body,'\0',1000);
                     memset(message,'\0',MAX_SIZE_ELEMENT_QUEUE);
                     sprintf(body, "{\"commands\": [%s]}", code);
-                    switch(json_value_get_type(json_object_get_value(json_object(object),KEY_DP_VAL)))
-                    {
-                        case JSONString:
-                        {
-                            LogInfo((get_localtime_now()),("[TYPE_MANAGER_PING_ON_OFF] JSONString"));
-                            sprintf(body,"{\"commands\": [{\"code\": \"%s\", \"value\": \"%s\"}]}",code,json_object_get_string(json_object(object),KEY_DP_VAL));
-                            break;
-                        }
-                        case JSONBoolean:
-                        {
-                            LogInfo((get_localtime_now()),("[TYPE_MANAGER_PING_ON_OFF] JSONBoolean"));
-                            value = json_object_get_boolean(json_object(object),KEY_DP_VAL);
-                            if(value)
-                            {
-                                sprintf(body,"{\"commands\": [{\"code\": \"%s\", \"value\": true}]}",code);
-                            }
-                            else
-                            {
-                                sprintf(body,"{\"commands\": [{\"code\": \"%s\", \"value\": false}]}",code);
-                            }
-                            break;
-                        }
-                        case JSONNumber:
-                        {
-                            LogInfo((get_localtime_now()),("[TYPE_MANAGER_PING_ON_OFF] JSONNumber"));
-                            sprintf(body,"{\"commands\": [{\"code\": \"%s\", \"value\": %d}]}",code,json_object_get_number(json_object(object),KEY_DP_VAL));
-                            break;
-                        }
-                    }
-                    if(!strlen(access_token))
-                    {
-                        get_access_token(access_token);
+                    if(!strlen(access_token)){
+                        get_access_token(access_token,access_token_refresh);
                         break;
                     }
                     sprintf(message,"/v1.0/devices/%s/commands",deviceID);
-                    send_commands(access_token,CTR_DEVICE,message, body);
+                    check_flag = send_commands(access_token,CTR_DEVICE,message, body);
+                    if(!check_flag){
+                        retry = 0;
+                        do
+                        {
+                            check_flag = send_commands(access_token,CTR_DEVICE,message, body);
+                            retry++;
+                        } while (!check_flag && retry < MaxNumberRetry);
+                        if(retry >= MaxNumberRetry){
+                            LogInfo((get_localtime_now()),("TIME OUT"));
+                        }
+                    }
                     break;
                 }
                 case TYPE_CTR_SCENE:
                 {
                     LogInfo((get_localtime_now()),("TYPE_CTR_SCENE_HC"));
                     int state = JSON_GetNumber(payload, "state");
-                    if(!strlen(access_token))
-                    {
-                        get_access_token(access_token);
+                    if(!strlen(access_token)){
+                        get_access_token(access_token,access_token_refresh);
                         break;
                     }
                     memset(body,'\0',1000);
                     memset(message,'\0',1000);
                     if (state == 1) {
-                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/enable", g_homeId, deviceID);
+                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/enable", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
                     } else if(state == 0) {
-                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/disable", g_homeId, deviceID);
-                    } else {
-                        sprintf(message, "/v1.0/homes/%s/scenes/%s/trigger", g_homeId, deviceID);
+                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/disable", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
+                    } else{
+                        sprintf(message, "/v1.0/homes/%s/scenes/%s/trigger", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
                     }
-                    LogInfo((get_localtime_now()),("message = %s", message));
-                    send_commands(access_token,CTR_SCENE,message, "\0");
+                    check_flag = send_commands(access_token,CTR_SCENE,message, "\0");
+                    if(!check_flag){
+                        retry = 0;
+                        do
+                        {
+                            check_flag = send_commands(access_token,CTR_SCENE,message, "\0");
+                            retry++;
+                        } while (!check_flag && retry < MaxNumberRetry);
+                    }
+                    if(retry >= MaxNumberRetry){
+                        LogInfo((get_localtime_now()),("TIME OUT"));
+                    }
                     break;
                 }
                 default:

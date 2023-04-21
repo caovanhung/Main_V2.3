@@ -1407,6 +1407,8 @@ int main( int argc,char ** argv ) {
                                     JSON_SetText(device, KEY_PID, tmp->items[1]);
                                     JSON_SetText(device, "devicePid", tmp->items[1]);
                                     JSON_SetNumber(device, "pageIndex", pageIndex);
+                                } else {
+                                    logError("Parsing Device Error: %s", item->string);
                                 }
                                 List_Delete(tmp);
                             }
