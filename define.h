@@ -92,6 +92,8 @@ extern int g_dbgLineNumber;
 #define TYPE_LOCK_AGENCY                (22U)
 #define TYPE_NOTIFI_REPONSE             (23U)
 #define TYPE_UPDATE_SERVICE             (25U)
+#define TYPE_SET_GROUP_TTL              (27U)
+#define TYPE_SET_DEVICE_TTL             (28U)
 
 #define TYPE_GET_NUM_OF_PAGE            (45U)
 #define TYPE_GET_DEVICES                (46U)
@@ -100,15 +102,13 @@ extern int g_dbgLineNumber;
 #define TYPE_SYNC_DB_DEVICES            (49U)
 #define TYPE_SYNC_DB_GROUPS             (50U)
 #define TYPE_SYNC_DB_SCENES             (51U)
-#define TYPE_SET_DEVICE_TTL             (52U)
-#define TYPE_SET_GROUP_TTL              (53U)
 
 #define TYPE_SYNC_DEVICE_STATE          (99U)
 #define TYPE_GET_DEVICE_STATUS          (100U)
 
 ///////////////////////Define type repons from Devices///////////////////////////////////////
 #define GW_RESPONSE_UNKNOW               ( -1 )
-#define GW_RESPONSE_DEVICE_CONTROL       ( 50U )
+#define GW_RESP_DEVICE_STATUS       ( 50U )
 #define GW_RESPONSE_DEVICE_KICKOUT       ( 51U )
 #define GW_RESPONSE_SMOKE_SENSOR         ( 52U )
 #define GW_RESPONSE_SENSOR_ENVIRONMENT   ( 53U )
@@ -584,5 +584,13 @@ typedef enum {
     EV_LOCK_DEVICE = 6
 } HistoryEventType;
 
+// Event history cause type
+typedef enum {
+    EV_CAUSE_TYPE_DEVICE = 0,
+    EV_CAUSE_TYPE_APP = 1,
+    EV_CAUSE_TYPE_GROUP = 2,
+    EV_CAUSE_TYPE_SCENE = 3,
+    EV_CAUSE_TYPE_SYNC = 4,
+} HistoryCauseType;
 
 #endif // __DEFINE_H

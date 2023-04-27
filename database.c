@@ -389,7 +389,7 @@ int Db_LoadSceneToRam() {
                     StringCopy(action->dpAddr, JSON_GetText(act, "code"));
                 }
                 int isWifi = JSON_HasKey(act, "isWifi")? JSON_GetNumber(act, "isWifi") : 0;
-                if (isWifi) {
+                if (isWifi || JSON_HasKey(act, "code")) {
                     StringCopy(action->serviceName, SERVICE_TUYA);  // Service for controlling Tuya device
                 } else {
                     StringCopy(action->serviceName, SERVICE_BLE);   // Service for controlling BLE device
@@ -560,15 +560,15 @@ int Db_RemoveSceneAction(const char* sceneId, const char* deviceAddr) {
 
 int Db_AddDeviceHistory(JSON* packet) {
     long long time = timeInMilliseconds();
-    uint8_t causeType  = JSON_GetNumber(packet, "causeType");
-    char*   causeId    = JSON_GetText(packet, "causeId");
+    uint8_t causeType = JSON_HasKey(packet, "causeType")? JSON_GetNumber(packet, "causeType"): 0;
+    char*   causeId   = JSON_HasKey(packet, "causeId")? JSON_GetText(packet, "causeId") : "";
     uint8_t eventType = JSON_GetNumber(packet, "eventType");
-    char*   deviceId   = JSON_GetText(packet, "deviceId");
-    uint8_t dpId       = JSON_GetNumber(packet, "dpId");
-    uint16_t dpValue    = JSON_GetNumber(packet, "dpValue");
+    char*   deviceId  = JSON_GetText(packet, "deviceId");
+    uint8_t dpId      = JSON_HasKey(packet, "dpId")? JSON_GetNumber(packet, "dpId") : 0;
+    uint16_t dpValue  = JSON_HasKey(packet, "dpValue")? JSON_GetNumber(packet, "dpValue") : 0;
     char sqlCmd[500];
     sprintf(sqlCmd, "INSERT INTO device_histories(time  , causeType, causeId, eventType, deviceId, dpId, dpValue) \
-                                           VALUES('%lld', %d       , '%s'   , %d        , '%s'    , %d  , '%d'     )",
+                                           VALUES('%lld', %d       , '%s'   , %d        , '%s'    , %d  , '%d'  )",
                                                   time  , causeType, causeId, eventType, deviceId, dpId, dpValue);
     Sql_Exec(sqlCmd);
     return 1;

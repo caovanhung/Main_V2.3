@@ -156,6 +156,8 @@ typedef struct
 }InfoReponse;
 
 typedef enum {
+    PAGE_NONE,
+    PAGE_ANY,
     PAGE_MAIN,
     PAGE_DEVICE,
     PAGE_SCENE,
@@ -167,7 +169,8 @@ typedef enum {
     TOPIC_GET_SUB,      //     /get/accepted
     TOPIC_UPD_PUB,      //     /update
     TOPIC_UPD_SUB,      //     /update/accepted
-    TOPIC_NOTI_PUB      //     /notify
+    TOPIC_NOTI_PUB,     //     /notify
+    TOPIC_NOTI_SUB      //     /notify
 } AwsTopicType;
 
 void getHcInformation();

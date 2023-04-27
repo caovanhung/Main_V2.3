@@ -24,16 +24,20 @@ void getHcInformation() {
 }
 
 char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType) {
-    char* topicTypeStr = NULL, *pageTypeStr = NULL, *topic;
+    char* topicTypeStr = NULL, *pageTypeStr = NULL, *topic = NULL;
 
     if (pageType == PAGE_MAIN) {
-        pageTypeStr = "";
+        pageTypeStr = "accountInfo";
+    } else if (pageType == PAGE_ANY) {
+        pageTypeStr = "+";
     } else if (pageType == PAGE_DEVICE) {
         pageTypeStr = "d";
     } else if (pageType == PAGE_SCENE) {
         pageTypeStr = "s";
     } else if (pageType == PAGE_GROUP) {
         pageTypeStr = "g";
+    } else {
+        pageTypeStr = "";
     }
 
     if (topicType == TOPIC_GET_PUB) {
@@ -44,16 +48,18 @@ char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType) 
         topicTypeStr = "update";
     } else if (topicType == TOPIC_UPD_SUB) {
         topicTypeStr = "update/accepted";
-    } else if (topicType == TOPIC_NOTI_PUB) {
+    } else if (topicType == TOPIC_NOTI_PUB || topicType == TOPIC_NOTI_SUB) {
         topicTypeStr = "notify";
     }
 
     if (topicTypeStr && pageTypeStr) {
         topic = (char*)malloc(strlen(g_thingId) + strlen(g_homeId) + strlen(topicTypeStr) + 50);
-        if (pageType == PAGE_MAIN) {
-            sprintf(topic, "$aws/things/%s/shadow/name/%s/%s", g_thingId, g_homeId, topicTypeStr);
+        if (pageType == PAGE_MAIN || pageType == PAGE_ANY) {
+            sprintf(topic, "$aws/things/%s/shadow/name/%s/%s", g_thingId, pageTypeStr, topicTypeStr);
+        } else if (pageType == PAGE_NONE) {
+            sprintf(topic, "$aws/things/%s/shadow/name/%s", g_thingId, topicTypeStr);
         } else {
-            sprintf(topic, "$aws/things/%s/shadow/name/%s_%s_%d/%s", g_thingId, pageTypeStr, g_homeId, pageIndex, topicTypeStr);
+            sprintf(topic, "$aws/things/%s/shadow/name/%s_%d/%s", g_thingId, pageTypeStr, pageIndex, topicTypeStr);
         }
     }
     return topic;

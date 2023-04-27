@@ -57,8 +57,6 @@ void addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr
 JSON* requestIsInRespList(int reqType, const char* itemId);
 // Update device status in response list
 void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr, int status);
-// Get number of response in response list
-int getRespNumber();
 // Get response status of a device according to a command
 int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr);
 bool Scene_GetFullInfo(JSON* packet);
@@ -109,6 +107,12 @@ bool compareDeviceById(JSON* device1, JSON* device2) {
         char* deviceId2 = JSON_GetText(device2, "deviceId");
         if (StringCompare(deviceId1, deviceId2)) {
             return true;
+        } else {
+            if (deviceId1 == NULL || deviceId2 == NULL) {
+                char* t = cJSON_PrintUnformatted(device2);
+                int a = 0;
+            }
+            return false;
         }
     }
     return false;
@@ -130,13 +134,9 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
     int reponse = 0;
     bool check_flag =false;
 
-    pthread_mutex_lock(&mutex_lock_t);
     int size_queue = get_sizeQueue(queue_received);
     if (size_queue < QUEUE_SIZE) {
         enqueue(queue_received,(char *) msg->payload);
-        pthread_mutex_unlock(&mutex_lock_t);
-    } else {
-       pthread_mutex_unlock(&mutex_lock_t);
     }
 }
 
@@ -171,7 +171,7 @@ void Mosq_ProcessLoop() {
     }
 }
 
-void checkResponseLoop() {
+void ResponseWaiting() {
     long long int currentTime = timeInMilliseconds();
     int respCount = JArr_Count(g_checkRespList);
 
@@ -274,7 +274,7 @@ void checkResponseLoop() {
 
 void markSceneToRun(Scene* scene) {
     // Just setting the runningActionIndex vatiable to 0 and the actions of scene will be executed
-    // in executeScenes() function
+    // in ExecuteScene() function
     scene->delayStart = timeInMilliseconds();
     scene->runningActionIndex = 0;
 }
@@ -373,7 +373,7 @@ void checkSceneForDevice(const char* deviceId, int dpId) {
  * Loop through all HC scene and execute them is they need to execute
  * This function has to be called constantly in main loop
  */
-void executeScenes() {
+void ExecuteScene() {
     for (int i = 0; i < g_sceneCount; i++) {
         Scene* scene = &g_sceneList[i];
         if (!scene->isLocal && scene->runningActionIndex >= 0) {
@@ -489,32 +489,34 @@ void executeScenes() {
     }
 }
 
-void getDeviceStatusLoop() {
+void GetDeviceStatus() {
     static long long int oldTick = 0;
+
     if (timeInMilliseconds() - oldTick > 60000) {
         oldTick = timeInMilliseconds();
         char sqlCmd[500];
+        char pid[1000];
+        sprintf(pid, "%s,%s,%s", HG_BLE_SWITCH, HG_BLE_IR, HG_BLE_CURTAIN);
         sprintf(sqlCmd, "SELECT address FROM devices \
                         JOIN devices_inf ON devices.deviceId = devices_inf.deviceId \
-                        WHERE (instr('%s', pid) > 0 OR dpId='20') AND (state = 3) AND (%lld - updateTime > 60)", HG_BLE, oldTick);
+                        WHERE (instr('%s', pid) > 0 OR dpId='20') AND (%lld - updateTime > 60)", pid, oldTick);
+        JSON* devicesArray = cJSON_CreateArray();
         Sql_Query(sqlCmd, row) {
-            JSON* packet = JSON_CreateObject();
+            JSON* item = JArr_CreateObject(devicesArray);
             char* addr = sqlite3_column_text(row, 0);
-            JSON_SetText(packet, "addr", addr);
-            sendPacketTo(SERVICE_BLE, TYPE_GET_DEVICE_STATUS, packet);
-            JSON_Delete(packet);
+            JSON_SetText(item, "addr", addr);
         }
+        sendPacketTo(SERVICE_BLE, TYPE_GET_DEVICE_STATUS, devicesArray);
+        JSON_Delete(devicesArray);
     }
 }
 
-int main( int argc,char ** argv )
+int main(int argc, char ** argv)
 {
     g_checkRespList   = JSON_CreateArray();
     int size_queue = 0;
     bool check_flag = false;
-    pthread_t thr[2];
-    int err,xRun = 1;
-    int rc[2];
+    int xRun = 1;
     queue_received = newQueue(QUEUE_SIZE);
 
     //Open database
@@ -529,9 +531,9 @@ int main( int argc,char ** argv )
     sleep(1);
     while(xRun!=0) {
         Mosq_ProcessLoop();
-        checkResponseLoop();
-        executeScenes();
-        // getDeviceStatusLoop();
+        ResponseWaiting();
+        ExecuteScene();
+        GetDeviceStatus();
 
         size_queue = get_sizeQueue(queue_received);
         if (size_queue > 0) {
@@ -553,21 +555,26 @@ int main( int argc,char ** argv )
             }
             if (isMatchString(NameService, SERVICE_BLE) && payload) {
                 switch (reqType) {
-                    case GW_RESPONSE_DEVICE_CONTROL: {
+                    case GW_RESP_DEVICE_STATUS: {
                         char* dpAddr = JSON_GetText(payload, "dpAddr");
                         double dpValue = JSON_GetNumber(payload, "dpValue");
                         DpInfo dpInfo;
+                        DeviceInfo deviceInfo;
                         int foundDps = Db_FindDpByAddr(&dpInfo, dpAddr);
                         if (foundDps == 1) {
-                            JSON_SetText(payload, "deviceId", dpInfo.deviceId);
-                            JSON_SetNumber(payload, "dpId", dpInfo.id);
-                            JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);
-                            JSON_SetNumber(payload, "pageIndex", dpInfo.pageIndex);
-                            Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
-                            Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
-                            Db_AddDeviceHistory(payload);
-                            Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
-                            checkSceneForDevice(dpInfo.deviceId, dpInfo.id);     // Check and run scenes for this device if any
+                            int foundDevices = Db_FindDevice(&deviceInfo, dpInfo.deviceId);
+                            if (foundDevices == 1 && (deviceInfo.state == TYPE_DEVICE_OFFLINE || dpInfo.value != dpValue)) {
+                                JSON_SetText(payload, "deviceId", dpInfo.deviceId);
+                                JSON_SetNumber(payload, "dpId", dpInfo.id);
+                                JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);
+                                JSON_SetNumber(payload, "pageIndex", dpInfo.pageIndex);
+                                Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
+                                Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
+                                Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
+                                Db_AddDeviceHistory(payload);
+                                // Check and run scenes for this device if any
+                                checkSceneForDevice(dpInfo.deviceId, dpInfo.id);
+                            }
                         }
                         break;
                     }
@@ -579,7 +586,7 @@ int main( int argc,char ** argv )
                             DeviceInfo deviceInfo;
                             int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr);
                             if (foundDevices == 1) {
-                                JSON_SetText(arrayItem, "deviceId", deviceInfo.id);
+                                JSON_SetText(payload, "deviceId", deviceInfo.id);
                                 Db_SaveDeviceState(deviceInfo.id, deviceState);
                                 Aws_SaveDeviceState(deviceInfo.id, deviceState, deviceInfo.pageIndex);
                                 JSON_SetNumber(payload, "dpValue", deviceState == 2? 1 : 0);
@@ -723,12 +730,39 @@ int main( int argc,char ** argv )
                             deviceId = JSON_GetText(payload, "groupAdress");
                             deviceInfo.pid[0] = 0;
                             foundDevices = 1;
+
+                            // Update status of devices in this group to AWS
+                            char* devicesStr = Db_FindDevicesInGroup(deviceId);
+                            JSON* groupDevices = parseGroupNormalDevices(devicesStr);
+                            JSON_ForEach(d, groupDevices) {
+                                JSON_ForEach(dp, originDPs) {
+                                    if (cJSON_IsNumber(dp) || cJSON_IsBool(dp)) {
+                                        int dpId = atoi(dp->string);
+                                        Aws_SaveDpValue(JSON_GetText(d, "deviceId"), dpId, dp->valueint, JSON_GetNumber(d, "pageIndex"));
+                                    }
+                                }
+                            }
+                            // Add event of group to history
+                            JSON_ForEach(dp, originDPs) {
+                                if (cJSON_IsNumber(dp) || cJSON_IsBool(dp)) {
+                                    JSON* history = JSON_CreateObject();
+                                    JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                                    JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
+                                    JSON_SetText(history, "causeId", senderId);
+                                    JSON_SetText(history, "deviceId", deviceId);
+                                    JSON_SetNumber(history, "dpId", atoi(dp->string));
+                                    JSON_SetNumber(history, "dpValue", dp->valueint);
+                                    Db_AddDeviceHistory(history);
+                                    JSON_Delete(history);
+                                }
+                            }
+                            free(devicesStr);
+                            JSON_Delete(groupDevices);
                         }
 
                         if (foundDevices == 1) {
                             JSON* packet = JSON_CreateObject();
                             JSON_SetText(packet, "pid", deviceInfo.pid);
-                            JSON_SetText(packet, "senderId", senderId);
                             JSON* dictDPs = JSON_AddArray(packet, "dictDPs");
                             JSON_ForEach(o, originDPs) {
                                 int dpId = atoi(o->string);
@@ -1310,7 +1344,8 @@ int main( int argc,char ** argv )
                                 JSON* devices = parseGroupNormalDevices(deviceStr);
                                 JSON_ForEach(d, devices) {
                                     char* deviceAddr = JSON_GetText(d, "deviceAddr");
-                                    Ble_SetTTL(deviceAddr, ttl);
+                                    int gwIndex = JSON_GetNumber(d, "gwIndex");
+                                    Ble_SetTTL(gwIndex, deviceAddr, ttl);
                                     addDeviceToRespList(GW_RESPONSE_SET_TTL, "0", deviceAddr);
                                 }
                             }
@@ -1367,10 +1402,6 @@ void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceA
             JSON_SetNumber(device, "status", status);
         }
     }
-}
-
-int getRespNumber() {
-    return json_array_get_count(json_value_get_array(g_checkRespList));
 }
 
 int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr) {
@@ -1799,6 +1830,8 @@ JSON* parseGroupNormalDevices(const char* devices) {
             JSON_SetText(arrayItem, "deviceId", deviceInfo.id);
             JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
             JSON_SetText(arrayItem, "pid", deviceInfo.pid);
+            JSON_SetNumber(arrayItem, "gwIndex", deviceInfo.gwIndex);
+            JSON_SetNumber(arrayItem, "pageIndex", deviceInfo.pageIndex);
         }
         cJSON_AddItemToArray(devicesArray, arrayItem);
     }

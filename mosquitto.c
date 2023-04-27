@@ -172,7 +172,7 @@ void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex) {
     ASSERT(deviceId);
     char payload[200];
     sprintf(payload,"{\"deviceId\":\"%s\", \"state\":2, \"dpId\":%d, \"dpValue\":%d}", deviceId, dpId, value);
-    sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_CONTROL, pageIndex, payload);
+    sendToServicePageIndex(SERVICE_AWS, GW_RESP_DEVICE_STATUS, pageIndex, payload);
 }
 
 void Aws_updateGroupState(const char* groupAddr, int state)
@@ -212,18 +212,32 @@ void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const 
 }
 
 
-void Ble_SetTTL(const char* deviceAddr, uint8_t ttl) {
-    JSON* p = JSON_CreateObject();
-    JSON_SetText(p, "deviceAddr", deviceAddr);
-    JSON_SetNumber(p, "ttl", ttl);
-    sendPacketTo(SERVICE_BLE, TYPE_SET_DEVICE_TTL, p);
-    JSON_Delete(p);
-}
-
 void sendNotiToUser(const char* message) {
     char* payload = malloc(strlen(message) + 200);
     sprintf(payload, "{\"type\": %d, \"sender\":%d,\"%s\": \"%s\" }", TYPE_NOTIFI_REPONSE, SENDER_HC_VIA_CLOUD, KEY_MESSAGE, message);
     sendToService(SERVICE_AWS, TYPE_NOTIFI_REPONSE, payload);
     free(payload);
 }
+
+
+// void Ble_ControlDevice(const char* pid, DpInfo* dps, int dpCount) {
+//     ASSERT(pid); ASSERT(dps);
+//     JSON* p = JSON_CreateObject();
+//     JSON_SetText(p, "pid", pid);
+//     JSON_SetNumber(p, "ttl", ttl);
+//     sendPacketTo(SERVICE_BLE, TYPE_SET_DEVICE_TTL, p);
+//     JSON_Delete(p);
+// }
+
+
+void Ble_SetTTL(int gwIndex, const char* deviceAddr, uint8_t ttl) {
+    JSON* p = JSON_CreateObject();
+    JSON_SetNumber(p, "gwIndex", gwIndex);
+    JSON_SetText(p, "deviceAddr", deviceAddr);
+    JSON_SetNumber(p, "ttl", ttl);
+    sendPacketTo(SERVICE_BLE, TYPE_SET_DEVICE_TTL, p);
+    JSON_Delete(p);
+}
+
+
 

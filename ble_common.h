@@ -18,7 +18,7 @@
 
 #define _DEBUG //debug tranfer infor and warring
 #define TIME_DELAY_PROVISION                    ( 1U ) //delay code write UART into provision
-#define TIME_DELAY_WAIT_DONE_PROVISION          ( 15U ) //waiting still provision done!
+#define TIME_DELAY_WAIT_DONE_PROVISION          ( 3U ) //waiting still provision done!
 
 ///////////////////////Define for process_infor///////////////////////////////////////
 #define MAX_FRAME_SIZE              ( 50U )     // Maximum number of bytes in a single frame

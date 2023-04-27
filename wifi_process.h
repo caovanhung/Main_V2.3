@@ -84,8 +84,10 @@ typedef struct {
   uint8_t bytes[SHA256_HASH_SIZE];
 } SHA256_HASH;
 
-void send_commands(char *access_token,char*type_action, char *input, const char *body);
-bool get_access_token(char *access_token);
+bool send_commands(char *access_token,char*type_action, char *input, const char *body);
+bool get_access_token(char *access_token,char *refresh_token);
+bool refresh_token(char *refresh_token,char *access_token);
+
 
 static const uint32_t K[64] = {
     0x428a2f98UL, 0x71374491UL, 0xb5c0fbcfUL, 0xe9b5dba5UL, 0x3956c25bUL,

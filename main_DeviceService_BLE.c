@@ -64,7 +64,6 @@ struct Queue *g_lowPrioMqttMsgQueue;
 static struct Queue* g_bleFrameQueue;
 
 static JSON *g_checkRespList;
-static char g_senderId[50] = {0};
 
 bool addSceneLC(JSON* packet);
 bool delSceneLC(JSON* packet);
@@ -230,21 +229,13 @@ void Ble_ProcessPacket()
                 }
 
                 case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
-                case GW_RESPONSE_DEVICE_CONTROL: {
+                case GW_RESP_DEVICE_STATUS: {
                     JSON* packet = JSON_CreateObject();
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetText(packet, "dpAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpValue", tmp->dpValue);
-                    if (g_senderId[0] != 0) {
-                        JSON_SetNumber(packet, "causeType", 1);
-                        JSON_SetText(packet, "causeId", g_senderId);
-                    } else {
-                        JSON_SetNumber(packet, "causeType", tmp->causeType);
-                        JSON_SetText(packet, "causeId", tmp->causeId);
-                    }
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
-                    g_senderId[0] = 0;
                     break;
                 }
                 case GW_RESPONSE_SMOKE_SENSOR: {
@@ -503,6 +494,7 @@ int main( int argc,char ** argv )
     usleep(50000);
     Mosq_Init(SERVICE_BLE);
     sleep(3);
+    // set_inf_DV_for_GW(0, "Đ00", "BLEHGAA0201", "077C533EA69371AFFA435AA0CB5B3121");
     while (xRun!=0) {
         BLE_SendUartFrameLoop();
         BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue
@@ -538,9 +530,7 @@ int main( int argc,char ** argv )
                     ble_bindGateWay(1, &PRV);
                     break;
                 }
-                case TYPE_CTR_DEVICE:
-                case TYPE_CTR_GROUP_NORMAL: {
-                    StringCopy(g_senderId, JSON_GetText(payload, "senderId"));  // Save senderId to response to Core service after receiving response from device
+                case TYPE_CTR_DEVICE: {
                     char* pid = JSON_GetText(payload, "pid");
                     cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
                     int lightness = -1, colorTemperature = -1;
@@ -602,6 +592,36 @@ int main( int argc,char ** argv )
                     }
                     break;
                 }
+                case TYPE_CTR_GROUP_NORMAL: {
+                    char* pid = JSON_GetText(payload, "pid");
+                    cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
+                    int lightness = -1, colorTemperature = -1;
+                    int irCommandType = 0, irBrandId = 0, irRemoteId = 0, irTemp = 0, irMode = 0, irFan = 0, irSwing = 1;
+                    JSON_ForEach(o, dictDPs) {
+                        int dpId = JSON_GetNumber(o, "id");
+                        dpAddr = JSON_GetText(o, "addr");
+                        int dpValue = JSON_GetNumber(o, "value");
+                        char valueStr[5];
+                        sprintf(valueStr, "%d", dpValue);
+                        if (isContainString(HG_BLE_SWITCH, pid)) {
+                            ble_controlOnOFF_SW(dpAddr, dpValue);
+                        } else if (isContainString(HG_BLE_CURTAIN, pid) || dpId == 20) {
+                            GW_CtrlGroupLightOnoff(dpAddr, dpValue);
+                        } else if (dpId == 24) {
+                            ble_controlHSL(dpAddr, valueStr);
+                        } else if (dpId == 21) {
+                            ble_controlModeBlinkRGB(dpAddr, valueStr);
+                        } else if (dpId == 22) {
+                            lightness = dpValue;
+                        } else if (dpId == 23) {
+                            colorTemperature = dpValue;
+                        }
+                    }
+                    if (lightness >= 0 && colorTemperature >= 0) {
+                        GW_CtrlGroupLightCT(dpAddr, lightness, colorTemperature);
+                    }
+                    break;
+                }
                 case TYPE_CTR_SCENE: {
                     char* sceneId = JSON_GetText(payload, "sceneId");
                     int state = JSON_GetNumber(payload, "state");
@@ -630,7 +650,7 @@ int main( int argc,char ** argv )
                             ble_deleteDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, deviceAddr);
                         }
                         // Add this device to response list to check TIMEOUT later
-                        addRespTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
+                        addRespTypeToSendingFrame(GW_RESPONSE_GROUP, groupAddr);
                     }
                     break;
                 }
@@ -648,7 +668,7 @@ int main( int argc,char ** argv )
                         char* deviceAddr = JSON_GetText(dpNeedAdd, "deviceAddr");
                         ble_addDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, deviceAddr);
                         // Add this device to response list to check TIMEOUT later
-                        addRespTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
+                        addRespTypeToSendingFrame(GW_RESPONSE_GROUP, groupAddr);
                     }
                     break;
                 }
@@ -666,7 +686,7 @@ int main( int argc,char ** argv )
                             ble_deleteDeviceToGroupLightCCT_HOMEGY(gwIndex, groupAddr, deviceAddr, dpAddr);
                         }
                         // Add this device to response list to check TIMEOUT later
-                        addRespTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
+                        addRespTypeToSendingFrame(GW_RESPONSE_GROUP, groupAddr);
                     }
                     break;
                 }
@@ -686,7 +706,7 @@ int main( int argc,char ** argv )
                         char* dpAddr = JSON_GetText(dpNeedAdd, "dpAddr");
                         ble_addDeviceToGroupLink(gwIndex, groupAddr, deviceAddr, dpAddr);
                         // Add this device to response list to check TIMEOUT later
-                        addRespTypeToRespList(GW_RESPONSE_GROUP, groupAddr);
+                        addRespTypeToSendingFrame(GW_RESPONSE_GROUP, groupAddr);
                     }
                     break;
                 }
@@ -761,11 +781,18 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_GET_DEVICE_STATUS: {
-                    char* addr = JSON_GetText(payload, "addr");
-                    BLE_GetDeviceOnOffState(addr);
+                    JSON_ForEach(d, payload) {
+                        char* addr = JSON_GetText(d, "addr");
+                        GW_GetDeviceOnOffState(addr);
+                        addRespTypeToSendingFrame(GW_RESP_DEVICE_STATUS, addr);
+                        addPriorityToSendingFrame(2);
+                    }
+                    break;
                 }
                 case TYPE_SET_DEVICE_TTL: {
-                    GW_SetTTL(JSON_GetText(payload, "deviceAddr"), JSON_GetNumber(payload, "ttl"));
+                    int gwIndex = JSON_GetNumber(payload, "gwIndex");
+                    GW_SetTTL(gwIndex, JSON_GetText(payload, "deviceAddr"), JSON_GetNumber(payload, "ttl"));
+                    break;
                 }
             }
         } else {
@@ -815,15 +842,15 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                 } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
                     ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x00");
                     // Add this device to response list to check TIMEOUT later
-                    addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
+                    addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                 } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
                     ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x01");
                     // Add this device to response list to check TIMEOUT later
-                    addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
+                    addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                 } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
                     ble_setSceneLocalToDeviceLightCCT_HOMEGY(deviceAddr, sceneId);
                     // Add this device to response list to check TIMEOUT later
-                    addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
+                    addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                 }
             }
         }
@@ -836,7 +863,7 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
             uint32_t param = (uint32_t)JSON_GetNumber(item, "param");
             ble_setSceneLocalToDeviceSwitch(sceneId, addr, dpCount, param);
             // Add this device to response list to check TIMEOUT later
-            addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
+            addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
         }
     }
 
@@ -928,11 +955,11 @@ bool addSceneCondition(const char* sceneId, JSON* condition) {
         if (isMatchString(pid, HG_BLE_SENSOR_MOTION)) {
             ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
             // Add this device to response list to check TIMEOUT later
-            addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
+            addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
         } else {
             ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
             // Add this device to response list to check TIMEOUT later
-            addRespTypeToRespList(GW_RESPONSE_ADD_SCENE, sceneId);
+            addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
         }
     }
     return true;

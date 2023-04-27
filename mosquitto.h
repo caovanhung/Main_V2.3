@@ -61,7 +61,8 @@ void Aws_updateGroupState(const char* groupAddr, int state);
 void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const list_t* failedDevices);
 
 
-void Ble_SetTTL(const char* deviceAddr, uint8_t ttl);
+void Ble_ControlDevice(const char* pid, DpInfo* dps, int dpCount);
+void Ble_SetTTL(int gwIndex, const char* deviceAddr, uint8_t ttl);
 
 void sendNotiToUser(const char* message);
 
