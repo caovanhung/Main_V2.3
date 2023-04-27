@@ -163,6 +163,25 @@ JSON* Db_GetAllDevices() {
         JSON* item = JArr_CreateObject(arr);
         JSON_SetText(item, "deviceId", deviceId);
     }
+
+    JSON_ForEach(d, arr) {
+        char* deviceId = JSON_GetText(d, "deviceId");
+        JSON* dictDPs = JSON_CreateObject();
+        sprintf(sqlCmd, "SELECT dpId, dpValue FROM devices WHERE deviceId='%s'", deviceId);
+        Sql_Query(sqlCmd, row) {
+            int dpId = sqlite3_column_int(row, 0);
+            char* dpValue = sqlite3_column_text(row, 1);
+            char tmp[20];
+            sprintf(tmp, "%d", dpId);
+            if (dpId == 106) {
+                JSON_SetText(dictDPs, tmp, dpValue);
+            } else {
+                JSON_SetNumber(dictDPs, tmp, atoi(dpValue));
+            }
+        }
+        JSON_SetObject(d, "dictDPs", dictDPs);
+    }
+
     return arr;
 }
 

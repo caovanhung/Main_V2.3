@@ -1030,7 +1030,9 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         return GW_RESPONSE_GROUP;
     } else if (frame->opcode == 0x8204) {
         // Homegy smart switch, Rang Dong light
-        if (frame->paramSize == 4) {
+        if (frame->paramSize == 8) {
+            temp->dpValue = frame->param[2];
+        } else if (frame->paramSize == 4) {
             temp->dpValue = frame->param[0];
         } else if (frame->paramSize > 1) {
             temp->dpValue = frame->param[1];

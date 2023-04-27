@@ -414,13 +414,13 @@ void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIden
         JSON* reported = JSON_GetObject(state, "reported");
 
         if (isContainString(topic, "d_")) {
-            JSON_SetNumber(reported, "type", TYPE_GET_DEVICES);
+            JSON_SetNumber(reported, "type", TYPE_SYNC_DB_DEVICES);
             JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
         } else if(isContainString(topic, "s_")) {
-            JSON_SetNumber(reported, "type", TYPE_GET_SCENES);
+            JSON_SetNumber(reported, "type", TYPE_SYNC_DB_SCENES);
             JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
         } else if(isContainString(topic, "g_")) {
-            JSON_SetNumber(reported, "type", TYPE_GET_GROUPS);
+            JSON_SetNumber(reported, "type", TYPE_SYNC_DB_GROUPS);
             JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
         } else {
             JSON_SetNumber(reported, "type", TYPE_GET_NUM_OF_PAGE);
@@ -931,7 +931,7 @@ void Aws_Init() {
     g_awsSubscriptionList[1].topicFilterLength = strlen(g_awsSubscriptionList[1].pTopicFilter);
 
     g_awsSubscriptionList[2].qos = MQTTQoS0;
-    g_awsSubscriptionList[2].pTopicFilter = Aws_GetTopic(PAGE_ANY, 0, TOPIC_NOTI_SUB);
+    g_awsSubscriptionList[2].pTopicFilter = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_SUB);
     g_awsSubscriptionList[2].topicFilterLength = strlen(g_awsSubscriptionList[2].pTopicFilter);
 }
 
@@ -1181,6 +1181,11 @@ int main( int argc,char ** argv ) {
             char* recvMsg = (char *)dequeue(queue_received_aws);
             JSON* recvPacket = JSON_Parse(recvMsg);
 
+            char *val_input = (char*)malloc(strlen(recvMsg) + 1);
+            strcpy(val_input, recvMsg);
+            printf("\n\r");
+            logInfo("Received msg from MQTT cloud: %s", val_input);
+
             if (recvPacket) {
                 JSON* state = JSON_GetObject(recvPacket, "state");
                 JSON* reported = JSON_GetObject(state, "reported");
@@ -1190,6 +1195,7 @@ int main( int argc,char ** argv ) {
                     continue;
                 }
                 switch(reqType) {
+                    case TYPE_GET_ALL_DEVICES:
                     case TYPE_SET_GROUP_TTL: {
                         sendPacketTo(SERVICE_CORE, reqType, reported);
                         break;
@@ -1197,13 +1203,9 @@ int main( int argc,char ** argv ) {
                 }
             }
 
-            char *val_input = (char*)malloc(strlen(recvMsg) + 1);
-            strcpy(val_input, recvMsg);
             check_flag = AWS_pre_detect_message_received(pre_detect,val_input);
             if (check_flag && (pre_detect->sender == SENDER_APP_VIA_LOCAL || pre_detect->sender == SENDER_APP_VIA_CLOUD ))
             {
-                printf("\n\r");
-                logInfo("Received msg from MQTT cloud: %s", val_input);
                 JSON* recvPacket = JSON_Parse(recvMsg);
                 if (recvPacket == NULL) {
                     continue;
@@ -1412,8 +1414,8 @@ int main( int argc,char ** argv ) {
                         // Openssl_Disconnect( &networkContext );
                         break;
                     }
-                    case TYPE_GET_DEVICES: {
-                        logInfo("TYPE_GET_DEVICES");
+                    case TYPE_SYNC_DB_DEVICES: {
+                        logInfo("TYPE_SYNC_DB_DEVICES");
                         JSON* p = JSON_CreateObject();
                         int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
                         if (pageIndex == 1) {
@@ -1460,8 +1462,8 @@ int main( int argc,char ** argv ) {
                         }
                         break;
                     }
-                    case TYPE_GET_GROUPS: {
-                        logInfo("TYPE_GET_GROUPS");
+                    case TYPE_SYNC_DB_GROUPS: {
+                        logInfo("TYPE_SYNC_DB_GROUPS");
                         JSON* p = JSON_CreateObject();
                         int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
                         if (pageIndex == 1) {
@@ -1505,8 +1507,8 @@ int main( int argc,char ** argv ) {
                         }
                         break;
                     }
-                    case TYPE_GET_SCENES: {
-                        logInfo("TYPE_GET_SCENES");
+                    case TYPE_SYNC_DB_SCENES: {
+                        logInfo("TYPE_SYNC_DB_SCENES");
                         // JSON* p = JSON_CreateObject();
                         // int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
                         // if (pageIndex == 1) {

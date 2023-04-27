@@ -52,7 +52,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket);
 bool sendInfoDeviceFromDatabase();
 bool sendInfoSceneFromDatabase();
 // Add device that need to check response to response list
-void addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr);
+JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr);
 // Check and get the JSON_Object of request that is in response list
 JSON* requestIsInRespList(int reqType, const char* itemId);
 // Update device status in response list
@@ -247,6 +247,26 @@ void ResponseWaiting() {
                     int status = JSON_GetNumber(device, "status");
                     if (status != 0) {
                         Db_RemoveSceneAction(itemId, JSON_GetText(device, "addr"));
+                    }
+                } else if (reqType == TYPE_CTR_DEVICE) {
+                    int status = JSON_GetNumber(device, "status");
+                    char* deviceId = JSON_GetText(respItem, "deviceId");
+                    int dpId = JSON_GetNumber(respItem, "dpId");
+                    int oldDpValue = JSON_GetNumber(respItem, "oldDpValue");
+                    int newDpValue = oldDpValue? 0 : 1;
+                    int pageIndex = JSON_GetNumber(respItem, "pageIndex");
+                    if (status == 0) {
+                        JSON* history = JSON_CreateObject();
+                        JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
+                        JSON_SetText(history, "causeId", JSON_GetText(respItem, "causeId"));
+                        JSON_SetText(history, "deviceId", deviceId);
+                        JSON_SetNumber(history, "dpId", dpId);
+                        JSON_SetNumber(history, "dpValue", newDpValue);
+                        Db_AddDeviceHistory(history);
+                        JSON_Delete(history);
+                    } else {
+                        Aws_SaveDpValue(deviceId, dpId, oldDpValue, pageIndex);
                     }
                 }
             }
@@ -558,6 +578,7 @@ int main(int argc, char ** argv)
                     case GW_RESP_DEVICE_STATUS: {
                         char* dpAddr = JSON_GetText(payload, "dpAddr");
                         double dpValue = JSON_GetNumber(payload, "dpValue");
+                        int causeType = JSON_GetNumber(payload, "causeType");
                         DpInfo dpInfo;
                         DeviceInfo deviceInfo;
                         int foundDps = Db_FindDpByAddr(&dpInfo, dpAddr);
@@ -571,7 +592,11 @@ int main(int argc, char ** argv)
                                 Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
                                 Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
                                 Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
-                                Db_AddDeviceHistory(payload);
+                                if (causeType == EV_CAUSE_TYPE_SYNC) {
+                                    Db_AddDeviceHistory(payload);
+                                } else {
+                                    updateDeviceRespStatus(TYPE_CTR_DEVICE, dpAddr, dpAddr, 0);
+                                }
                                 // Check and run scenes for this device if any
                                 checkSceneForDevice(dpInfo.deviceId, dpInfo.id);
                             }
@@ -699,6 +724,25 @@ int main(int argc, char ** argv)
                 }
             } else if (isMatchString(NameService, SERVICE_AWS) && payload) {
                 switch (reqType) {
+                    case TYPE_GET_ALL_DEVICES: {
+                        JSON* p = JSON_CreateObject();
+                        JSON_SetNumber(p, "type", TYPE_GET_ALL_DEVICES);
+                        JSON_SetNumber(p, "sender", SENDER_HC_VIA_CLOUD);
+                        JSON* devicesArray = Db_GetAllDevices();
+                        JSON* devices = JSON_CreateObject();
+                        JSON_ForEach(d, devicesArray) {
+                            JSON* item = JSON_CreateObject();
+                            JSON_SetObject(item, "dictDPs", JSON_GetObject(d, "dictDPs"));
+                            JSON_SetObject(devices, JSON_GetText(d, "deviceId"), item);
+                        }
+                        JSON_SetObject(p, "devices", devices);
+                        char* msg = cJSON_PrintUnformatted(p);
+                        sendToService(SERVICE_AWS, TYPE_NOTIFI_REPONSE, msg);
+                        JSON_Delete(p);
+                        JSON_Delete(devicesArray);
+                        free(msg);
+                        break;
+                    }
                     case TYPE_GET_DEVICE_HISTORY: {
                         long long currentTime = timeInMilliseconds();
                         long long startTime = JSON_GetNumber(payload, "start");
@@ -775,6 +819,14 @@ int main(int argc, char ** argv)
                                     JSON_SetNumber(dp, "value", o->valueint);
                                     JSON_SetText(dp, "valueString", o->valuestring);
                                     cJSON_AddItemToArray(dictDPs, dp);
+                                    if (reqType == TYPE_CTR_DEVICE && (isContainString(HG_BLE_SWITCH, deviceInfo.pid) || dpId == 20)) {
+                                        JSON* item = addDeviceToRespList(reqType, dpInfo.addr, dpInfo.addr);
+                                        JSON_SetText(item, "deviceId", deviceId);
+                                        JSON_SetText(item, "causeId", senderId);
+                                        JSON_SetNumber(item, "dpId", dpId);
+                                        JSON_SetNumber(item, "oldDpValue", dpInfo.value);
+                                        JSON_SetNumber(item, "pageIndex", deviceInfo.pageIndex);
+                                    }
                                 }
                             }
                             if (StringCompare(deviceInfo.pid, HG_BLE_IR_AC) ||
@@ -1365,7 +1417,7 @@ int main(int argc, char ** argv)
 }
 
 // Add device that need to check response to response list
-void addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr) {
+JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr) {
     ASSERT(itemId); ASSERT(deviceAddr);
     JSON* item = requestIsInRespList(reqType, itemId);
     if (item == NULL) {
@@ -1382,6 +1434,7 @@ void addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr
         JSON_SetText(device, "addr", deviceAddr);
         JSON_SetNumber(device, "status", -1);
     }
+    return item;
 }
 
 JSON* requestIsInRespList(int reqType, const char* itemId) {

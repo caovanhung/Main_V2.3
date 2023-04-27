@@ -234,6 +234,11 @@ void Ble_ProcessPacket()
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetText(packet, "dpAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpValue", tmp->dpValue);
+                    if (bleFrames[i].frameSize >= 8 && bleFrames[i].param[0] == 0x82 && bleFrames[i].param[1] == 0x02) {
+                        JSON_SetNumber(packet, "causeType", EV_CAUSE_TYPE_APP);
+                    } else {
+                        JSON_SetNumber(packet, "causeType", EV_CAUSE_TYPE_SYNC);
+                    }
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
                     break;
