@@ -712,7 +712,22 @@ void ble_getStringControlOnOff_SW(char **result,const char* strAddress,const cha
     strcat(*result, tmp_3);
 }
 
-bool ble_controlOnOFF_SW(const char* dpAddr, uint8_t dpValue)
+bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue)
+{
+    ASSERT(dpAddr);
+
+    uint8_t data[] = {0xe8, 0xff,  0x00,0x00,0x00,0x00,0x00,0x00,  0xff,0xff,  0x82,0x02, 0x00};
+    long int dpAddrHex = strtol(dpAddr, NULL, 16);
+    data[9] = dpAddrHex & (0xFF);
+    data[8] = (dpAddrHex >> 8) & 0xFF;
+    data[12] = dpValue;
+
+    bool ret = sendFrameToAnyGw(dpAddrHex, data, 13);
+    addPriorityToSendingFrame(0);
+    return ret;
+}
+
+bool GW_HgSwitchOnOff_NoResp(const char* dpAddr, uint8_t dpValue)
 {
     ASSERT(dpAddr);
 

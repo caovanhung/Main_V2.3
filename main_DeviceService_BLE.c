@@ -151,7 +151,7 @@ void BLE_ReceivePacket() {
         if (len_uart >= 10 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x5d && rcv_uart_buff[9] == 0x00) {
             return;
         }
-        strcpy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
+        StringCopy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
         enqueue(g_bleFrameQueue, givenStr);
     }
 
@@ -170,9 +170,7 @@ void BLE_ReceivePacket() {
         if (len_uart >= 10 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x5d && rcv_uart_buff[9] == 0x00) {
             return;
         }
-        strcpy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
-        // printf("\n\r");
-        // logInfo("Received package from UART2: %s", givenStr);
+        StringCopy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
         enqueue(g_bleFrameQueue, givenStr);
     }
 }
@@ -547,7 +545,7 @@ int main( int argc,char ** argv )
                         char valueStr[5];
                         sprintf(valueStr, "%d", dpValue);
                         if (isContainString(HG_BLE_SWITCH, pid)) {
-                            ble_controlOnOFF_SW(dpAddr, dpValue);
+                            GW_HgSwitchOnOff(dpAddr, dpValue);
                         } else if (isContainString(HG_BLE_CURTAIN, pid) || dpId == 20) {
                             ble_controlOnOFF(dpAddr, valueStr);
                         } else if (dpId == 24) {
@@ -609,7 +607,7 @@ int main( int argc,char ** argv )
                         char valueStr[5];
                         sprintf(valueStr, "%d", dpValue);
                         if (isContainString(HG_BLE_SWITCH, pid)) {
-                            ble_controlOnOFF_SW(dpAddr, dpValue);
+                            GW_HgSwitchOnOff_NoResp(dpAddr, dpValue);
                         } else if (isContainString(HG_BLE_CURTAIN, pid) || dpId == 20) {
                             GW_CtrlGroupLightOnoff(dpAddr, dpValue);
                         } else if (dpId == 24) {
@@ -747,12 +745,15 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_UPDATE_SCENE: {
+                    bool ret = false;
                     char* sceneId = JSON_GetText(payload, "sceneId");
                     JSON* actionsNeedRemove = JSON_GetObject(payload, "actionsNeedRemove");
                     JSON* actionsNeedAdd = JSON_GetObject(payload, "actionsNeedAdd");
-                    bool ret = deleteSceneActions(sceneId, actionsNeedRemove);
-                    if (ret) {
-                        ret = addSceneActions(sceneId, actionsNeedAdd);
+                    if (JArr_Count(actionsNeedRemove) > 0) {
+                        deleteSceneActions(sceneId, actionsNeedRemove);
+                    }
+                    if (JArr_Count(actionsNeedAdd) > 0) {
+                        addSceneActions(sceneId, actionsNeedAdd);
                     }
                     if (ret && JSON_HasKey(payload, "conditionNeedRemove")) {
                         JSON* conditionNeedRemove = JSON_GetObject(payload, "conditionNeedRemove");
@@ -768,6 +769,7 @@ int main( int argc,char ** argv )
                     char* dpAddr = JSON_GetText(payload, "dpAddr");
                     int value = JSON_GetNumber(payload, "value");
                     ble_dimLedSwitch_HOMEGY(dpAddr, value);
+                    break;
                 }
                 case TYPE_LOCK_AGENCY: {
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
@@ -881,15 +883,11 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
 //         char commonDevices[1200] = {'\0'};
 //         uint8_t  i = 0;
 //         for (i = 0; i < actionCount; i++) {
-//             LogInfo((get_localtime_now()),("[ACTION %d]", i));
 //             JSON* action     = JArr_GetObject(actions, i);
 //             char* deviceAddr = JSON_GetText(action, "entityAddr");
-//             LogInfo((get_localtime_now()),("    [deleteSceneActions] deviceAddr  = %s", deviceAddr));
-//             LogInfo((get_localtime_now()),("    [deleteSceneActions] commonDevices = %s", commonDevices));
 //             if (deviceAddr != NULL) {
 //                 if (!isContainString(commonDevices, deviceAddr)) {
 //                     ble_delSceneLocalToDevice(deviceAddr, sceneId);
-//                     sleep(1);
 //                     strcat(commonDevices, deviceAddr);
 //                 }
 //             }
@@ -904,7 +902,7 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
     }
     char commonDevices[1200]    = {'\0'};
     int  i = 0, j = 0;
-    logInfo("[addSceneActions] sceneId = %s", sceneId);
+    logInfo("[deleteSceneActions] sceneId = %s", sceneId);
     int actionCount = JArr_Count(actions);
     JSON* mergedActions = JSON_CreateArray();
     for (i = 0; i < actionCount; i++) {

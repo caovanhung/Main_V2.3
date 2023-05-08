@@ -120,12 +120,8 @@ void BLE_SendUartFrameLoop();
 
 // Send request to get the device ON/OFF state
 bool GW_GetDeviceOnOffState(const char* dpAddr);
-
-/*
- * On/Off control
- * Models: HG_BLE_SWITCH_1, HG_BLE_SWITCH_2, HG_BLE_SWITCH_3, HG_BLE_SWITCH_4
- */
-bool ble_controlOnOFF_SW(const char* dpAddr, uint8_t dpValue);
+bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue);
+bool GW_HgSwitchOnOff_NoResp(const char* dpAddr, uint8_t dpValue);
 
 /*
  * On/Off control

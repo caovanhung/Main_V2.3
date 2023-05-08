@@ -82,6 +82,7 @@ pthread_cond_t dataUpdate_MosqQueue     = PTHREAD_COND_INITIALIZER;
 static bool g_awsIsConnected = false;
 static bool g_mosqIsConnected = false;
 char aws_buff[MAX_SIZE_ELEMENT_QUEUE] = {'\0'};
+static int g_syncingPageIndex = 1;
 
 typedef struct PublishPackets
 {
@@ -406,36 +407,53 @@ void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIden
     char* topic = malloc(pPublishInfo->topicNameLength + 1);
     memcpy(topic, pPublishInfo->pTopicName, pPublishInfo->topicNameLength);
     topic[pPublishInfo->topicNameLength] = 0;
-    // logInfo("Received topic: %s", topic);
+    logInfo("Received topic: %s", topic);
     if (isContainString(topic, "get")) {
+        bool packetIsValid = false;
         flag = true;
         JSON* recvPacket = JSON_Parse(aws_buff);
         JSON* state = JSON_GetObject(recvPacket, "state");
         JSON* reported = JSON_GetObject(state, "reported");
-
-        if (isContainString(topic, "d_")) {
-            JSON_SetNumber(reported, "type", TYPE_SYNC_DB_DEVICES);
-            JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
-        } else if(isContainString(topic, "s_")) {
-            JSON_SetNumber(reported, "type", TYPE_SYNC_DB_SCENES);
-            JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
-        } else if(isContainString(topic, "g_")) {
-            JSON_SetNumber(reported, "type", TYPE_SYNC_DB_GROUPS);
-            JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
-        } else {
+        list_t* topicParts = String_Split(topic, "/");
+        if (StringCompare(topicParts->items[5], "accountInfo")) {
+            packetIsValid = true;
             JSON_SetNumber(reported, "type", TYPE_GET_NUM_OF_PAGE);
             JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
+        } else if (topicParts->count == 8 && StringCompare(topicParts->items[6], "get")) {
+            list_t* tmp = String_Split(topicParts->items[5], "_");
+            if (tmp->count == 2) {
+                int pageIndex = atoi(tmp->items[1]);
+                if (pageIndex == g_syncingPageIndex) {
+                    JSON_SetNumber(reported, "pageIndex", pageIndex);
+                    if (isContainString(topic, "d_")) {
+                        packetIsValid = true;
+                        JSON_SetNumber(reported, "type", TYPE_SYNC_DB_DEVICES);
+                        JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
+                    } else if(isContainString(topic, "s_")) {
+                        packetIsValid = true;
+                        JSON_SetNumber(reported, "type", TYPE_SYNC_DB_SCENES);
+                        JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
+                    } else if(isContainString(topic, "g_")) {
+                        packetIsValid = true;
+                        JSON_SetNumber(reported, "type", TYPE_SYNC_DB_GROUPS);
+                        JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
+                    }
+                }
+            }
+            List_Delete(tmp);
         }
+
         memset(aws_buff,'\0',MAX_SIZE_ELEMENT_QUEUE);
         char* updatedPacket = cJSON_PrintUnformatted(recvPacket);
-        strcpy(aws_buff, updatedPacket);
+        StringCopy(aws_buff, updatedPacket);
         free(updatedPacket);
-        JSON_Delete(recvPacket);
 
-        // if () {
-        //     // Unsubscribe "/get" topic, we only want to get all data at startup
-        //     MQTT_Unsubscribe(pMqttContext, &g_awsSubscriptionList[0], 1, MQTT_GetPacketId(pMqttContext));
-        // }
+        JSON_Delete(recvPacket);
+        List_Delete(topicParts);
+
+        if (packetIsValid == false) {
+            return;
+        }
     }
 
     if (flag == false || g_awsSyncDatabaseStep) {
@@ -919,7 +937,7 @@ void Aws_Init() {
     returnStatus = initializeMqtt( &mqttContext, &networkContext );
     // Initialize the subscribe list
 
-    g_awsSubscriptionCount = 3;
+    g_awsSubscriptionCount = 4;
     g_awsSubscriptionList = malloc(sizeof(MQTTSubscribeInfo_t) * g_awsSubscriptionCount);
 
     g_awsSubscriptionList[0].qos = MQTTQoS0;
@@ -931,8 +949,12 @@ void Aws_Init() {
     g_awsSubscriptionList[1].topicFilterLength = strlen(g_awsSubscriptionList[1].pTopicFilter);
 
     g_awsSubscriptionList[2].qos = MQTTQoS0;
-    g_awsSubscriptionList[2].pTopicFilter = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_SUB);
+    g_awsSubscriptionList[2].pTopicFilter = Aws_GetTopic(PAGE_ANY, 0, TOPIC_REJECT);
     g_awsSubscriptionList[2].topicFilterLength = strlen(g_awsSubscriptionList[2].pTopicFilter);
+
+    g_awsSubscriptionList[3].qos = MQTTQoS0;
+    g_awsSubscriptionList[3].pTopicFilter = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_SUB);
+    g_awsSubscriptionList[3].topicFilterLength = strlen(g_awsSubscriptionList[3].pTopicFilter);
 }
 
 void Aws_ProcessLoop() {
@@ -1016,7 +1038,7 @@ void Mosq_ProcessMessage() {
     int size_queue = get_sizeQueue(queue_mos_sub);
     if (size_queue > 0) {
         char *val_input = (char*)malloc(10000);
-        strcpy(val_input,(char *)dequeue(queue_mos_sub));
+        StringCopy(val_input,(char *)dequeue(queue_mos_sub));
         logInfo("Received msg from MQTT local: %s", val_input);
 
         JSON* recvPacket = JSON_Parse(val_input);
@@ -1053,7 +1075,6 @@ void Mosq_ProcessMessage() {
                     int dpId = JSON_GetNumber(payload, "dpId");
                     sprintf(str, "%d", dpId);
                     JSON_SetNumber(dictDPs, str, JSON_GetNumber(payload, "dpValue"));
-                    // logInfo(cJSON_PrintUnformatted(g_mergePayloads));
                 }
                 break;
             }
@@ -1172,8 +1193,6 @@ int main( int argc,char ** argv ) {
 
             Pre_parse *pre_detect = (Pre_parse *)malloc(sizeof(Pre_parse));
             Info_device *inf_device = (Info_device *)malloc(sizeof(Info_device));
-            // Info_device_Debug *inf_device_Debug = (Info_device_Debug *)malloc(sizeof(Info_device_Debug));
-
             Info_scene *inf_scene = (Info_scene *)malloc(sizeof(Info_scene));
             InfoProvisonGateway InfoProvisonGateway_t;
             Info_group *info_group_t = (Info_group *)malloc(sizeof(Info_group));
@@ -1182,7 +1201,7 @@ int main( int argc,char ** argv ) {
             JSON* recvPacket = JSON_Parse(recvMsg);
 
             char *val_input = (char*)malloc(strlen(recvMsg) + 1);
-            strcpy(val_input, recvMsg);
+            StringCopy(val_input, recvMsg);
             printf("\n\r");
             logInfo("Received msg from MQTT cloud: %s", val_input);
 
@@ -1449,7 +1468,8 @@ int main( int argc,char ** argv ) {
 
                         if (pageIndex < g_awsDevicePageNum) {
                             // Send request to get next page
-                            char* topic = Aws_GetTopic(PAGE_DEVICE, pageIndex + 1, TOPIC_GET_PUB);
+                            g_syncingPageIndex = pageIndex + 1;
+                            char* topic = Aws_GetTopic(PAGE_DEVICE, g_syncingPageIndex, TOPIC_GET_PUB);
                             mqttCloudPublish(topic, "");
                             free(topic);
                         } else {

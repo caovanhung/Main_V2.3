@@ -195,7 +195,7 @@ void ResponseWaiting() {
             }
         }
         char reqId[20];
-        strcpy(reqId, JSON_GetText(respItem, "reqType"));   // reqId = reqType.itemId
+        StringCopy(reqId, JSON_GetText(respItem, "reqType"));   // reqId = reqType.itemId
         int reqType  = atoi(strtok(reqId, "."));
         char* itemId = strtok(NULL, ".");
         // Calculate timeout based on number of successed and failed devices
@@ -285,9 +285,11 @@ void ResponseWaiting() {
             List_Delete(successDevices);
             List_Delete(failedDevices);
             // Send notification to user
-            char noti[100];
-            sprintf(noti, "Thành công: %d, Thất bại: %d", successCount, failedCount + notRespCount);
-            sendNotiToUser(noti);
+            if (reqType != TYPE_CTR_DEVICE) {
+                char noti[100];
+                sprintf(noti, "Thành công: %d, Thất bại: %d", successCount, failedCount + notRespCount);
+                sendNotiToUser(noti);
+            }
         }
     }
 }
@@ -381,7 +383,7 @@ void checkSceneForDevice(const char* deviceId, int dpId) {
         Scene* scene = &g_sceneList[i];
         for (int c = 0; c < scene->conditionCount; c++) {
             if (scene->conditions[c].conditionType == EntityDevice &&
-                (strcmp(scene->conditions[c].entityId, deviceId) == 0) &&
+                (StringCompare(scene->conditions[c].entityId, deviceId)) &&
                 (scene->conditions[c].dpId == dpId)) {
                 checkSceneCondition(scene);
             }
@@ -594,12 +596,13 @@ int main(int argc, char ** argv)
                                 Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
                                 if (causeType == EV_CAUSE_TYPE_SYNC) {
                                     Db_AddDeviceHistory(payload);
-                                } else {
-                                    updateDeviceRespStatus(TYPE_CTR_DEVICE, dpAddr, dpAddr, 0);
                                 }
                                 // Check and run scenes for this device if any
                                 checkSceneForDevice(dpInfo.deviceId, dpInfo.id);
                             }
+                            // if (causeType == EV_CAUSE_TYPE_APP) {
+                                updateDeviceRespStatus(TYPE_CTR_DEVICE, dpAddr, dpAddr, 0);
+                            // }
                         }
                         break;
                     }
@@ -662,8 +665,8 @@ int main(int argc, char ** argv)
                         int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr);
                         if (foundDevices == 1) {
                             JSON_SetText(payload, "deviceId", deviceInfo.id);
-                            sendPacketTo(SERVICE_AWS, reqType, payload);
                             Db_SaveDpValue(deviceInfo.id, dpId, dpValue);
+                            Aws_SaveDpValue(deviceInfo.id, dpId, dpValue, deviceInfo.pageIndex);
                             JSON_SetNumber(payload, "causeType", 0);
                             JSON_SetText(payload, "causeId", "");
                             JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);
@@ -819,14 +822,14 @@ int main(int argc, char ** argv)
                                     JSON_SetNumber(dp, "value", o->valueint);
                                     JSON_SetText(dp, "valueString", o->valuestring);
                                     cJSON_AddItemToArray(dictDPs, dp);
-                                    if (reqType == TYPE_CTR_DEVICE && (isContainString(HG_BLE_SWITCH, deviceInfo.pid) || dpId == 20)) {
-                                        JSON* item = addDeviceToRespList(reqType, dpInfo.addr, dpInfo.addr);
-                                        JSON_SetText(item, "deviceId", deviceId);
-                                        JSON_SetText(item, "causeId", senderId);
-                                        JSON_SetNumber(item, "dpId", dpId);
-                                        JSON_SetNumber(item, "oldDpValue", dpInfo.value);
-                                        JSON_SetNumber(item, "pageIndex", deviceInfo.pageIndex);
-                                    }
+                                    // if (reqType == TYPE_CTR_DEVICE && (isContainString(HG_BLE_SWITCH, deviceInfo.pid) || dpId == 20)) {
+                                    //     JSON* item = addDeviceToRespList(reqType, dpInfo.addr, dpInfo.addr);
+                                    //     JSON_SetText(item, "deviceId", deviceId);
+                                    //     JSON_SetText(item, "causeId", senderId);
+                                    //     JSON_SetNumber(item, "dpId", dpId);
+                                    //     JSON_SetNumber(item, "oldDpValue", dpInfo.value);
+                                    //     JSON_SetNumber(item, "pageIndex", deviceInfo.pageIndex);
+                                    // }
                                 }
                             }
                             if (StringCompare(deviceInfo.pid, HG_BLE_IR_AC) ||
@@ -857,7 +860,7 @@ int main(int argc, char ** argv)
                         bool isLocal = true;
                         int sceneType = 0;
                         for (int i = 0; i < g_sceneCount; i++) {
-                            if (strcmp(g_sceneList[i].id, sceneId) == 0) {
+                            if (StringCompare(g_sceneList[i].id, sceneId)) {
                                 isLocal = g_sceneList[i].isLocal;
                                 sceneType = g_sceneList[i].type;
                                 JSON_SetNumber(payload, "sceneType", g_sceneList[i].type);
@@ -872,7 +875,7 @@ int main(int argc, char ** argv)
                             logInfo("Executing HC scene %s", sceneId);
                             if (!isLocal) {
                                 for (int i = 0; i < g_sceneCount; i++) {
-                                    if (strcmp(g_sceneList[i].id, sceneId) == 0) {
+                                    if (StringCompare(g_sceneList[i].id, sceneId)) {
                                         markSceneToRun(&g_sceneList[i]);
                                         break;
                                     }
@@ -1547,7 +1550,7 @@ bool Scene_GetFullInfo(JSON* packet) {
         uint8_t repeat = 0;
         JSON* exprArray = JSON_GetObject(condition, "expr");
         char* entityId = JSON_GetText(condition, "entityId");
-        if (strcmp(entityId, "timer") == 0) {
+        if (StringCompare(entityId, "timer")) {
             repeat = atoi(JSON_GetText(exprArray, "loops"));
             char* time = JSON_GetText(exprArray, "time");
             list_t* timeItems = String_Split(time, ":");
@@ -1618,7 +1621,7 @@ Scene* Scene_ParseJson(const char* json) {
         JSON* executorProperty = JSON_GetObject(action, "executorProperty");
         StringCopy(sceneAction->entityId, JSON_GetText(action, "entityId"));
         int delaySeconds = 0;
-        if (strcmp(sceneAction->entityId, "delay") == 0) {
+        if (StringCompare(sceneAction->entityId, "delay")) {
             int minutes = atoi(JSON_GetText(executorProperty, "minutes"));
             delaySeconds = atoi(JSON_GetText(executorProperty, "seconds"));
             delaySeconds = minutes * 60 + delaySeconds;
@@ -1657,7 +1660,7 @@ Scene* Scene_ParseJson(const char* json) {
         JSON* exprArray = JSON_GetObject(condition, "expr");
         char* entityId = JSON_GetText(condition, "entityId");
         StringCopy(sceneCondition->entityId, JSON_GetText(condition, "entityId"));
-        if (strcmp(sceneCondition->entityId, "timer") == 0) {
+        if (StringCompare(sceneCondition->entityId, "timer")) {
             repeat = atoi(JSON_GetText(exprArray, "loops"));
             char* time = JSON_GetText(exprArray, "time");
             list_t* timeItems = String_Split(time, ":");

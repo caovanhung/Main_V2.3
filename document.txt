@@ -196,3 +196,17 @@ Tính năng IR:
 
         Lệnh 4: 04 02 05 18 00 01 00 00
                 04 02 03 18 00 01 00 00
+
+
+
+
+# Cấu hình serveo để ssh từ xa (qua mạng internet)
+    Copy file serveo.service vào thư mục /etc/systemd/system
+    Sửa lại alias trong file này với giá trị khác (nên tạo ngẫu nhiên để đảm bảo không bị trùng)
+    Chạy các lệnh sau:
+        systemctl daemon-reload
+        systemctl enable serveo.service
+        systemctl start serveo.service
+        systemctl status serveo.service
+    SSH vào board bằng lệnh sau:
+        ssh -J serveo.net root@homegy_jhskfhallas7624923

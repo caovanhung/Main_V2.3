@@ -50,6 +50,8 @@ char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType) 
         topicTypeStr = "update/accepted";
     } else if (topicType == TOPIC_NOTI_PUB || topicType == TOPIC_NOTI_SUB) {
         topicTypeStr = "notify";
+    } else if (topicType == TOPIC_REJECT) {
+        topicTypeStr = "reject";
     }
 
     if (topicTypeStr && pageTypeStr) {

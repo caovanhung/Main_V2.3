@@ -170,7 +170,8 @@ typedef enum {
     TOPIC_UPD_PUB,      //     /update
     TOPIC_UPD_SUB,      //     /update/accepted
     TOPIC_NOTI_PUB,     //     /notify
-    TOPIC_NOTI_SUB      //     /notify
+    TOPIC_NOTI_SUB,     //     /notify
+    TOPIC_REJECT        //     /reject
 } AwsTopicType;
 
 void getHcInformation();

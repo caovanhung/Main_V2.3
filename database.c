@@ -196,10 +196,10 @@ int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand) {
         {
             deviceInfo->state = sqlite3_column_int(sqlResponse, 1);
             deviceInfo->provider = sqlite3_column_int(sqlResponse, 7);
-            strcpy(deviceInfo->id, sqlite3_column_text(sqlResponse, 0));
-            strcpy(deviceInfo->addr, sqlite3_column_text(sqlResponse, 4));
+            StringCopy(deviceInfo->id, sqlite3_column_text(sqlResponse, 0));
+            StringCopy(deviceInfo->addr, sqlite3_column_text(sqlResponse, 4));
             deviceInfo->gwIndex = sqlite3_column_int(sqlResponse, 5);
-            strcpy(deviceInfo->pid, sqlite3_column_text(sqlResponse, 8));
+            StringCopy(deviceInfo->pid, sqlite3_column_text(sqlResponse, 8));
             deviceInfo->pageIndex = sqlite3_column_int(sqlResponse, 15);
             rowCount = 1;
         }
@@ -265,7 +265,7 @@ char* Db_FindDevicesInGroup(const char* groupAddr) {
     Sql_Query(sqlCommand, row) {
         char* devices = sqlite3_column_text(row, 4);
         resultDeviceIds = malloc(strlen(devices) + 1);
-        strcpy(resultDeviceIds, devices);
+        StringCopy(resultDeviceIds, devices);
     }
     return resultDeviceIds;
 }
@@ -316,15 +316,15 @@ int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId) {
     Sql_Query(sqlCommand, row) {
         dpInfo->id = dpId;
         char* value = sqlite3_column_text(row, 2);
-        if (strcmp(value, "true") == 0) {
+        if (StringCompare(value, "true")) {
             dpInfo->value = 1;
-        } else if (strcmp(value, "false") == 0) {
+        } else if (StringCompare(value, "false")) {
             dpInfo->value = 0;
         } else {
             dpInfo->value = strtod(value, NULL);
         }
-        strcpy(dpInfo->deviceId, sqlite3_column_text(row, 0));
-        strcpy(dpInfo->addr, sqlite3_column_text(row, 1));
+        StringCopy(dpInfo->deviceId, sqlite3_column_text(row, 0));
+        StringCopy(dpInfo->addr, sqlite3_column_text(row, 1));
         dpInfo->pageIndex = sqlite3_column_int(row, 3);
         rowCount = 1;
     }
@@ -339,15 +339,15 @@ int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr) {
     Sql_Query(sqlCommand, row) {
         dpInfo->id = atoi(sqlite3_column_text(row, 1));
         char* value = sqlite3_column_text(row, 3);
-        if (strcmp(value, "true")) {
+        if (StringCompare(value, "true")) {
             dpInfo->value = 1;
-        } else if (strcmp(value, "false")) {
+        } else if (StringCompare(value, "false")) {
             dpInfo->value = 0;
         } else {
             dpInfo->value = strtod(value, NULL);
         }
-        strcpy(dpInfo->deviceId, sqlite3_column_text(row, 0));
-        strcpy(dpInfo->addr, sqlite3_column_text(row, 2));
+        StringCopy(dpInfo->deviceId, sqlite3_column_text(row, 0));
+        StringCopy(dpInfo->addr, sqlite3_column_text(row, 2));
         dpInfo->pageIndex = sqlite3_column_int(row, 4);
         rowCount = 1;
     }
