@@ -130,7 +130,7 @@ extern int g_dbgLineNumber;
 #define GW_RESPONSE_ADD_DEVICE                          (68U)
 #define GW_RESPONSE_ADD_SCENE_HC                        (69U)
 #define GW_RESPONSE_DEL_SCENE_HC                        (70U)
-#define GW_RESPONSE_ADD_SCENE          (71U)
+#define GW_RESPONSE_ADD_SCENE                           (71U)
 #define GW_RESPONSE_SCENE_LC_CALL_FROM_DEVICE           (72U)
 #define GW_RESPONSE_ADD_SCENE_LC                        (73U)
 #define GW_RESPONSE_DEL_SCENE_LC                        (74U)
@@ -570,6 +570,19 @@ extern int g_dbgLineNumber;
 
 
 #define KEY_SHADOWNAME_AWS              "ShadowName"
+
+
+// DPs of IR devices
+#define DPID_IR_BRAND_ID        "1"
+#define DPID_IR_REMOTE_ID       "2"
+#define DPID_IR_COMMAND_TYPE    "3"
+#define DPID_IR_VOICE           "4"
+#define DPID_IR_ONOFF           "101"
+#define DPID_IR_MODE            "102"
+#define DPID_IR_TEMP            "103"
+#define DPID_IR_FAN             "104"
+#define DPID_IR_SWING           "105"
+#define DPID_IR_COMMAND         "106"
 
 
 // Event history type

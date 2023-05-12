@@ -389,23 +389,20 @@ int Db_LoadSceneToRam() {
         int actionCount = 0;
         JSON_ForEach(act, actionsArray) {
             SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
+            action->dpCount = 0;
             if (JSON_HasKey(act, "actionType")) {
                 action->actionType = JSON_GetNumber(act, "actionType");
                 action->delaySeconds = JSON_HasKey(act, "delaySeconds")? JSON_GetNumber(act, "delaySeconds") : 0;
                 StringCopy(action->entityId, JSON_GetText(act, "entityId"));
-                action->dpId = JSON_HasKey(act, "dpId")? JSON_GetNumber(act, "dpId") : 0;
-                action->dpValue = JSON_HasKey(act, "dpValue")? JSON_GetNumber(act, "dpValue") : 0;
-                if (action->actionType == EntityDevice) {
-                    StringCopy(action->pid, JSON_GetText(act, "pid"));
-                    StringCopy(action->dpAddr, JSON_GetText(act, "dpAddr"));
+                JSON* executorProperty = JSON_GetObject(act, "executorProperty");
+                JSON_ForEach(o, executorProperty) {
+                    action->dpIds[action->dpCount] = atoi(o->string);
+                    action->dpValues[action->dpCount] = o->valuedouble;
+                    action->dpCount++;
                 }
                 // Load 'code' field for controlling tuya
                 if (JSON_HasKey(act, "code")) {
-                    JSON* executorProperty = JSON_GetObject(act, "executorProperty");
-                    JSON_ForEach(o, executorProperty) {
-                        action->dpValue = o->valueint;
-                    }
-                    StringCopy(action->dpAddr, JSON_GetText(act, "code"));
+                    StringCopy(action->entityId, JSON_GetText(act, "code"));
                 }
                 int isWifi = JSON_HasKey(act, "isWifi")? JSON_GetNumber(act, "isWifi") : 0;
                 if (isWifi || JSON_HasKey(act, "code")) {

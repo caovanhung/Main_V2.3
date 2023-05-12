@@ -67,7 +67,7 @@ void List_Delete(list_t* l) {
 
 int List_PushString(list_t* l, const char* item) {
     char* newItem = malloc(strlen(item) + 1);
-    strcpy(newItem, item);
+    StringCopy(newItem, item);
     l->items[l->count++] = newItem;
     return (l->count - 1);
 }
@@ -94,7 +94,7 @@ list_t* String_Split(const char* str, const char* delim) {
     if (str && delim) {
         // Copy to temp string before split because strtok will modify the original string
         char* tmpString = malloc(strlen(str) + 1);
-        strcpy(tmpString, str);
+        StringCopy(tmpString, str);
         // Split string
         char * token = strtok(tmpString, delim);
         while (token != NULL) {

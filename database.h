@@ -63,10 +63,9 @@ typedef struct {
     EntityType      actionType;     // Thiết bị, kịch bản hay độ trễ
     char            entityId[50];   // Id của thiết bị hoặc kịch bản cần thực hiện
     char            entityAddr[10]; // Address của thiết bị hoặc kịch bản cần thực hiện
-    char            pid[50];        // PID của thiết bị nếu entityType = Thiết bị
-    int             dpId;           // Id của dp nếu entityType = Thiết bị
-    char            dpAddr[100];    // Address của dp nếu entityType = Thiết bị
-    double          dpValue;        // dpValue của thiết bị nếu entityType = Thiết bị
+    uint8_t         dpIds[10];      // Danh sách Id của các dps nếu entityType = Thiết bị
+    double          dpValues[10];   // dpValues của từng dp nếu entityType = Thiết bị
+    int             dpCount;        // Số lượng dp cần điều khiển
     int             delaySeconds;   // Giá trị thời gian trễ tính bằng giây nếu entityType = Độ trễ
     char            serviceName[10];// Service điều khiển cho action BLE, TUYA, XIAOMI, HOMEKIT, chỉ áp dụng khi actionType = EntityDevice, EntityScene
 } SceneAction;

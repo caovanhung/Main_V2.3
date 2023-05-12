@@ -824,12 +824,23 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
     JSON* mergedActions = JSON_CreateArray();
     for (i = 0; i < actionCount; i++) {
         JSON* action = JArr_GetObject(actions, i);
-        if (JSON_HasKey(action, "pid")) {
+        char* actionExecutor = JSON_GetText(action, "actionExecutor");
+        JSON* executorProperty = JSON_GetObject(action, "executorProperty");
+        char* deviceAddr = JSON_GetText(action, "entityAddr");
+        if (StringCompare(actionExecutor, "irHGBLE")) {
+            uint8_t commandIndex = JSON_GetNumber(action, "commandIndex");
+            uint8_t commandType = JSON_GetNumber(executorProperty, DPID_IR_COMMAND_TYPE);
+            uint8_t brandId = JSON_GetNumber(executorProperty, DPID_IR_BRAND_ID);
+            uint8_t remoteId = JSON_GetNumber(executorProperty, DPID_IR_REMOTE_ID);
+            uint8_t temp = JSON_HasKey(executorProperty, DPID_IR_TEMP)? JSON_GetNumber(executorProperty, DPID_IR_TEMP) : 0;
+            uint8_t mode = JSON_HasKey(executorProperty, DPID_IR_MODE)? JSON_GetNumber(executorProperty, DPID_IR_MODE) : 0;
+            uint8_t fan = JSON_HasKey(executorProperty, DPID_IR_FAN)? JSON_GetNumber(executorProperty, DPID_IR_FAN) : 0;
+            uint8_t swing = JSON_HasKey(executorProperty, DPID_IR_SWING)? JSON_GetNumber(executorProperty, DPID_IR_SWING) : 0;
+            GW_AddSceneActionIR(deviceAddr, sceneId, commandIndex, commandType, brandId, remoteId, temp, mode, fan, swing);
+        } else if (JSON_HasKey(action, "pid")) {
             char* pid = JSON_GetText(action, "pid");
-            char* deviceAddr = JSON_GetText(action, "entityAddr");
             int dpId = JSON_GetNumber(action, "dpId");
             int dpValue = JSON_GetNumber(action, "dpValue");
-
             if (pid != NULL) {
                 if (isContainString(HG_BLE_SWITCH, pid)) {
                     int dpParam = (dpId - 1)*0x10 + dpValue;
@@ -907,9 +918,13 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
     JSON* mergedActions = JSON_CreateArray();
     for (i = 0; i < actionCount; i++) {
         JSON* action = JArr_GetObject(actions, i);
-        if (JSON_HasKey(action, "pid")) {
+        char* actionExecutor = JSON_GetText(action, "actionExecutor");
+        char* deviceAddr = JSON_GetText(action, "entityAddr");
+        if (StringCompare(actionExecutor, "irHGBLE")) {
+            uint8_t commandIndex = JSON_GetNumber(action, "commandIndex");
+            GW_DeleteSceneActionIR(deviceAddr, sceneId, commandIndex);
+        } else if (JSON_HasKey(action, "pid")) {
             char* pid = JSON_GetText(action, "pid");
-            char* deviceAddr = JSON_GetText(action, "entityAddr");
             int dpId = JSON_GetNumber(action, "dpId");
 
             if (pid != NULL) {
@@ -952,17 +967,24 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
 
 bool addSceneCondition(const char* sceneId, JSON* condition) {
     if (sceneId && condition) {
+        logInfo("[addSceneCondition] sceneId = %s", sceneId);
         char *pid = JSON_GetText(condition, "pid");
-        char *dpAddr = JSON_GetText(condition, "dpAddr");
-        int dpValue   = JSON_GetNumber(condition, "dpValue");
-        if (isMatchString(pid, HG_BLE_SENSOR_MOTION)) {
-            ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
-            // Add this device to response list to check TIMEOUT later
-            addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
+        if (StringCompare(pid, HG_BLE_IR)) {
+            char* deviceAddr = JSON_GetText(condition, "entityAddr");
+            uint16_t voiceCode = JSON_GetNumber(condition, "dpValue");
+            GW_AddSceneConditionIR(deviceAddr, sceneId, voiceCode);
         } else {
-            ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
-            // Add this device to response list to check TIMEOUT later
-            addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
+            char *dpAddr = JSON_GetText(condition, "dpAddr");
+            int dpValue   = JSON_GetNumber(condition, "dpValue");
+            if (isMatchString(pid, HG_BLE_SENSOR_MOTION)) {
+                ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
+                // Add this device to response list to check TIMEOUT later
+                addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
+            } else {
+                ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
+                // Add this device to response list to check TIMEOUT later
+                addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
+            }
         }
     }
     return true;
@@ -970,11 +992,16 @@ bool addSceneCondition(const char* sceneId, JSON* condition) {
 
 bool deleteSceneCondition(const char* sceneId, JSON* condition) {
     if (sceneId && condition) {
-        char* p = cJSON_PrintUnformatted(condition);
-        char* dpAddr = JSON_GetText(condition, "dpAddr");
-        int dpValue  = JSON_GetNumber(condition, "dpValue");
-        ble_callSceneLocalToDevice(dpAddr, "0000", "00", dpValue);
-        sleep(1);
+        logInfo("[deleteSceneCondition] sceneId = %s", sceneId);
+        char *pid = JSON_GetText(condition, "pid");
+        if (StringCompare(pid, HG_BLE_IR)) {
+            char* deviceAddr = JSON_GetText(condition, "entityAddr");
+            GW_DeleteSceneConditionIR(deviceAddr, sceneId);
+        } else {
+            char* dpAddr = JSON_GetText(condition, "dpAddr");
+            int dpValue  = JSON_GetNumber(condition, "dpValue");
+            ble_callSceneLocalToDevice(dpAddr, "0000", "00", dpValue);
+        }
     }
     return true;
 }

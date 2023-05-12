@@ -30,6 +30,7 @@
 #include "cJSON.h"
 #include "helper.h"
 
+extern struct mosquitto * mosq;
 
 #define sendToService(serviceToSend, typeAction, payload)  g_dbgFileName = FILENAME; g_dbgLineNumber =  __LINE__; sendToServiceFunc(mosq, serviceToSend, typeAction, payload);
 bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, const char* payload);
@@ -61,8 +62,7 @@ void Aws_updateGroupState(const char* groupAddr, int state);
 void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const list_t* failedDevices);
 
 
-void Ble_ControlDevice(const char* pid, DpInfo* dps, int dpCount);
-void Ble_SetTTL(int gwIndex, const char* deviceAddr, uint8_t ttl);
+
 
 void sendNotiToUser(const char* message);
 

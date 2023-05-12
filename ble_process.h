@@ -170,12 +170,12 @@ bool ble_addDeviceToGroupLink(int gwIndex, const char *address_group, const char
 /*
  * Lock agency
  */
-int ble_logDeivce(const char *address_element, int state);
+bool ble_logDeivce(const char *address_element, int state);
 
 /*
  * Lock kids
  */
-int ble_logTouch(const char *address_element, uint8_t dpId, int state);
+bool ble_logTouch(const char *address_element, uint8_t dpId, int state);
 
 /*
  * Add/delete local scene
@@ -243,16 +243,18 @@ bool setResetDeviceSofware(const char *addressDevice);
 
 char *get_dpid(const char *code);
 
-int  GW_CtrlGroupLightOnoff(const char *groupAddr, uint8_t onoff);
+bool  GW_CtrlGroupLightOnoff(const char *groupAddr, uint8_t onoff);
 bool GW_CtrlGroupLightCT(const char *dpAddr, int lightness, int colorTemperature);
-int  GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl);
+bool  GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl);
 
 /*
  * Control IR
  * Models:
  */
-int GW_ControlIRCmd(const char* command);
-int GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remoteId, int temp, int mode, int fan, int swing);
-
-
+bool GW_ControlIRCmd(const char* command);
+bool GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remoteId, int temp, int mode, int fan, int swing);
+bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex, uint8_t commandType, uint8_t brandId, uint8_t remoteId, uint8_t temp, uint8_t mode, uint8_t fan, uint8_t swing);
+bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex);
+bool GW_AddSceneConditionIR(const char* deviceAddr, const char* sceneId, uint16_t voiceCode);
+bool GW_DeleteSceneConditionIR(const char* deviceAddr, const char* sceneId);
 #endif

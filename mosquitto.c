@@ -3,7 +3,7 @@
 #include "mosquitto.h"
 #include "time_t.h"
 #include "helper.h"
-
+#include "database.h"
 
 char* g_dbgFileName;
 int g_dbgLineNumber;
@@ -21,13 +21,13 @@ bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int ty
     char* layerService;
     char topic[100];
 
-    if (strcmp(serviceToSend, SERVICE_AWS) == 0) {
+    if (StringCompare(serviceToSend, SERVICE_AWS)) {
         layerService = MOSQ_LayerService_App;
-    } else if (strcmp(serviceToSend, SERVICE_CORE) == 0) {
+    } else if (StringCompare(serviceToSend, SERVICE_CORE)) {
         layerService = MOSQ_LayerService_Core;
-    } else if (strcmp(serviceToSend, SERVICE_BLE) == 0) {
+    } else if (StringCompare(serviceToSend, SERVICE_BLE)) {
         layerService = MOSQ_LayerService_Device;
-    } else if (strcmp(serviceToSend, SERVICE_TUYA) == 0) {
+    } else if (StringCompare(serviceToSend, SERVICE_TUYA)) {
         layerService = MOSQ_LayerService_Device;
     } else {
         layerService = "Unknown";
@@ -62,13 +62,13 @@ bool sendToServicePageIndexFunc(struct mosquitto* mosq, const char* serviceToSen
     char* layerService;
     char topic[100];
 
-    if (strcmp(serviceToSend, SERVICE_AWS) == 0) {
+    if (StringCompare(serviceToSend, SERVICE_AWS)) {
         layerService = MOSQ_LayerService_App;
-    } else if (strcmp(serviceToSend, SERVICE_CORE) == 0) {
+    } else if (StringCompare(serviceToSend, SERVICE_CORE)) {
         layerService = MOSQ_LayerService_Core;
-    } else if (strcmp(serviceToSend, SERVICE_BLE) == 0) {
+    } else if (StringCompare(serviceToSend, SERVICE_BLE)) {
         layerService = MOSQ_LayerService_Device;
-    } else if (strcmp(serviceToSend, SERVICE_TUYA) == 0) {
+    } else if (StringCompare(serviceToSend, SERVICE_TUYA)) {
         layerService = MOSQ_LayerService_Device;
     } else {
         layerService = "Unknown";
@@ -219,25 +219,6 @@ void sendNotiToUser(const char* message) {
     free(payload);
 }
 
-
-// void Ble_ControlDevice(const char* pid, DpInfo* dps, int dpCount) {
-//     ASSERT(pid); ASSERT(dps);
-//     JSON* p = JSON_CreateObject();
-//     JSON_SetText(p, "pid", pid);
-//     JSON_SetNumber(p, "ttl", ttl);
-//     sendPacketTo(SERVICE_BLE, TYPE_SET_DEVICE_TTL, p);
-//     JSON_Delete(p);
-// }
-
-
-void Ble_SetTTL(int gwIndex, const char* deviceAddr, uint8_t ttl) {
-    JSON* p = JSON_CreateObject();
-    JSON_SetNumber(p, "gwIndex", gwIndex);
-    JSON_SetText(p, "deviceAddr", deviceAddr);
-    JSON_SetNumber(p, "ttl", ttl);
-    sendPacketTo(SERVICE_BLE, TYPE_SET_DEVICE_TTL, p);
-    JSON_Delete(p);
-}
 
 
 

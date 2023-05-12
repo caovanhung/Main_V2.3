@@ -18,6 +18,7 @@ typedef struct {
     uint16_t addr;
     uint8_t  data[50];
     uint8_t  dataLength;
+    uint8_t  retryCount;
 } UartSendingFrame;
 
 typedef struct {
@@ -56,6 +57,10 @@ void addPriorityToSendingFrame(int priority) {
     g_uartSendingFrames[g_uartSendingFramesIdx].priority = priority;
 }
 
+void addRetryCountToSendingFrame(uint8_t retryCount) {
+    g_uartSendingFrames[g_uartSendingFramesIdx].retryCount = retryCount;
+}
+
 bool sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
     ASSERT(data);
     for (int i = 0; i < UART_SENDING_FRAME_SIZE; i++) {
@@ -66,6 +71,7 @@ bool sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
             g_uartSendingFrames[i].priority = 1;
             memcpy(g_uartSendingFrames[i].data, data, len);
             g_uartSendingFrames[i].dataLength = len;
+            g_uartSendingFrames[i].retryCount = 2;
             g_uartSendingFramesIdx = i;
             return true;
         }
@@ -105,6 +111,7 @@ void BLE_SendToGateway(int gwIndex) {
         // Find frame to send
         UartSendingFrame* frame = findFrameToSend(gwIndex);
         if (frame != NULL) {
+            sentFrame[gwIndex].retryCount = frame->retryCount;
             sentFrame[gwIndex].respType = frame->respType;
             sentFrame[gwIndex].addr = frame->addr;
             sentFrame[gwIndex].dataLength = frame->dataLength;
@@ -149,7 +156,7 @@ void BLE_SendToGateway(int gwIndex) {
         // Timeout handling
         if (timeInMilliseconds() - sentTime[gwIndex] > 1000) {
             failedCount[gwIndex]++;
-            if (failedCount[gwIndex] < 2) {
+            if (failedCount[gwIndex] < sentFrame[gwIndex].retryCount) {
                 state[gwIndex] = 1;      // Goto step 1 to retry sending
             } else {
                 // TIMEOUT occurs
@@ -784,7 +791,7 @@ bool ble_controlOnOFF(const char *address_element,const char *state)
     String2HexArr(str_send_uart,hex_send_uart);
     hex_send_uart[len_str/2] = tid++;
     sendFrameToAnyGw(dpAddrHex, hex_send_uart, len_str/2 + 1);
-     addPriorityToSendingFrame(0);
+    addPriorityToSendingFrame(0);
     free(hex_send_uart);
     free(str_send_uart);
     return true;
@@ -1279,7 +1286,7 @@ char *get_dpid(const char *code)
 }
 
 
-int ble_logDeivce(const char *address_element,int state)
+bool ble_logDeivce(const char *address_element,int state)
 {
     ASSERT(address_element);
     long int addrHex = strtol(address_element, NULL, 16);
@@ -1294,7 +1301,7 @@ int ble_logDeivce(const char *address_element,int state)
     return sendFrameToAnyGw(addrHex, LOG_DEVICE, 18);
 }
 
-int ble_logTouch(const char *address_element, uint8_t dpId, int state)
+bool ble_logTouch(const char *address_element, uint8_t dpId, int state)
 {
     ASSERT(address_element);
     long int addrHex = strtol(address_element, NULL, 16);
@@ -1307,7 +1314,7 @@ int ble_logTouch(const char *address_element, uint8_t dpId, int state)
     return sendFrameToAnyGw(addrHex, LOG_TOUCH, 18);
 }
 
-int GW_CtrlGroupLightOnoff(const char *groupAddr, uint8_t onoff) {
+bool GW_CtrlGroupLightOnoff(const char *groupAddr, uint8_t onoff) {
     ASSERT(groupAddr);
     long int addrHex = strtol(groupAddr, NULL, 16);
     uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0xff,0xff, 0x82,0x03,0x00};
@@ -1351,7 +1358,7 @@ bool GW_CtrlGroupLightCT(const char *dpAddr, int lightness, int colorTemperature
     return sendFrameToAnyGw(dpAddrHex, SET_CT, 16);
 }
 
-int GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl) {
+bool GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl) {
     ASSERT(deviceAddr); ASSERT(ttl > 0);
     long int addrHex = strtol(deviceAddr, NULL, 16);
     uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0x80,0x0D,0x00};
@@ -1361,15 +1368,18 @@ int GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl) {
     return sendFrameToGwIndex(gwIndex, addrHex, data, 13);
 }
 
-int GW_ControlIRCmd(const char* command) {
+bool GW_ControlIRCmd(const char* command) {
     ASSERT(command); ASSERT(strlen(command) >= 46);
     uint8_t data[50];
     String2HexArr(command, data);
     uint16_t addr = ((uint16_t)data[9] << 8) + data[8];
-    return sendFrameToAnyGw(addr, data, strlen(command) / 2);
+    bool ret = sendFrameToAnyGw(addr, data, strlen(command) / 2);
+    addPriorityToSendingFrame(0);
+    addRetryCountToSendingFrame(1);
+    return ret;
 }
 
-int GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remoteId, int temp, int mode, int fan, int swing)
+bool GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remoteId, int temp, int mode, int fan, int swing)
 {
     ASSERT(deviceAddr);
     uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0xff,0xff,   0xE4,0x11,0x02,0x00,0x00,    0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
@@ -1386,6 +1396,91 @@ int GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remot
     data[22] = (uint8_t)(swing);
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 23);
     addPriorityToSendingFrame(0);
+    addRetryCountToSendingFrame(1);
     return ret;
 }
 
+bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex, uint8_t commandType, uint8_t brandId, uint8_t remoteId, uint8_t temp, uint8_t mode, uint8_t fan, uint8_t swing) {
+    ASSERT(deviceAddr);
+    ASSERT(sceneId);
+    ASSERT(commandIndex > 0 && commandIndex < 32);
+    ASSERT(commandType == 2 || commandType == 3);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0xff,0xff,   0xE4,0x11,0x02,0x00,0x00,    0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+    temp -= 16;
+    fan -= 1;
+    swing = swing == 0? 1 : swing;
+    swing -= 1;
+    swing /= 2;
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    long int sceneIdHex = strtol(sceneId, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[16] = (uint8_t)(sceneIdHex >> 8);
+    data[17] = (uint8_t)(sceneIdHex);
+    data[18] = (uint8_t)(2 << 6);
+    data[18] |= (uint8_t)(commandIndex << 1);
+    data[18] |= (commandType - 2);
+    data[19] = (uint8_t)(brandId);
+    data[20] = (uint8_t)(brandId >> 8);
+    data[21] = (uint8_t)(remoteId << 3);
+    data[21] |= (uint8_t)(mode);
+    data[22] = (uint8_t)(temp << 4);
+    data[22] |= (uint8_t)(fan << 2);
+    data[22] |= (uint8_t)(swing);
+    bool ret = sendFrameToAnyGw(dpAddrHex, data, 23);
+    addRetryCountToSendingFrame(1);
+    return ret;
+}
+
+
+bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex) {
+    ASSERT(deviceAddr);
+    ASSERT(sceneId);
+    ASSERT(commandIndex > 0 && commandIndex < 32);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0xff,0xff,   0xE4,0x11,0x02,0x00,0x00,    0x06,0x00,0x00,0x00};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    long int sceneIdHex = strtol(sceneId, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[16] = (uint8_t)(sceneIdHex >> 8);
+    data[17] = (uint8_t)(sceneIdHex);
+    data[18] = (uint8_t)(1 << 6);
+    data[18] |= (uint8_t)(commandIndex << 1);
+    bool ret = sendFrameToAnyGw(dpAddrHex, data, 19);
+    addRetryCountToSendingFrame(1);
+    return ret;
+}
+
+bool GW_AddSceneConditionIR(const char* deviceAddr, const char* sceneId, uint16_t voiceCode) {
+    ASSERT(deviceAddr);
+    ASSERT(sceneId);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0xff,0xff,   0xE4,0x11,0x02,0x00,0x00,    0x06,0x00,0x00,0x00,0x00,0x00};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    long int sceneIdHex = strtol(sceneId, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[16] = (uint8_t)(sceneIdHex >> 8);
+    data[17] = (uint8_t)(sceneIdHex);
+    data[18] = (uint8_t)(2 << 6);
+    data[19] = (uint8_t)voiceCode;
+    data[20] = (uint8_t)(voiceCode >> 8);
+    bool ret = sendFrameToAnyGw(dpAddrHex, data, 21);
+    addRetryCountToSendingFrame(1);
+    return ret;
+}
+
+bool GW_DeleteSceneConditionIR(const char* deviceAddr, const char* sceneId) {
+    ASSERT(deviceAddr);
+    ASSERT(sceneId);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0xff,0xff,   0xE4,0x11,0x02,0x00,0x00,    0x06,0x00,0x00,0x00};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    long int sceneIdHex = strtol(sceneId, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[16] = (uint8_t)(sceneIdHex >> 8);
+    data[17] = (uint8_t)(sceneIdHex);
+    data[18] = (uint8_t)(1 << 6);
+    bool ret = sendFrameToAnyGw(dpAddrHex, data, 19);
+    addRetryCountToSendingFrame(1);
+    return ret;
+}
