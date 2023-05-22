@@ -3,13 +3,23 @@
 
 #include <stdarg.h>
 
-// #define Ble_ControlDevice(deviceId, x, ...)   _Generic((x), uint8_t*: Ble_ControlDeviceArray, JSON*: Ble_ControlDeviceJSON)(deviceId, x, __VA_ARGS__)
+extern JSON *g_checkRespList;
 
+void CoreInit();
 
 JSON* parseGroupLinkDevices(const char* devices);
 JSON* parseGroupNormalDevices(const char* devices);
-void Ble_ControlDeviceArray(const char* deviceId, uint8_t* dpIds, double* dpValues, int dpCount);
-void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs);
+// Add device that need to check response to response list
+JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr);
+// Check and get the JSON_Object of request that is in response list
+JSON* requestIsInRespList(int reqType, const char* itemId);
+// Update device status in response list
+void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr, int status);
+// Get response status of a device according to a command
+int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr);
+
+void Ble_ControlDeviceArray(const char* deviceId, uint8_t* dpIds, double* dpValues, int dpCount, const char* causeId);
+void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* causeId);
 void Ble_ControlStringDp(const char* deviceId, int dpId, const char* dpValue);
 void Ble_ControlGroup(const char* groupAddr, JSON* dictDPs);
 void Ble_SetTTL(int gwIndex, const char* deviceAddr, uint8_t ttl);

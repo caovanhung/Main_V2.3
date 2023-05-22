@@ -41,8 +41,20 @@ bool addNewDevice(sqlite3 **db, JSON* packet)
                 Db_SaveDpValueString(deviceId, dpId, dp->valuestring);
             }
         }
+    } else if (StringCompare(pid, HG_BLE_IR)) {
+        Db_AddDp(deviceId, 1, deviceAddr, pageIndex);
+    } else if (StringCompare(pid, CAM_HANET)) {
+        JSON* dictDPs = JSON_GetObject(protParam, "dictDPs");
+        JSON_ForEach(dp, dictDPs) {
+            int dpId = atoi(dp->string);
+            Db_AddDp(deviceId, dpId, dp->valuestring, pageIndex);
+            if (cJSON_IsNumber) {
+                Db_SaveDpValue(deviceId, dpId, dp->valueint);
+            } else {
+                Db_SaveDpValueString(deviceId, dpId, dp->valuestring);
+            }
+        }
     }
-
     JSON_Delete(deviceInfo);
     return true;
 }

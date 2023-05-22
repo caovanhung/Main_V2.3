@@ -16,11 +16,17 @@
 #include "core_process_t.h"
 #include "cJSON.h"
 
+typedef enum {
+    ValueTypeDouble = 0,
+    ValueTypeString = 1
+} ValueType;
+
 typedef struct {
     uint8_t id;
     char deviceId[50];
     char addr[10];
     double value;
+    char valueStr[100];
     int pageIndex;
 } DpInfo;
 
@@ -68,6 +74,7 @@ typedef struct {
     int             dpCount;        // Số lượng dp cần điều khiển
     int             delaySeconds;   // Giá trị thời gian trễ tính bằng giây nếu entityType = Độ trễ
     char            serviceName[10];// Service điều khiển cho action BLE, TUYA, XIAOMI, HOMEKIT, chỉ áp dụng khi actionType = EntityDevice, EntityScene
+    char            wifiCode[100];
 } SceneAction;
 
 typedef struct {
@@ -77,7 +84,9 @@ typedef struct {
     char            pid[50];        // PID của thiết bị nếu entityType = Thiết bị
     int             dpId;           // Id của dp nếu entityType = Thiết bị
     char            dpAddr[10];     // Address của dp nếu entityType = Thiết bị
-    double          dpValue;        // Value của dp cần kiểm tra nếu entityType = Thiết bị
+    ValueType       valueType;        // Value type of device : ValueTypeDouble = Switch, Light, Sensor; ValueTypeString = CameraHanet
+    double          dpValue;        // Value của dp cần kiểm tra nếu entityType = Thiết bị và valueType = ValueTypeDouble
+    char            dpValueStr[100];   // Value của dp cần kiểm tra nếu valueType = ValueTypeString
     char            expr[5];        // Biểu thức so sánh để so sánh giá trị thực tế của dp và dpValue để quyết định xem điều kiện có thỏa mãn hay không
     int             schMinutes;     // Thời điểm trong ngày cần thực hiện nếu entityType = đặt lịch
     uint8_t         repeat;         // Danh sách thứ trong tuần cần lặp lại nếu entityType = đặt lịch
@@ -144,23 +153,7 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
 
 bool open_database(const char *filename, sqlite3 **db);
 bool close_database(sqlite3 **db);
-void printColumnValue(sqlite3_stmt* stmt, int col);
-void sql_print_a_table(sqlite3 **db,char *name_table);
-void print_database(sqlite3 **db);
-int sql_insert_data_table(sqlite3 **db,char *sql);
 int sql_creat_table(sqlite3 **db,char *name_table);
 bool creat_table_database(sqlite3 **db);
-bool creat_table_database_log(sqlite3 **db);
-
-bool sql_deleteDeviceInTable(sqlite3 **db ,const char *name_table,const char *key,const char *value);
-
-char **sql_getValueWithMultileCondition(sqlite3 **db, int *leng_t,char *object, const char *name_table,const char *key1,const char *value1,const char *key2,const char *value2);
-char **sql_getValueWithCondition(sqlite3 **db, int *leng_t,char *object,const char *name_table,const char *key,const char *value);
-
-int sql_getNumberWithCondition(sqlite3 **db, int *leng_t,char *object,const char *name_table,const char *key,const char *value);
-int sql_getNumberRowWithCondition(sqlite3 **db,const char *name_table,const char *key,const char *value);
-int sql_getCountColumnWithCondition(sqlite3 **db,char *name_table,char *key_1,char *value_1,char *key_2,char *value_2);
-
-
 
 #endif  // DATABASE_H

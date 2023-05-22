@@ -32,74 +32,6 @@ bool close_database(sqlite3 **db)
     }
 }
 
-void printColumnValue(sqlite3_stmt* stmt, int col)
-{
-  int colType = sqlite3_column_type(stmt, col);
-  switch(colType)
-  {
-    case SQLITE_INTEGER:
-         printf("  %3d   ", sqlite3_column_int(stmt, col));
-         break;
-    case SQLITE_FLOAT:
-         printf("  %5.2f", sqlite3_column_double(stmt, col));
-         break;
-    case SQLITE_TEXT:
-         printf("  %-5s", sqlite3_column_text(stmt, col));
-         break;
-    case SQLITE_NULL:
-         printf("  null");
-         break;
-    case SQLITE_BLOB:
-         printf("  blob");
-         break;
-    }
-}
-
-void sql_print_a_table(sqlite3 **db,char *name_table)
-{
-    char *sql =(char*) malloc(100 * sizeof(char));
-    //append_string(&sql,"SELECT * FROM ",name_table);
-    sprintf(sql,"SELECT * FROM %s;",name_table);
-    // sqlite3_open(VAR_DATABASE,db);
-    sqlite3_stmt *stmt;
-    sqlite3_prepare_v2(*db,sql, -1, &stmt, NULL);
-    sqlite3_bind_int (stmt, 1, 2);
-    int col  = 0,tmp_index = 0;
-    while (sqlite3_step(stmt) != SQLITE_DONE)
-    {
-        tmp_index = sqlite3_data_count(stmt);
-        for ( col=0; col< tmp_index; col++) {
-          printColumnValue(stmt, col);
-        }
-        printf("\n");
-    }
-    sqlite3_finalize(stmt);
-    sql = NULL;
-    free(sql);
-    // sqlite3_close(*db);
-
-}
-
-void print_database(sqlite3 **db)
-{
-    printf("\n\n\n");
-    printf("GATEWAY\n");
-    sql_print_a_table(db,"GATEWAY");
-    printf("\n\n\n");
-    printf("DEVICES\n");
-    sql_print_a_table(db,"DEVICES");
-    printf("\n\n\n");
-    printf("DEVICES_INF\n");
-    sql_print_a_table(db,"DEVICES_INF");
-    printf("\n\n\n");
-    printf("GROUP_INF\n");
-    sql_print_a_table(db,"GROUP_INF");
-    printf("\n\n\n");
-    printf("SCENE_INF\n");
-    sql_print_a_table(db,"SCENE_INF");
-    printf("\n\n\n");
-}
-
 int Db_AddGateway(JSON* gatewayInfo) {
     ASSERT(gatewayInfo);
     creat_table_database(&db);
@@ -323,6 +255,7 @@ int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId) {
         } else {
             dpInfo->value = strtod(value, NULL);
         }
+        StringCopy(dpInfo->valueStr,value); //get valueStr for check condition camera hanet
         StringCopy(dpInfo->deviceId, sqlite3_column_text(row, 0));
         StringCopy(dpInfo->addr, sqlite3_column_text(row, 1));
         dpInfo->pageIndex = sqlite3_column_int(row, 3);
@@ -394,15 +327,18 @@ int Db_LoadSceneToRam() {
                 action->actionType = JSON_GetNumber(act, "actionType");
                 action->delaySeconds = JSON_HasKey(act, "delaySeconds")? JSON_GetNumber(act, "delaySeconds") : 0;
                 StringCopy(action->entityId, JSON_GetText(act, "entityId"));
+
                 JSON* executorProperty = JSON_GetObject(act, "executorProperty");
                 JSON_ForEach(o, executorProperty) {
                     action->dpIds[action->dpCount] = atoi(o->string);
-                    action->dpValues[action->dpCount] = o->valuedouble;
+                    // ction->dpValues[action->dpCount] = (double)o->valuedouble; //type value in executorProperty is bool
+                    action->dpValues[action->dpCount] = (double)o->valueint;
                     action->dpCount++;
                 }
+
                 // Load 'code' field for controlling tuya
                 if (JSON_HasKey(act, "code")) {
-                    StringCopy(action->entityId, JSON_GetText(act, "code"));
+                    StringCopy(action->wifiCode, JSON_GetText(act, "code"));
                 }
                 int isWifi = JSON_HasKey(act, "isWifi")? JSON_GetNumber(act, "isWifi") : 0;
                 if (isWifi || JSON_HasKey(act, "code")) {
@@ -431,6 +367,8 @@ int Db_LoadSceneToRam() {
                 StringCopy(cond->expr, "==");
                 cond->dpId = JSON_GetNumber(condition, "dpId");
                 cond->dpValue = JSON_GetNumber(condition, "dpValue");
+                cond->valueType = JSON_GetNumber(condition, "valueType");
+                StringCopy(cond->dpValueStr, JSON_GetText(condition, "dpValueStr")); //get dpValueStr for camraHanet
             }
             conditionCount++;
             if (conditionCount > 1000) {
@@ -622,23 +560,6 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
     return histories;
 }
 
-int sql_insert_data_table(sqlite3 **db,char *sql)
-{
-    char *err_msg = 0;
-    // sqlite3_open(VAR_DATABASE, db);
-    int rc = sqlite3_exec(*db,sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK )
-    {
-        sqlite3_free(err_msg);
-        // sqlite3_close(*db);
-        return -1;
-    }
-    sql = NULL;
-    free(sql);
-    // sqlite3_close(*db);
-    return 0;
-}
-
 int sql_creat_table(sqlite3 **db,char *name_table)
 {
     char *err_msg;
@@ -700,199 +621,4 @@ bool creat_table_database(sqlite3 **db)
         return false;
     }
     return true;
-}
-
-bool creat_table_database_log(sqlite3 **db)
-{
-    int check = 0;
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICE_LOG;CREATE TABLE DEVICE_LOG(deviceID TEXT,dpID TEXT,dpValue TEXT,TimeCreat INTEGER);");
-    if(check != 0)
-    {
-        return false;
-    }
-    return true;
-}
-
-
-
-bool sql_deleteDeviceInTable(sqlite3 **db ,const char *name_table,const char *key,const char *value)
-{
-    // int check = 0;
-    char *sql =(char*) malloc(100 * sizeof(char));
-    sprintf(sql,"DELETE FROM %s WHERE %s = (\"%s\");",name_table,key,value);
-    char *err_msg = 0;
-    int rc = sqlite3_exec(*db, sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK )
-    {
-        printf("error : rc != SQLITE_OK\n");
-        sqlite3_free(err_msg);
-        return false;
-    }
-    sql = NULL;
-    free(sql);
-    return true;
-}
-
-
-
-char **sql_getValueWithMultileCondition(sqlite3 **db, int *leng_t,char *object, const char *name_table,const char *key1,const char *value1,const char *key2,const char *value2)
-{
-    sqlite3_stmt *res;
-    int rc = 0,i = 0,size = 0;
-
-    char *sql = (char*) malloc(1500 * sizeof(char));
-    sprintf(sql,"SELECT COUNT(*) FROM %s WHERE %s = '%s' AND %s = '%s';",name_table,key1,value1,key2,value2);
-    sqlite3_prepare_v2(*db,sql, -1, &res, NULL);
-    sqlite3_bind_int (res, 1, 2);
-    if (sqlite3_step(res) != SQLITE_DONE)
-    {
-        size = sqlite3_column_int(res,0);
-    }
-    sqlite3_finalize(res);
-    *leng_t = size;
-
-    if(size == 0)
-    {
-        free(sql);
-        return  NULL;
-    }
-    char **result = generate_fields(size,10000);
-    if(*result == NULL)
-    {
-        printf("Failed to malloc for **result\n");
-    }
-    sprintf(sql,"SELECT %s FROM %s WHERE %s = '%s' AND %s = '%s';",object,name_table,key1,value1,key2,value2);
-
-    rc = sqlite3_prepare_v2(*db, sql, -1, &res, NULL);
-    if (rc == SQLITE_OK)
-    {
-        while (sqlite3_step(res) == SQLITE_ROW)
-        {
-            memcpy(result[i],(char *)sqlite3_column_text(res,0),strlen((char *)sqlite3_column_text(res,0))+1);
-            ++i;
-        }
-    }
-    free(sql);
-    sqlite3_finalize(res);
-    return result;
-}
-
-char ** sql_getValueWithCondition(sqlite3 **db, int *leng_t,char *object,const char *name_table,const char *key,const char *value)
-{
-    int rc = 0,i = 0,size = 0;
-    sqlite3_stmt *res;
-    char *sql = (char*) calloc(500,sizeof(char));
-
-    sprintf(sql,"SELECT COUNT(*) FROM %s WHERE %s = '%s';", name_table, key, value);
-    sqlite3_prepare_v2(*db,sql, -1, &res, NULL);
-    sqlite3_bind_int (res, 1, 2);
-    if (sqlite3_step(res) != SQLITE_DONE)
-    {
-        size = sqlite3_column_int(res,0);
-    }
-    *leng_t = size;
-    if(size == 0)
-    {
-        sqlite3_finalize(res);
-        free(sql);
-        return  NULL;
-    }
-
-    char **result = generate_fields(size,10000);
-    if(*result == NULL)
-    {
-        printf("Failed to malloc for **result\n");
-    }
-    sprintf(sql,"SELECT %s FROM %s WHERE %s = '%s';",object,name_table,key,value);
-
-    rc = sqlite3_prepare_v2(*db, sql, -1, &res, NULL);
-    if (rc == SQLITE_OK)
-    {
-        while (sqlite3_step(res) == SQLITE_ROW)
-        {
-            memcpy(result[i],(char *)sqlite3_column_text(res,0),strlen((char *)sqlite3_column_text(res,0))+1);
-            ++i;
-        }
-    }
-    free(sql);
-    sqlite3_finalize(res);
-
-    return result;
-}
-
-
-int sql_getNumberWithCondition(sqlite3 **db, int *leng_t,char *object,const char *name_table,const char *key,const char *value)
-{
-    int result = -1;
-    // char *tmp;
-    sqlite3_stmt *res;
-    int rc = 0,size = 0;
-
-    char *sql = (char*) malloc(10000 * sizeof(char));
-    sprintf(sql,"SELECT COUNT(*) FROM %s WHERE %s = '%s';",name_table,key,value);
-    sqlite3_prepare_v2(*db,sql, -1, &res, NULL);
-    sqlite3_bind_int (res, 1, 2);
-    if (sqlite3_step(res) != SQLITE_DONE)
-    {
-        size = sqlite3_column_int(res,0);
-    }
-    sqlite3_finalize(res);
-    *leng_t = size;
-    if(size == 0)
-    {
-        free(sql);
-        return  -1;
-    }
-
-
-    sprintf(sql,"SELECT %s FROM %s WHERE %s = '%s';",object,name_table,key,value);
-    rc = sqlite3_prepare_v2(*db, sql, -1, &res, NULL);
-    if (rc == SQLITE_OK)
-    {
-        sqlite3_bind_int (res, 1, 2);
-        while (sqlite3_step(res) != SQLITE_DONE)
-        {
-            result = sqlite3_column_int(res,0);
-        }
-    }
-    sqlite3_finalize(res);
-    free(sql);
-    return result;
-}
-
-int sql_getNumberRowWithCondition(sqlite3 **db,const char *name_table,const char *key,const char *value)
-{
-    int result = -1;
-    char *sql = (char*) malloc(100 * sizeof(char));
-    sprintf(sql,"SELECT COUNT(*) FROM %s WHERE %s = '%s';",name_table,key,value);
-    sqlite3_stmt *stmt;
-    sqlite3_prepare_v2(*db,sql, -1, &stmt, NULL);
-    sqlite3_bind_int (stmt, 1, 2);
-    if (sqlite3_step(stmt) != SQLITE_DONE)
-    {
-        result = sqlite3_column_int(stmt,0);
-        printf("result %d\n",result );
-    }
-    sqlite3_finalize(stmt);
-    sql = NULL;
-    free(sql);
-    return result;
-}
-
-int sql_getCountColumnWithCondition(sqlite3 **db,char *name_table,char *key_1,char *value_1,char *key_2,char *value_2)
-{
-    int result = 0;
-    char *sql = (char*) malloc(100 * sizeof(char));
-    sprintf(sql,"SELECT COUNT(*) FROM %s WHERE %s = '%s' AND %s = '%s';",name_table,key_1,value_1,key_2,value_2);
-    sqlite3_stmt *stmt;
-    sqlite3_prepare_v2(*db,sql, -1, &stmt, NULL);
-    sqlite3_bind_int (stmt, 1, 2);
-    if (sqlite3_step(stmt) != SQLITE_DONE)
-    {
-        result = sqlite3_column_int(stmt,0);
-    }
-    sqlite3_finalize(stmt);
-    sql = NULL;
-    free(sql);
-    return result;
 }

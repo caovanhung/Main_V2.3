@@ -174,12 +174,10 @@ int main( int argc,char ** argv )
 
             JSON* payload = JSON_Parse(object_string);
             JSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
-            char* code;
+
             int value = 0;
-            char* deviceID = JSON_GetText(payload, "entityId");
-            JSON_ForEach(dp, dictDPs) {
-                code = JSON_GetText(dp, "addr");
-            }
+            char* deviceID = JSON_GetText(payload, "deviceId");
+            char* code = JSON_GetText(payload, "code");
             long long currentTime = timeInMilliseconds();
             if((currentTime - GetAccessTokenTime)/1000/60 >= MaxTimeGetToken_Second)
             {

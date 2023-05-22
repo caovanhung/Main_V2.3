@@ -3206,13 +3206,21 @@ JSON* JArr_CreateObject(JSON* arr) {
 }
 
 JSON* JArr_FindByText(JSON* array, const char* key, const char* value) {
-    ASSERT(array); ASSERT(key); ASSERT(value);
+    ASSERT(array); ASSERT(value);
 
     JSON_ForEach(item, array) {
-        if (cJSON_IsObject(item) && JSON_HasKey(item, key)) {
-            JSON* v = JSON_GetText(item, key);
-            if (StringCompare(v, value)) {
-                return item;
+        if (key) {
+            if (cJSON_IsObject(item) && JSON_HasKey(item, key)) {
+                JSON* v = JSON_GetText(item, key);
+                if (StringCompare(v, value)) {
+                    return item;
+                }
+            }
+        } else {
+            if (cJSON_IsString(item)) {
+                if (StringCompare(item->valuestring, value)) {
+                    return item;
+                }
             }
         }
     }

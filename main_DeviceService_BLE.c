@@ -153,6 +153,8 @@ void BLE_ReceivePacket() {
         }
         StringCopy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
         enqueue(g_bleFrameQueue, givenStr);
+        printf("\n\r");
+        logInfo("Received from UART3: %s", givenStr);
     }
 
     len_uart = UART0_Recv(g_gatewayFds[1], rcv_uart_buff, MAX_PACKAGE_SIZE);
@@ -172,6 +174,8 @@ void BLE_ReceivePacket() {
         }
         StringCopy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
         enqueue(g_bleFrameQueue, givenStr);
+        printf("\n\r");
+        logInfo("Received from UART2: %s", givenStr);
     }
 }
 
@@ -192,8 +196,7 @@ void Ble_ProcessPacket()
     if (size_queue > 0) {
         char* recvPackage = (char *)dequeue(g_bleFrameQueue);
         String2HexArr(recvPackage, msgHex);
-        printf("\n\r");
-        logInfo("Received package from UART: %s", recvPackage);
+        // logInfo("Received package from UART: %s", recvPackage);
         int frameCount = GW_SplitFrame(bleFrames, msgHex, strlen(recvPackage) / 2);
         logInfo("Parsing package. Found %d frames:", frameCount);
         for (int i = 0; i < frameCount; i++) {
@@ -228,17 +231,34 @@ void Ble_ProcessPacket()
 
                 case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
                 case GW_RESP_DEVICE_STATUS: {
-                    JSON* packet = JSON_CreateObject();
-                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                    JSON_SetText(packet, "dpAddr", tmp->address_element);
-                    JSON_SetNumber(packet, "dpValue", tmp->dpValue);
-                    if (bleFrames[i].frameSize >= 8 && bleFrames[i].param[0] == 0x82 && bleFrames[i].param[1] == 0x02) {
-                        JSON_SetNumber(packet, "causeType", EV_CAUSE_TYPE_APP);
+                    if (bleFrames[i].frameSize >= 5 && bleFrames[i].param[0] == 0x82 && bleFrames[i].param[1] == 0x01) {
+                        uint8_t dpCount = bleFrames[i].param[3];
+                        uint16_t deviceAddr = bleFrames[i].sendAddr;
+                        char str[10];
+                        for (int d = 0; d < dpCount; d++) {
+                            JSON* packet = JSON_CreateObject();
+                            JSON_SetNumber(packet, "opcode", 0x8201);
+                            uint16_t addr = (uint8_t)(deviceAddr >> 8);
+                            addr += d;
+                            addr = (addr << 8) | (uint8_t)deviceAddr;
+                            sprintf(str, "%04X", addr);
+                            JSON_SetText(packet, "deviceAddr", str);
+                            JSON_SetText(packet, "dpAddr", str);
+                            JSON_SetNumber(packet, "dpValue", bleFrames[i].param[4 + d]);
+                            sendPacketTo(SERVICE_CORE, frameType, packet);
+                            JSON_Delete(packet);
+                        }
                     } else {
-                        JSON_SetNumber(packet, "causeType", EV_CAUSE_TYPE_SYNC);
+                        JSON* packet = JSON_CreateObject();
+                        uint16_t opcode = bleFrames[i].param[0];
+                        opcode = (opcode << 8) | bleFrames[i].param[1];
+                        JSON_SetNumber(packet, "opcode", opcode);
+                        JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                        JSON_SetText(packet, "dpAddr", tmp->address_element);
+                        JSON_SetNumber(packet, "dpValue", tmp->dpValue);
+                        sendPacketTo(SERVICE_CORE, frameType, packet);
+                        JSON_Delete(packet);
                     }
-                    sendPacketTo(SERVICE_CORE, frameType, packet);
-                    JSON_Delete(packet);
                     break;
                 }
                 case GW_RESPONSE_SMOKE_SENSOR: {
@@ -389,21 +409,26 @@ void Ble_ProcessPacket()
                 }
                 case GW_RESPONSE_IR: {
                     logInfo("GW_RESPONSE_IR");
-                    uint16_t brandId = ((uint16_t)bleFrames[i].param[4] << 8) + bleFrames[i].param[3];
-                    uint8_t  remoteId = bleFrames[i].param[5];
-                    uint8_t  temp = bleFrames[i].param[6];
-                    uint8_t  mode = bleFrames[i].param[7];
-                    uint8_t  fan = bleFrames[i].param[8] >> 4;
-                    uint8_t  swing = bleFrames[i].param[8] & 0x0F;
-                    logInfo("brandId=%d, remoteId=%d, temp=%d, mode=%d, fan=%d, swing=%d", brandId, remoteId, temp, mode, fan, swing);
-
                     JSON* packet = JSON_CreateObject();
-                    JSON_SetNumber(packet, "brandId", brandId);
-                    JSON_SetNumber(packet, "remoteId", remoteId);
-                    JSON_SetNumber(packet, "temp", temp);
-                    JSON_SetNumber(packet, "mode", mode);
-                    JSON_SetNumber(packet, "fan", fan);
-                    JSON_SetNumber(packet, "swing", swing);
+                    if (tmp->dpValue == 0) {
+                        uint16_t brandId = ((uint16_t)bleFrames[i].param[4] << 8) + bleFrames[i].param[3];
+                        uint8_t  remoteId = bleFrames[i].param[5];
+                        uint8_t  temp = bleFrames[i].param[6];
+                        uint8_t  mode = bleFrames[i].param[7];
+                        uint8_t  fan = bleFrames[i].param[8] >> 4;
+                        uint8_t  swing = bleFrames[i].param[8] & 0x0F;
+                        logInfo("brandId=%d, remoteId=%d, temp=%d, mode=%d, fan=%d, swing=%d", brandId, remoteId, temp, mode, fan, swing);
+                        JSON_SetNumber(packet, "respType", 0);
+                        JSON_SetNumber(packet, "brandId", brandId);
+                        JSON_SetNumber(packet, "remoteId", remoteId);
+                        JSON_SetNumber(packet, "temp", temp);
+                        JSON_SetNumber(packet, "mode", mode);
+                        JSON_SetNumber(packet, "fan", fan);
+                        JSON_SetNumber(packet, "swing", swing);
+                    } else {
+                        JSON_SetNumber(packet, "respType", 1);
+                        JSON_SetNumber(packet, "voiceId", tmp->dpValue);
+                    }
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
                     break;
@@ -479,7 +504,7 @@ int main( int argc,char ** argv )
     if (g_gatewayFds[1] == -1) {
         logError("Cannot open %s", UART_GATEWAY2);
     }
-    
+
     do {
         err = UART0_Init(g_gatewayFds[0], 115200, 0, 8, 1, 'N');
         usleep(50000);
@@ -497,7 +522,8 @@ int main( int argc,char ** argv )
     usleep(50000);
     Mosq_Init(SERVICE_BLE);
     sleep(3);
-    // set_inf_DV_for_GW(0, "Đ00", "BLEHGAA0201", "077C533EA69371AFFA435AA0CB5B3121");
+    // ble_setSceneLocalToDeviceSwitch("2E10", "E901", 1, 0x12000000);
+    // GW_GetScenes("E901");
     while (xRun!=0) {
         BLE_SendUartFrameLoop();
         BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue
@@ -577,15 +603,15 @@ int main( int argc,char ** argv )
                         } else if (dpId == 105) {
                             irSwing = dpValue;
                             logInfo("[TYPE_CTR_DEVICE] Swing = %d", irSwing);
-                        } else if (dpId == 106) {
+                        } else if (dpId == 106 || dpId == 101) { //add condition dpId == 101 for CTL IR_TV
                             char* command = JSON_GetText(o, "valueString");
                             if (StringCompare(pid, HG_BLE_IR)) {
                                 GW_ControlIRCmd(command);
                             } else {
                                 irTemp = atoi(command);
+                                logInfo("[TYPE_CTR_DEVICE] irTemp = %d", irTemp);
                             }
                         }
-
                         if (lightness >= 0 && colorTemperature >= 0) {
                             ble_controlCTL(dpAddr, lightness, colorTemperature);
                         }
@@ -633,10 +659,8 @@ int main( int argc,char ** argv )
                         ble_callSceneLocalToHC("FFFF", sceneId);
                     } else {
                         // Enable/Disable scene
-                        char* pid = JSON_GetText(payload, "pid");
-                        char* dpAddr = JSON_GetText(payload, "dpAddr");
-                        double dpValue = JSON_GetNumber(payload, "dpValue");
-                        ble_callSceneLocalToDevice(dpAddr, sceneId, "00", dpValue);
+                        // char* dpAddr = JSON_GetText(payload, "dpAddr");
+                        // ble_callSceneLocalToDevice(dpAddr, sceneId, "00", dpValue);
                     }
                     break;
                 }
@@ -719,6 +743,8 @@ int main( int argc,char ** argv )
                     char* deviceKey = JSON_GetText(payload, "deviceKey");
                     int gatewayId = JSON_GetNumber(payload, "gatewayId");
                     set_inf_DV_for_GW(gatewayId, deviceAddr, devicePid, deviceKey);
+                    // set_inf_DV_for_GW(0, deviceAddr, devicePid, deviceKey);
+                    // set_inf_DV_for_GW(1, deviceAddr, devicePid, deviceKey);
                     if (JSON_HasKey(payload, "command")) {
                         GW_ControlIRCmd(JSON_GetText(payload, "command"));
                     }
@@ -789,9 +815,8 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_GET_DEVICE_STATUS: {
                     JSON_ForEach(d, payload) {
-                        char* addr = JSON_GetText(d, "addr");
-                        GW_GetDeviceOnOffState(addr);
-                        addRespTypeToSendingFrame(GW_RESP_DEVICE_STATUS, addr);
+                        GW_GetDeviceOnOffState(d->valuestring);
+                        addRespTypeToSendingFrame(GW_RESP_DEVICE_STATUS, d->valuestring);
                         addPriorityToSendingFrame(2);
                     }
                     break;

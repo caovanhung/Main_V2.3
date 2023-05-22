@@ -39,27 +39,16 @@ struct mosquitto * mosq;
 sqlite3 *db;
 
 struct Queue *queue_received;
-
-pthread_mutex_t mutex_lock_t            = PTHREAD_MUTEX_INITIALIZER;
-
 Scene* g_sceneList;
 int g_sceneCount = 0;
-JSON *g_checkRespList;
 static bool g_mosqIsConnected = false;
 
 JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket);
 bool sendInfoDeviceFromDatabase();
 bool sendInfoSceneFromDatabase();
-// Add device that need to check response to response list
-JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr);
-// Check and get the JSON_Object of request that is in response list
-JSON* requestIsInRespList(int reqType, const char* itemId);
-// Update device status in response list
-void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr, int status);
-// Get response status of a device according to a command
-int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr);
 bool Scene_GetFullInfo(JSON* packet);
 void SyncDevicesState();
+void GetDeviceStatusForScene(Scene* scene);
 
 bool compareSceneEntity(JSON* entity1, JSON* entity2) {
     if (entity1 && entity2) {
@@ -126,6 +115,7 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc)
         exit(-1);
     }
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_CORE_DATA, 0);
+    mosquitto_subscribe(mosq, NULL, "/topic/detected/#", 0); //subcribe MQTT for camera HANET
 }
 
 void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg)
@@ -135,7 +125,20 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
 
     int size_queue = get_sizeQueue(queue_received);
     if (size_queue < QUEUE_SIZE) {
-        enqueue(queue_received,(char *) msg->payload);
+        if(isContainString( msg->topic,MOSQ_LayerService_Core)){
+            enqueue(queue_received,(char *) msg->payload);
+        } else if (isContainString( msg->topic,"/topic/detected/")){
+            JSON_Value *root_value = json_value_init_object();
+            JSON_Object *root_object = json_value_get_object(root_value);
+            json_object_set_string(root_object, MOSQ_NameService, SERVICE_HANET);
+            json_object_set_number(root_object, MOSQ_ActionType, CAM_HANET_RESPONSE);
+            json_object_set_number(root_object, MOSQ_TimeCreat, timeInMilliseconds());
+            json_object_set_string(root_object, MOSQ_Payload, (char *) msg->payload);
+            char *message = json_serialize_to_string_pretty(root_value);
+            enqueue(queue_received,message);
+            json_free_serialized_string(message);
+            json_value_free(root_value);
+        }
     }
 }
 
@@ -198,10 +201,10 @@ void ResponseWaiting() {
         int reqType  = atoi(strtok(reqId, "."));
         char* itemId = strtok(NULL, ".");
         // Calculate timeout based on number of successed and failed devices
-        int addgroupTimeout = deviceCount * 1500;
+        int timeout = deviceCount * 1500;
         bool checkDone = false;
 
-        if (currentTime - createdTime < addgroupTimeout) {
+        if (currentTime - createdTime < timeout) {
             if (successCount + failedCount == deviceCount) {
                 checkDone = true;
             }
@@ -247,26 +250,6 @@ void ResponseWaiting() {
                     if (status != 0) {
                         Db_RemoveSceneAction(itemId, JSON_GetText(device, "addr"));
                     }
-                } else if (reqType == TYPE_CTR_DEVICE) {
-                    int status = JSON_GetNumber(device, "status");
-                    char* deviceId = JSON_GetText(respItem, "deviceId");
-                    int dpId = JSON_GetNumber(respItem, "dpId");
-                    int oldDpValue = JSON_GetNumber(respItem, "oldDpValue");
-                    int newDpValue = oldDpValue? 0 : 1;
-                    int pageIndex = JSON_GetNumber(respItem, "pageIndex");
-                    if (status == 0) {
-                        JSON* history = JSON_CreateObject();
-                        JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
-                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
-                        JSON_SetText(history, "causeId", JSON_GetText(respItem, "causeId"));
-                        JSON_SetText(history, "deviceId", deviceId);
-                        JSON_SetNumber(history, "dpId", dpId);
-                        JSON_SetNumber(history, "dpValue", newDpValue);
-                        Db_AddDeviceHistory(history);
-                        JSON_Delete(history);
-                    } else {
-                        Aws_SaveDpValue(deviceId, dpId, oldDpValue, pageIndex);
-                    }
                 }
             }
             if (reqType == TYPE_ADD_GROUP_NORMAL || reqType == TYPE_UPDATE_GROUP_NORMAL ||
@@ -293,18 +276,30 @@ void ResponseWaiting() {
     }
 }
 
-void markSceneToRun(Scene* scene) {
+void markSceneToRun(Scene* scene, const char* causeId) {
     // Just setting the runningActionIndex vatiable to 0 and the actions of scene will be executed
     // in ExecuteScene() function
     scene->delayStart = timeInMilliseconds();
     scene->runningActionIndex = 0;
+    // Save event to history
+    JSON* history = JSON_CreateObject();
+    JSON_SetNumber(history, "eventType", EV_RUN_SCENE);
+    if (causeId) {
+        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
+        JSON_SetText(history, "causeId", causeId);
+    } else {
+        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_DEVICE);
+    }
+    JSON_SetText(history, "deviceId", scene->id);
+    Db_AddDeviceHistory(history);
+    JSON_Delete(history);
 }
 
 // Check if a scene is need to be executed or not
 void checkSceneCondition(Scene* scene) {
     // Don't check condition for manual scene
     if (scene->type == SceneTypeManual) {
-        markSceneToRun(scene);
+        markSceneToRun(scene, NULL);
         return;
     }
 
@@ -336,23 +331,41 @@ void checkSceneCondition(Scene* scene) {
     // Only check conditions of scene if current time is effective and scene is enabled
     if (effectTime && scene->isEnable) {
         if (scene->type == SceneTypeOneOfConds) {
+            printf("check conditions of SceneTypeOneOfConds\n");
             for (int i = 0; i < scene->conditionCount; i++) {
                 if (scene->conditions[i].conditionType == EntitySchedule) {
                     if (scene->conditions[i].timeReached) {
                         scene->conditions[i].timeReached = -1;
-                        markSceneToRun(scene);
+                        markSceneToRun(scene, NULL);
                     }
                 } else {
                     DpInfo dpInfo;
                     int foundDps = Db_FindDp(&dpInfo, scene->conditions[i].entityId, scene->conditions[i].dpId);
-                    if (foundDps == 1 && dpInfo.value == scene->conditions[i].dpValue) {
-                        markSceneToRun(scene);
-                        break;
+                    printf("foundDps = %d\n",foundDps);
+
+                    //Check type of value in DB is Double or String ( with many Device is double type, with Camera Hanet is string type(personID))
+                    if (foundDps == 1 && scene->conditions[i].valueType == ValueTypeDouble) {
+                        printf("check conditions of ValueTypeDouble\n");
+                        printf("dpInfo.value = %f\n",dpInfo.value);
+                        printf("scene->conditions[i].dpValue = %f\n",scene->conditions[i].dpValue);
+                        if(dpInfo.value == scene->conditions[i].dpValue){
+                            printf("check conditions of scene is ok\n");
+                            markSceneToRun(scene, NULL);
+                            break;
+                        }
+                    } else if(foundDps == 1 && scene->conditions[i].valueType == ValueTypeString) {
+                        printf("check conditions of ValueTypeString\n");
+                        if(StringCompare(dpInfo.valueStr, scene->conditions[i].dpValueStr)){
+                            printf("check conditions of scene is ok\n");
+                            markSceneToRun(scene, NULL);
+                            break;
+                        }
                     }
                 }
             }
         } else {
             int i = 0;
+            printf("check conditions of SceneTypeAllConds\n");
             for (i = 0; i < scene->conditionCount; i++) {
                 if (scene->conditions[i].conditionType == EntitySchedule) {
                     if (scene->conditions[i].timeReached == 0) {
@@ -368,7 +381,7 @@ void checkSceneCondition(Scene* scene) {
             }
             if (i == scene->conditionCount) {
                 scene->conditions[i].timeReached = -1;
-                markSceneToRun(scene);
+                markSceneToRun(scene, NULL);
             }
         }
     }
@@ -376,15 +389,39 @@ void checkSceneCondition(Scene* scene) {
 
 
 // Check if there are scenes need to be executed if status of a device is changed
-void checkSceneForDevice(const char* deviceId, int dpId) {
+void checkSceneForDevice(const char* deviceId, int dpId, bool syncRelatedDevices) {
+    printf("checkSceneForDevice\n");
     // Find all scenes that this device is in conditions
     for (int i = 0; i < g_sceneCount; i++) {
         Scene* scene = &g_sceneList[i];
         for (int c = 0; c < scene->conditionCount; c++) {
+            printf("scene->conditions[%d].entityId = %s\n",c,scene->conditions[c].entityId);
+            printf("scene->conditions[%d].dpId = %d\n",c,scene->conditions[c].dpId);
+            printf("deviceId = %s\n",deviceId);
+            printf("dpId = %d\n",dpId);
             if (scene->conditions[c].conditionType == EntityDevice &&
                 (StringCompare(scene->conditions[c].entityId, deviceId)) &&
                 (scene->conditions[c].dpId == dpId)) {
-                checkSceneCondition(scene);
+                printf("checkSceneForDevice with scene->conditions[c].dpId == dpId\n");
+                if (scene->isLocal == false) {
+                    checkSceneCondition(scene);
+                } else if (syncRelatedDevices && scene->isEnable) {
+                    DpInfo dpInfo;
+                    int foundDps = Db_FindDp(&dpInfo, scene->conditions[c].entityId, scene->conditions[c].dpId);
+                    if (foundDps == 1 && scene->conditions[c].valueType == ValueTypeDouble) {
+                        if(dpInfo.value == scene->conditions[c].dpValue){
+                            // Save history for this local scene
+                            JSON* history = JSON_CreateObject();
+                            JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_DEVICE);
+                            JSON_SetNumber(history, "eventType", EV_RUN_SCENE);
+                            JSON_SetText(history, "deviceId", scene->id);
+                            Db_AddDeviceHistory(history);
+                            JSON_Delete(history);
+                            GetDeviceStatusForScene(scene);
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
@@ -402,9 +439,9 @@ void ExecuteScene() {
             if (runningAction->actionType == EntityDevice) {
                 // Action type is "control a device"
                 if (StringCompare(runningAction->serviceName, SERVICE_BLE)) {
-                    Ble_ControlDeviceArray(runningAction->entityId, runningAction->dpIds, runningAction->dpValues, runningAction->dpCount);
+                    Ble_ControlDeviceArray(runningAction->entityId, runningAction->dpIds, runningAction->dpValues, runningAction->dpCount, scene->id);
                 } else {
-                    Wifi_ControlDevice(runningAction->entityId, runningAction->entityId);
+                    Wifi_ControlDevice(runningAction->entityId, runningAction->wifiCode);
                 }
                 // Move to next action
                 scene->delayStart = timeInMilliseconds();
@@ -427,7 +464,7 @@ void ExecuteScene() {
                                     // Enable scene
                                     Db_EnableScene(runningAction->entityId, 1);
                                 } else {
-                                    markSceneToRun(&g_sceneList[s]);
+                                    markSceneToRun(&g_sceneList[s], g_sceneList[s].id);
                                 }
                             } else {
                                 // BLE scene: Send request to BLE service
@@ -505,7 +542,26 @@ void ExecuteScene() {
     }
 }
 
-void GetDeviceStatus() {
+
+void GetDeviceStatusForScene(Scene* scene) {
+    ASSERT(scene);
+    JSON* devicesArray = cJSON_CreateArray();
+    for (int act = 0; act < scene->actionCount; act++) {
+        if (scene->actions[act].actionType == EntityDevice) {
+            DeviceInfo deviceInfo;
+            int foundDevices = Db_FindDevice(&deviceInfo, scene->actions[act].entityId);
+            if (foundDevices == 1 && !JArr_FindByText(devicesArray, NULL, deviceInfo.addr)) {
+                JArr_AddText(devicesArray, deviceInfo.addr);
+            }
+        }
+    }
+    if (JArr_Count(devicesArray) > 0) {
+        sendPacketTo(SERVICE_BLE, TYPE_GET_DEVICE_STATUS, devicesArray);
+    }
+    JSON_Delete(devicesArray);
+}
+
+void GetDeviceStatusInterval() {
     static long long int oldTick = 0;
 
     if (timeInMilliseconds() - oldTick > 60000) {
@@ -529,7 +585,7 @@ void GetDeviceStatus() {
 
 int main(int argc, char ** argv)
 {
-    g_checkRespList   = JSON_CreateArray();
+    CoreInit();
     int size_queue = 0;
     bool check_flag = false;
     int xRun = 1;
@@ -549,7 +605,7 @@ int main(int argc, char ** argv)
         Mosq_ProcessLoop();
         ResponseWaiting();
         ExecuteScene();
-        // GetDeviceStatus();
+        // GetDeviceStatusInterval();
 
         size_queue = get_sizeQueue(queue_received);
         if (size_queue > 0) {
@@ -569,34 +625,42 @@ int main(int argc, char ** argv)
             if (payload == NULL) {
                 logError("Payload is NULL");
             }
-            if (isMatchString(NameService, SERVICE_BLE) && payload) {
+            if (StringCompare(NameService, SERVICE_BLE) && payload) {
                 switch (reqType) {
                     case GW_RESP_DEVICE_STATUS: {
                         char* dpAddr = JSON_GetText(payload, "dpAddr");
                         double dpValue = JSON_GetNumber(payload, "dpValue");
-                        int causeType = JSON_GetNumber(payload, "causeType");
+                        uint16_t opcode = JSON_HasKey(payload, "opcode")? JSON_GetNumber(payload, "opcode") : 0;
                         DpInfo dpInfo;
                         DeviceInfo deviceInfo;
                         int foundDps = Db_FindDpByAddr(&dpInfo, dpAddr);
                         if (foundDps == 1) {
+                            double oldDpValue = dpInfo.value;
                             int foundDevices = Db_FindDevice(&deviceInfo, dpInfo.deviceId);
-                            if (foundDevices == 1 && (deviceInfo.state == TYPE_DEVICE_OFFLINE || dpInfo.value != dpValue)) {
+                            if (foundDevices == 1) {
+                                Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
+                                Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
+                                Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
                                 JSON_SetText(payload, "deviceId", dpInfo.deviceId);
                                 JSON_SetNumber(payload, "dpId", dpInfo.id);
                                 JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);
                                 JSON_SetNumber(payload, "pageIndex", dpInfo.pageIndex);
-                                Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
-                                Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
-                                Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
-                                if (causeType == EV_CAUSE_TYPE_SYNC) {
-                                    Db_AddDeviceHistory(payload);
+                                if (opcode != 0x8201) {
+                                    // Check and run scenes for this device if any
+                                    checkSceneForDevice(dpInfo.deviceId, dpInfo.id, true);
+                                    if (opcode == 0) {
+                                        JSON_SetNumber(payload, "causeType", EV_CAUSE_TYPE_DEVICE);
+                                        Db_AddDeviceHistory(payload);
+                                    }
+                                } else {
+                                    // The response is from getting status of devices actively
+                                    if (oldDpValue != dpValue) {
+                                        checkSceneForDevice(dpInfo.deviceId, dpInfo.id, false);
+                                        JSON_SetNumber(payload, "causeType", EV_CAUSE_TYPE_SYNC);
+                                        Db_AddDeviceHistory(payload);
+                                    }
                                 }
-                                // Check and run scenes for this device if any
-                                checkSceneForDevice(dpInfo.deviceId, dpInfo.id);
                             }
-                            // if (causeType == EV_CAUSE_TYPE_APP) {
-                                updateDeviceRespStatus(TYPE_CTR_DEVICE, dpAddr, dpAddr, 0);
-                            // }
                         }
                         break;
                     }
@@ -619,28 +683,41 @@ int main(int argc, char ** argv)
                         break;
                     }
                     case GW_RESPONSE_IR: {
-                        uint16_t brandId = JSON_GetNumber(payload, "brandId");
-                        uint8_t  remoteId = JSON_GetNumber(payload, "remoteId");
-                        uint8_t  temp = JSON_GetNumber(payload, "temp");
-                        uint8_t  mode = JSON_GetNumber(payload, "mode");
-                        uint8_t  fan = JSON_GetNumber(payload, "fan");
-                        uint8_t  swing = JSON_GetNumber(payload, "swing");
-                        // Find device with brandId and remoteId
-                        char sql[500];
-                        sprintf(sql, "select * from devices where dpId=1 AND CAST(dpValue as INTEGER)=%d", brandId);
-                        Sql_Query(sql, row) {
-                            char* deviceId = sqlite3_column_text(row, 0);
-                            sprintf(sql, "select * from devices where deviceId='%s' and dpId=2 and CAST(dpValue as INTEGER)=%d", deviceId, remoteId);
-                            Sql_Query(sql, r) {
-                                int pageIndex = sqlite3_column_int(r, 4);
-                                Db_SaveDpValue(deviceId, 103, temp);
-                                Db_SaveDpValue(deviceId, 102, mode);
-                                Db_SaveDpValue(deviceId, 104, fan);
-                                Db_SaveDpValue(deviceId, 105, swing);
-                                Aws_SaveDpValue(deviceId, 103, temp, pageIndex);
-                                Aws_SaveDpValue(deviceId, 102, mode, pageIndex);
-                                Aws_SaveDpValue(deviceId, 104, fan, pageIndex);
-                                Aws_SaveDpValue(deviceId, 105, swing, pageIndex);
+                        uint8_t respType = JSON_GetNumber(payload, "respType");
+                        if (respType == 0) {
+                            uint16_t brandId = JSON_GetNumber(payload, "brandId");
+                            uint8_t  remoteId = JSON_GetNumber(payload, "remoteId");
+                            uint8_t  temp = JSON_GetNumber(payload, "temp");
+                            uint8_t  mode = JSON_GetNumber(payload, "mode");
+                            uint8_t  fan = JSON_GetNumber(payload, "fan");
+                            uint8_t  swing = JSON_GetNumber(payload, "swing");
+                            // Find device with brandId and remoteId
+                            char sql[500];
+                            sprintf(sql, "select * from devices where dpId=1 AND CAST(dpValue as INTEGER)=%d", brandId);
+                            Sql_Query(sql, row) {
+                                char* deviceId = sqlite3_column_text(row, 0);
+                                sprintf(sql, "select * from devices where deviceId='%s' and dpId=2 and CAST(dpValue as INTEGER)=%d", deviceId, remoteId);
+                                Sql_Query(sql, r) {
+                                    int pageIndex = sqlite3_column_int(r, 4);
+                                    Db_SaveDpValue(deviceId, 103, temp);
+                                    Db_SaveDpValue(deviceId, 102, mode);
+                                    Db_SaveDpValue(deviceId, 104, fan);
+                                    Db_SaveDpValue(deviceId, 105, swing);
+                                    Aws_SaveDpValue(deviceId, 103, temp, pageIndex);
+                                    Aws_SaveDpValue(deviceId, 102, mode, pageIndex);
+                                    Aws_SaveDpValue(deviceId, 104, fan, pageIndex);
+                                    Aws_SaveDpValue(deviceId, 105, swing, pageIndex);
+                                }
+                            }
+                        } else {
+                            uint16_t voiceId = JSON_GetNumber(payload, "voiceId");
+                            char sql[500];
+                            sprintf(sql, "select d.deviceId from devices d JOIN devices_inf di ON d.deviceId=di.deviceId where dpId=1 AND pid='BLEHGAA0301'");
+                            Sql_Query(sql, row) {
+                                char* deviceId = sqlite3_column_text(row, 0);
+                                Db_SaveDpValue(deviceId, 1, voiceId);
+                                checkSceneForDevice(deviceId, 1, true);
+                                Db_SaveDpValue(deviceId, 1, 0);
                             }
                         }
                         break;
@@ -665,7 +742,7 @@ int main(int argc, char ** argv)
                             JSON_SetText(payload, "causeId", "");
                             JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);
                             Db_AddDeviceHistory(payload);
-                            checkSceneForDevice(deviceInfo.id, dpId);     // Check and run scenes for this device if any
+                            checkSceneForDevice(deviceInfo.id, dpId, true);     // Check and run scenes for this device if any
                         }
 
                         break;
@@ -759,8 +836,9 @@ int main(int argc, char ** argv)
                     }
                     case TYPE_CTR_DEVICE: {
                         char* deviceId = JSON_GetText(payload, "deviceId");
+                        char* senderId = JSON_GetText(payload, "senderId");
                         JSON* dictDPs = JSON_GetObject(payload, "dictDPs");
-                        Ble_ControlDeviceJSON(deviceId, dictDPs);
+                        Ble_ControlDeviceJSON(deviceId, dictDPs, senderId);
                         break;
                     }
                     case TYPE_CTR_GROUP_NORMAL: {
@@ -770,40 +848,51 @@ int main(int argc, char ** argv)
                         break;
                     }
                     case TYPE_CTR_SCENE: {
-                        char* sceneId = JSON_GetText(payload, "sceneId");
-                        int state = JSON_GetNumber(payload, "state");
-
-                        // Check if this scene is HC or local
-                        bool isLocal = true;
-                        int sceneType = 0;
-                        for (int i = 0; i < g_sceneCount; i++) {
-                            if (StringCompare(g_sceneList[i].id, sceneId)) {
-                                isLocal = g_sceneList[i].isLocal;
-                                sceneType = g_sceneList[i].type;
-                                JSON_SetNumber(payload, "sceneType", g_sceneList[i].type);
-                                break;
+                        char* senderId = JSON_GetText(payload, "senderId");
+                        char* sceneId = NULL;
+                        int state = 1;
+                        JSON_ForEach(o, payload) {
+                            if (cJSON_IsObject(o)) {
+                                sceneId = o->string;
+                                state = JSON_GetNumber(o, "state");
                             }
                         }
-                        if (sceneType != SceneTypeManual) {
-                            if (state)  { logInfo("Enabling scene %s", sceneId); }
-                            else        { logInfo("Disabling scene %s", sceneId); }
-                            Db_EnableScene(sceneId, state);
-                        } else {
-                            logInfo("Executing HC scene %s", sceneId);
-                            if (!isLocal) {
-                                for (int i = 0; i < g_sceneCount; i++) {
-                                    if (StringCompare(g_sceneList[i].id, sceneId)) {
-                                        markSceneToRun(&g_sceneList[i]);
-                                        break;
+                        if (sceneId) {
+                            // Check if this scene is HC or local
+                            bool isLocal = true;
+                            int sceneType = 0;
+                            for (int i = 0; i < g_sceneCount; i++) {
+                                if (StringCompare(g_sceneList[i].id, sceneId)) {
+                                    isLocal = g_sceneList[i].isLocal;
+                                    sceneType = g_sceneList[i].type;
+                                    break;
+                                }
+                            }
+                            if (sceneType != SceneTypeManual) {
+                                if (state)  { logInfo("Enabling scene %s", sceneId); }
+                                else        { logInfo("Disabling scene %s", sceneId); }
+                                Db_EnableScene(sceneId, state);
+                            } else {
+                                logInfo("Executing HC scene %s", sceneId);
+                                if (!isLocal) {
+                                    for (int i = 0; i < g_sceneCount; i++) {
+                                        if (StringCompare(g_sceneList[i].id, sceneId)) {
+                                            markSceneToRun(&g_sceneList[i], senderId);
+                                            break;
+                                        }
                                     }
                                 }
                             }
-                        }
-                        if (isLocal) {
-                            if (sceneType == SceneTypeManual) {
-                                JSON_SetNumber(payload, "state", 2);
+                            if (isLocal) {
+                                JSON* p = JSON_CreateObject();
+                                JSON_SetText(p, "sceneId", sceneId);
+                                JSON_SetNumber(p, "state", state);
+                                if (sceneType == SceneTypeManual) {
+                                    JSON_SetNumber(payload, "state", 2);
+                                }
+                                sendPacketTo(SERVICE_BLE, reqType, p);
+                                JSON_Delete(p);
                             }
-                            sendPacketTo(SERVICE_BLE, reqType, payload);
                         }
                         break;
                     }
@@ -1325,6 +1414,40 @@ int main(int argc, char ** argv)
                         break;
                     }
                 }
+            } else if(isMatchString(NameService, SERVICE_HANET) && payload) {
+                switch (reqType) {
+                    case CAM_HANET_RESPONSE: {
+                        logInfo("CAM_HANET_RESPONSE");
+                        char* person_id = JSON_GetText(payload, "person_id");
+                        char* person_name = JSON_GetText(payload, "person_name");
+                        int person_type = JSON_GetNumber(payload, "person_type");
+                        char* camera_id = JSON_GetText(payload, "camera_id");
+                        logInfo("person_id = %s",person_id);
+                        logInfo("person_name = %s",person_name);
+                        logInfo("person_type = %d",person_type);
+                        logInfo("camera_id = %s",camera_id);
+                        if(person_type == 0 || person_type == 1){ //camera phát hiện người nhà hoặc người quen
+                            person_type = 3; //synch dpID reponse of Hanet with app Homegy
+                            DpInfo dpInfo;
+                            int foundDps = Db_FindDp(&dpInfo, camera_id, person_type);
+                            logInfo("foundDps = %d",foundDps);
+                            if (foundDps == 1) {
+                                Db_SaveDpValueString(dpInfo.deviceId, dpInfo.id, person_id);
+                                checkSceneForDevice(camera_id, person_type, true);
+                            }
+                        } else if(person_type == 2){//camera phát hiện người la
+                            person_type = 5; //synch dpID reponse of Hanet with app Homegy
+                            DpInfo dpInfo;
+                            int foundDps = Db_FindDp(&dpInfo, camera_id, person_type);
+                            logInfo("foundDps = %d",foundDps);
+                            if (foundDps == 1) {
+                                Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, 2);
+                                checkSceneForDevice(camera_id, person_type, true);
+                            }
+                        }
+                        break;
+                    }
+                }
             }
 
             JSON_Delete(recvPacket);
@@ -1332,59 +1455,6 @@ int main(int argc, char ** argv)
             free(recvMsg);
         }
         usleep(100);
-    }
-    return 0;
-}
-
-// Add device that need to check response to response list
-JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr) {
-    ASSERT(itemId); ASSERT(deviceAddr);
-    JSON* item = requestIsInRespList(reqType, itemId);
-    if (item == NULL) {
-        char reqTypeStr[10];
-        sprintf(reqTypeStr, "%d.%s", reqType, itemId);
-        item = JArr_CreateObject(g_checkRespList);
-        JSON_SetText(item, "reqType", reqTypeStr);
-        JSON_SetNumber(item, "createdTime", timeInMilliseconds());
-        JSON* devices = JSON_AddArray(item, "devices");
-    }
-    JSON* devices = JSON_GetObject(item, "devices");
-    if (JArr_FindByText(devices, "addr", deviceAddr) == NULL) {
-        JSON *device = JArr_CreateObject(devices);
-        JSON_SetText(device, "addr", deviceAddr);
-        JSON_SetNumber(device, "status", -1);
-    }
-    return item;
-}
-
-JSON* requestIsInRespList(int reqType, const char* itemId) {
-    ASSERT(itemId);
-    char reqTypeStr[10];
-    sprintf(reqTypeStr, "%d.%s", reqType, itemId);
-    JSON* item = JArr_FindByText(g_checkRespList, "reqType", reqTypeStr);
-    return item;
-}
-
-void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr, int status) {
-    ASSERT(itemId); ASSERT(deviceAddr);
-    JSON* item = requestIsInRespList(reqType, itemId);
-    if (item) {
-        JSON* devices = JSON_GetObject(item, "devices");
-        JSON* device = JArr_FindByText(devices, "addr", deviceAddr);
-        if (device) {
-            JSON_SetNumber(device, "status", status);
-        }
-    }
-}
-
-int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr) {
-    JSON* item = requestIsInRespList(reqType, itemId);
-    if (item) {
-        JSON* devices = JSON_GetObject(item, "devices");
-        JSON* device = JArr_FindByText(devices, "addr", deviceAddr);
-        if (device) {
-            return (int)JSON_GetNumber(device, "status");
-        }
     }
     return 0;
 }
@@ -1486,7 +1556,8 @@ bool Scene_GetFullInfo(JSON* packet) {
             int foundDevices = Db_FindDevice(&deviceInfo, entityId);
             if (foundDevices == 1) {
                 int dpId = atoi(JArr_GetText(exprArray, 0) + 3);   // Template is "$dp1"
-                int dpValue = JArr_GetNumber(exprArray, 2);
+                // int dpValue = JArr_GetNumber(exprArray, 2);
+                JSON* objItem = JArr_GetObject(exprArray, 2); //get obj for check type value of exprArray
                 DpInfo dpInfo;
                 int foundDps = Db_FindDp(&dpInfo, entityId, dpId);
                 if (foundDps == 1 || StringCompare(deviceInfo.pid, HG_BLE_IR)) {
@@ -1496,7 +1567,15 @@ bool Scene_GetFullInfo(JSON* packet) {
                     if (foundDps == 1) {
                         JSON_SetText(condition, "dpAddr", dpInfo.addr);
                     }
-                    JSON_SetNumber(condition, "dpValue", dpValue);
+                    if(cJSON_IsString(objItem)){ //check type value of conditions and set
+                        JSON_SetNumber(condition, "valueType", ValueTypeString);
+                        char* dpValueStr = JArr_GetText(exprArray, 2);
+                        JSON_SetText(condition, "dpValueStr", dpValueStr);
+                    } else if(cJSON_IsNumber(objItem) || cJSON_IsBool(objItem)){
+                        JSON_SetNumber(condition, "valueType", ValueTypeDouble);
+                        int dpValue = JArr_GetNumber(exprArray, 2);
+                        JSON_SetNumber(condition, "dpValue", dpValue);
+                    }
                 }
             }
             JSON_SetNumber(condition, "conditionType", EntityDevice);

@@ -220,7 +220,8 @@ bool ble_getInfoProvison(provison_inf *PRV, JSON* packet)
     PRV->netkeyIndex = JSON_GetText(packet, KEY_NETKEY_INDEX);
     PRV->netkey = JSON_GetText(packet, KEY_NETKEY);
     PRV->appkeyIndex = JSON_GetText(packet, KEY_APP_KEY_INDEX);
-    PRV->deviceKey = JSON_GetText(packet, KEY_DEVICE_KEY);
+    PRV->deviceKey1 = JSON_GetText(packet, KEY_DEVICE_KEY);
+    PRV->deviceKey2 = JSON_GetText(packet, KEY_DEVICE_KEY);
     PRV->address1 = JSON_GetText(packet, "address1");
     PRV->address2 = JSON_GetText(packet, "address2");
     return true;
@@ -228,14 +229,21 @@ bool ble_getInfoProvison(provison_inf *PRV, JSON* packet)
 
 bool GW_GetDeviceOnOffState(const char* dpAddr) {
     ASSERT(dpAddr);
-
-    int sentLength = 0, i = 0;
-    uint8_t  data[] = {0xe8,0xff,  0x00,0x00,0x00,0x00,0x00,0x00,  0x00,0x00,  0x82,0x01};
+    uint8_t  data[] = {0xe8,0xff,  0x00,0x00,0x00,0x00,0x00,0x00,  0x00,0x00,  0x82,0x01, 0x01};
     long int dpAddrHex = strtol(dpAddr, NULL, 16);
-    data[9] = dpAddrHex & (0xFF);
-    data[8] = (dpAddrHex >> 8) & 0xFF;
-
-    return sendFrameToAnyGw(dpAddrHex, data, 12);
+    bool found = false;
+    for (int i = 0; i < UART_SENDING_FRAME_SIZE; i++) {
+        if (g_uartSendingFrames[i].addr == dpAddrHex && g_uartSendingFrames[i].respType > 0 && g_uartSendingFrames[i].priority == 2) {
+            found = true;
+        }
+    }
+    if (found == false) {
+        int sentLength = 0, i = 0;
+        data[9] = dpAddrHex & (0xFF);
+        data[8] = (dpAddrHex >> 8) & 0xFF;
+        return sendFrameToAnyGw(dpAddrHex, data, 13);
+    }
+    return true;
 }
 
 bool ble_bindGateWay(int gwIndex, provison_inf *PRV)
@@ -279,11 +287,13 @@ bool ble_bindGateWay(int gwIndex, provison_inf *PRV)
     netkeyIndex = (char *)PRV->netkeyIndex;
     netkey = (char *)PRV->netkey;
     appkeyIndex = (char *)PRV->appkeyIndex;
-    deviceKey = (char *)PRV->deviceKey;
+    deviceKey = (char *)PRV->deviceKey1;
     // deviceKey[0] = gwIndex + 1 + '0';
     if (gwIndex == 0) {
+        // deviceKey = (char *)PRV->deviceKey1;
         address_t = (char *)PRV->address1;
     } else {
+        // deviceKey = (char *)PRV->deviceKey2;
         address_t = (char *)PRV->address2;
     }
 
@@ -1086,6 +1096,11 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     } else if (frame->opcode == 0x8245 && frame->paramSize >= 1) {
         // Add scene LC
         return GW_RESPONSE_ADD_SCENE;
+    } else if (frame->opcode >> 8 == 0x5E && frame->paramSize == 7 && (uint8_t)frame->opcode >= 0x6E && (uint8_t)frame->opcode <= 0x78) {
+        uint16_t tmp = (uint16_t)frame->param[0];
+        tmp = (tmp << 8) | (uint8_t)frame->opcode;
+        temp->dpValue = tmp;
+        return GW_RESPONSE_IR;
     } else if (frame->opcode >> 8 == 0x5E && frame->paramSize >= 6) {
         temp->dpValue =  frame->param[5];
         temp->causeType = 3;
@@ -1095,6 +1110,7 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         return GW_RESPONSE_SET_TTL;
     } else if (frame->opcode == 0xE511 && frame->paramSize >= 9 && frame->param[0] == 0x02) {
         if (frame->param[1] == 0x0A) {
+            temp->dpValue = 0;
             return GW_RESPONSE_IR;
         }
     }
@@ -1140,7 +1156,7 @@ bool ble_setSceneLocalToDeviceSwitch(const char* sceneId, const char* deviceAddr
     data[9] = (uint8_t)(dpAddrHex);
     data[12] = (uint8_t)(sceneIdHex >> 8);
     data[13] = (uint8_t)(sceneIdHex);
-    data[14] = 0x64;
+    data[14] = 0x0;
     data[15] = dpCount;
     data[16] = (uint8_t)(param >> 24);
     data[17] = (uint8_t)(param >> 16);
@@ -1257,7 +1273,9 @@ bool ble_callSceneLocalToHC(const char* address_device,const char* sceneID)
     CallSceneLocalToHC[12] = hex_sceneID[0];
     CallSceneLocalToHC[13] = hex_sceneID[1];
 
-    return sendFrameToAnyGw(deviceAddrHex, CallSceneLocalToHC, 14);
+    bool ret = sendFrameToAnyGw(deviceAddrHex, CallSceneLocalToHC, 14);
+    addRetryCountToSendingFrame(1);
+    return ret;
 }
 
 bool ble_setTimeForSensorPIR(const char* address_device,const char* time)
@@ -1483,4 +1501,14 @@ bool GW_DeleteSceneConditionIR(const char* deviceAddr, const char* sceneId) {
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 19);
     addRetryCountToSendingFrame(1);
     return ret;
+}
+
+
+bool GW_GetScenes(const char *deviceAddr) {
+    ASSERT(deviceAddr);
+    long int addrHex = strtol(deviceAddr, NULL, 16);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0x82,0x44};
+    data[8] = (addrHex >> 8) & 0x00FF;
+    data[9] = (addrHex & 0x00FF);
+    return sendFrameToAnyGw(addrHex, data, 12);
 }

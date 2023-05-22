@@ -246,6 +246,7 @@ bool AWS_get_info_device(Info_device *inf_device,Pre_parse *pre_detect)
     strcpy(device_inf_, device_inf);
 
     inf_device->provider = String2Int(strtok(device_inf_, "|"));
+    printf("provider %d\n",inf_device->provider);
     if(inf_device->provider  == HOMEGY_BLE)
     {
         int size_device_inf = 0;
@@ -270,6 +271,16 @@ bool AWS_get_info_device(Info_device *inf_device,Pre_parse *pre_detect)
 
         inf_device->dictDPs  =  (char*)json_serialize_to_string_pretty(json_object_get_value(pre_detect->JS_object, KEY_DICT_DPS));
         inf_device->dictName =  (char*)json_serialize_to_string_pretty(json_object_get_value(pre_detect->JS_object, KEY_DICT_NAME));
+    }
+    else if(inf_device->provider == HANET_CAMERA)
+    {
+        inf_device->pid = CAM_HANET;
+        inf_device->MAC       =   NULL;
+        inf_device->Unicast   =   NULL;
+        inf_device->deviceKey =   NULL;
+        inf_device->dictMeta =  NULL;
+        inf_device->dictName =  NULL;
+        inf_device->dictDPs  =  (char*)json_serialize_to_string_pretty(json_object_get_value(pre_detect->JS_object, KEY_DICT_DPS));
     }
     // free(device_inf_);
     return true;
@@ -302,8 +313,6 @@ bool MOSQ_getTemplateAddDevice(char **result,Info_device *inf_device)
     json_object_dotset_value(root_object, "protocol_para.dictMeta",json_parse_string(inf_device->dictMeta));
     json_object_dotset_value(root_object, "protocol_para.dictDPs",json_parse_string(inf_device->dictDPs));
     json_object_dotset_value(root_object, "protocol_para.dictName",json_parse_string(inf_device->dictName));
-
-
 
     serialized_string = json_serialize_to_string_pretty(root_value);
     int size_t = strlen(serialized_string);

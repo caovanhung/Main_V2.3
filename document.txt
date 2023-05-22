@@ -12,6 +12,13 @@
         Cảm biến nhiệt độ/độ ẩm
         Cảm biến chuyển động
 
+# Danh sách bản tin BLE:
+    Bản tin báo trạng thái của thiết bị khi người dùng nhấn nút (công tắc):
+        8204 0000 ss 0000 ll 0000: ss => trạng thái bật tắt (00 hoặc 01), ll => độ sáng của LED (00 - 64)
+    Bản tin điều khiển thiết bị từ HC có phản hồi (công tắc, đèn):
+        Request: E8FF 000000000000 adad 8202 ss: adad => địa chỉ của hạt công tắc hoặc đèn, ss => trạng thái bật tắt (00, 01)
+        Response: 8204 8202 ss 0000 ll 0000: ss => trạng thái bật tắt (00 hoặc 01), ll => độ sáng của LED (00 - 64)
+
 
 # Chức năng lưu lịch sử hoạt động
     Các thông tin thiết bị cần lưu:
@@ -25,17 +32,21 @@
     Thông tin của từng lịch sử:
         time: Số milliseconds tính từ năm 01/01/1970
         eventType: Loại sự kiện của lịch sử:
-            1: Điều khiển thiết bị
+            1: Thiết bị thay đổi giá trị dp
             2: Thiết bị online/offline (dpValue = 0: thiết bị offline, dpValue = 1: Thiết bị online)
             3: Thêm thiết bị
             4: Xoá thiết bị
             5: Khóa trẻ em (dpValue là index của hạt bị khóa (1, 2, 3, 4))
             6: Khóa hãng
+            7: Thay đổi trạng thái của nhóm liên động hoặc nhóm đèn
+            8: Scene được kích hoạt
+            9: Enable/disable scene
         causeType: Nguyên nhân làm thay đổi sự kiện
             0: Người dùng bật tắt trực tiếp từ thiết bị
             1: Người dùng điều khiển từ app, trong trường hợp này causeId sẽ chứa senderId tác động
             2: Có nhóm đèn hoặc nhóm công tắc tác động, trong trường hợp này causeId sẽ chứa groupId tác động
             3: Có scene tác động, trong trường hợp này causeId sẽ chứa sceneId tác động
+            4: HC chủ động đồng bộ trạng thái của thiết bị
         causeId: chứa senderId, groupId hoặc sceneId tùy theo causeType
         deviceId: Id của thiết bị
 
@@ -181,7 +192,7 @@ Tính năng IR:
         Vùng nhớ : điều hòa, tivi, quạt
 
         "1": "BrandId",
-        "2": "Remote",
+        "2": "RemoteId",
         "3": "Type Command", (1: điều khiển qua thư viện - lệnh 3 của IR, 2: điều khiển theo vùng nhớ - lệnh 2 của IR)
         "4": "Voice",
         "101": "OnOff",
@@ -196,7 +207,6 @@ Tính năng IR:
 
         Lệnh 4: 04 02 05 18 00 01 00 00
                 04 02 03 18 00 01 00 00
-
 
 
 

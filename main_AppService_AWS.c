@@ -1214,6 +1214,7 @@ int main( int argc,char ** argv ) {
                     continue;
                 }
                 switch(reqType) {
+                    case TYPE_CTR_SCENE:
                     case TYPE_GET_ALL_DEVICES:
                     case TYPE_SET_GROUP_TTL: {
                         sendPacketTo(SERVICE_CORE, reqType, reported);
@@ -1271,16 +1272,16 @@ int main( int argc,char ** argv ) {
                         sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
-                    case TYPE_CTR_SCENE:
-                    {
-                        TimeCreat = timeInMilliseconds();
-                        AWS_getInfoControlSecene(inf_scene,pre_detect);
-                        MOSQ_getTemplateControSecene(&payload,inf_scene);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_CTR_SCENE,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_CTR_SCENE,MOSQ_ActResponse);
-                        mqttLocalPublish(topic, message);
-                        break;
-                    }
+                    // case TYPE_CTR_SCENE:
+                    // {
+                    //     TimeCreat = timeInMilliseconds();
+                    //     AWS_getInfoControlSecene(inf_scene,pre_detect);
+                    //     MOSQ_getTemplateControSecene(&payload,inf_scene);
+                    //     getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_CTR_SCENE,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
+                    //     get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_CTR_SCENE,MOSQ_ActResponse);
+                    //     mqttLocalPublish(topic, message);
+                    //     break;
+                    // }
                     case TYPE_ADD_DEVICE:
                     {
                         TimeCreat = timeInMilliseconds();

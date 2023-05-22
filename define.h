@@ -143,8 +143,8 @@ extern int g_dbgLineNumber;
 #define GW_RESPONSE_UPDATE_SCENE                        (81U)
 #define GW_RESPONSE_UPDATE_GROUP                        (82U)
 #define GW_RESPONSE_SET_TTL                             (83U)
-#define GW_RESPONSE_IR                              (84U)
-
+#define GW_RESPONSE_IR                                  (84U)
+#define CAM_HANET_RESPONSE                              (85U)
 
 #define GW_RESPONSE_NOTIFI                              ( 111U)
 #define KEY_MESSAGE                                     "message"
@@ -330,7 +330,7 @@ extern int g_dbgLineNumber;
 #define BLE_LIGHT               "uyaenrl6qdapsclz,qil8rhfmzguzxchz,zfbj19qm,szfpeatw,ijsj2evj,BLEHGAA0201,BLEHG01020D,BLEHG01020B,BLEHG01020A,BLEHG010201,BLEHG010202,BLEHG010204,BLEHG010205,BLEHG010206,BLEHG010207,lqezswimvgrha0fm,WVy6k8Lc6g0sHYC5,bcuobg1jjmtxmesx,uuA2N4dyCeYlcvqA,bIovIDMEC0SdkqZD,BLEHGAA0202,BLEHG010401,BLEHG010402"
 
 
-#define CAMERA_HANET            "CAMERAHANET"
+#define CAM_HANET            "BLEHGCH0101"
 #define TUYA_DEVICE             "WIFI"
 #define HG_BLE_CURTAIN_NORMAL   "BLEHGAA0105"
 #define HG_BLE_ROLLING_DOOR     "BLEHGAA0106"
@@ -519,7 +519,7 @@ extern int g_dbgLineNumber;
 #define SERVICE_CORE                 "CORE"
 #define SERVICE_BLE                  "BLE"
 #define SERVICE_TUYA                 "TUYA"
-
+#define SERVICE_HANET                "HANET"
 
 #define MOSQ_NameService_Manager_ServieceManager        "ServieceManager"
 /////////////////////////////////DEFINE name of extend/////////////////////////////////////////
@@ -592,7 +592,10 @@ typedef enum {
     EV_DEVICE_ADDED = 3,
     EV_DEVICE_DELETED = 4,
     EV_LOCK_TOUCH = 5,
-    EV_LOCK_DEVICE = 6
+    EV_LOCK_DEVICE = 6,
+    EV_GROUP_CHANGED = 7,
+    EV_RUN_SCENE = 8,
+    EV_ONOFF_SCENE = 9
 } HistoryEventType;
 
 // Event history cause type

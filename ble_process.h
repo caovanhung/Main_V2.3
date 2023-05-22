@@ -52,7 +52,8 @@ typedef struct
     const char *netkeyIndex;
     const char *netkey;
     const char *appkeyIndex;
-    const char *deviceKey;
+    const char *deviceKey1;
+    const char *deviceKey2;
     const char *address1;
     const char *address2;
 }provison_inf;
@@ -257,4 +258,7 @@ bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t co
 bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex);
 bool GW_AddSceneConditionIR(const char* deviceAddr, const char* sceneId, uint16_t voiceCode);
 bool GW_DeleteSceneConditionIR(const char* deviceAddr, const char* sceneId);
+bool GW_GetScenes(const char *deviceAddr);
+
+
 #endif
