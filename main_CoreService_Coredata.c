@@ -888,7 +888,7 @@ int main(int argc, char ** argv)
                                 JSON_SetText(p, "sceneId", sceneId);
                                 JSON_SetNumber(p, "state", state);
                                 if (sceneType == SceneTypeManual) {
-                                    JSON_SetNumber(payload, "state", 2);
+                                    JSON_SetNumber(p, "state", 2);
                                 }
                                 sendPacketTo(SERVICE_BLE, reqType, p);
                                 JSON_Delete(p);

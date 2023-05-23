@@ -33,7 +33,11 @@ bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int ty
         layerService = "Unknown";
     }
 
-    sprintf(topic, "%s/%s/%d", layerService, serviceToSend, typeAction);
+    if (StringCompare(layerService, "Unknown")) {
+        sprintf(topic, "%s/%d", serviceToSend, typeAction);
+    } else {
+        sprintf(topic, "%s/%s/%d", layerService, serviceToSend, typeAction);
+    }
 
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
@@ -74,7 +78,11 @@ bool sendToServicePageIndexFunc(struct mosquitto* mosq, const char* serviceToSen
         layerService = "Unknown";
     }
 
-    sprintf(topic, "%s/%s/%d", layerService, serviceToSend, typeAction);
+    if (StringCompare(layerService, "Unknown")) {
+        sprintf(topic, "%s/%d", serviceToSend, typeAction);
+    } else {
+        sprintf(topic, "%s/%s/%d", layerService, serviceToSend, typeAction);
+    }
 
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);

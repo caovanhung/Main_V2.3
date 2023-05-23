@@ -19,6 +19,7 @@ typedef struct {
     uint8_t  data[50];
     uint8_t  dataLength;
     uint8_t  retryCount;
+    uint16_t timeout;
 } UartSendingFrame;
 
 typedef struct {
@@ -61,6 +62,10 @@ void addRetryCountToSendingFrame(uint8_t retryCount) {
     g_uartSendingFrames[g_uartSendingFramesIdx].retryCount = retryCount;
 }
 
+void addTimeoutToSendingFrame(uint16_t timeout) {
+    g_uartSendingFrames[g_uartSendingFramesIdx].timeout = timeout;
+}
+
 bool sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
     ASSERT(data);
     for (int i = 0; i < UART_SENDING_FRAME_SIZE; i++) {
@@ -71,7 +76,8 @@ bool sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
             g_uartSendingFrames[i].priority = 1;
             memcpy(g_uartSendingFrames[i].data, data, len);
             g_uartSendingFrames[i].dataLength = len;
-            g_uartSendingFrames[i].retryCount = 2;
+            g_uartSendingFrames[i].retryCount = 1;
+            g_uartSendingFrames[i].timeout = 1000;
             g_uartSendingFramesIdx = i;
             return true;
         }
@@ -111,6 +117,7 @@ void BLE_SendToGateway(int gwIndex) {
         // Find frame to send
         UartSendingFrame* frame = findFrameToSend(gwIndex);
         if (frame != NULL) {
+            sentFrame[gwIndex].timeout = frame->timeout;
             sentFrame[gwIndex].retryCount = frame->retryCount;
             sentFrame[gwIndex].respType = frame->respType;
             sentFrame[gwIndex].addr = frame->addr;
@@ -154,7 +161,7 @@ void BLE_SendToGateway(int gwIndex) {
         }
 
         // Timeout handling
-        if (timeInMilliseconds() - sentTime[gwIndex] > 1000) {
+        if (timeInMilliseconds() - sentTime[gwIndex] > sentFrame[gwIndex].timeout) {
             failedCount[gwIndex]++;
             if (failedCount[gwIndex] < sentFrame[gwIndex].retryCount) {
                 state[gwIndex] = 1;      // Goto step 1 to retry sending
@@ -198,8 +205,8 @@ void BLE_SendToGateway(int gwIndex) {
 }
 
 void BLE_SendUartFrameLoop() {
-    BLE_SendToGateway(0);
     BLE_SendToGateway(1);
+    BLE_SendToGateway(0);
 }
 
 void BLE_PrintFrame(char* str, ble_rsp_frame_t* frame) {
@@ -741,6 +748,8 @@ bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue)
 
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 13);
     addPriorityToSendingFrame(0);
+    // addTimeoutToSendingFrame(250);
+    // addRetryCountToSendingFrame(2);
     return ret;
 }
 
@@ -789,7 +798,6 @@ void ble_getStringControlOnOff(char **result,const char* strAddress,const char* 
 bool ble_controlOnOFF(const char *address_element,const char *state)
 {
     ASSERT(address_element); ASSERT(state);
-    static uint8_t tid = 0;
 
     char *str_send_uart;
     unsigned char *hex_send_uart;
@@ -797,10 +805,9 @@ bool ble_controlOnOFF(const char *address_element,const char *state)
     ble_getStringControlOnOff(&str_send_uart,address_element,state);
 
     int len_str = (int)strlen(str_send_uart);
-    hex_send_uart  = (char*) malloc(len_str * sizeof(char) + 1);
+    hex_send_uart  = (char*) malloc(len_str * sizeof(char));
     String2HexArr(str_send_uart,hex_send_uart);
-    hex_send_uart[len_str/2] = tid++;
-    sendFrameToAnyGw(dpAddrHex, hex_send_uart, len_str/2 + 1);
+    sendFrameToAnyGw(dpAddrHex, hex_send_uart, len_str/2);
     addPriorityToSendingFrame(0);
     free(hex_send_uart);
     free(str_send_uart);
@@ -854,7 +861,9 @@ bool ble_addDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *address_group,
     SET_GROUP[14] = *hex_address_group;
     SET_GROUP[15] = *(hex_address_group+1);
 
-    return sendFrameToGwIndex(gwIndex, dpAddrHex, SET_GROUP, 18);
+    bool ret = sendFrameToGwIndex(gwIndex, dpAddrHex, SET_GROUP, 18);
+    addRetryCountToSendingFrame(2);
+    return ret;
 }
 
 
@@ -1173,8 +1182,8 @@ bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const c
     uint8_t hex_address_device[5];
     uint8_t hex_sceneID[5];
 
-    String2HexArr((char*)address_device,hex_address_device);
-    String2HexArr((char*)sceneID,hex_sceneID);
+    String2HexArr((char*)address_device, hex_address_device);
+    String2HexArr((char*)sceneID, hex_sceneID);
 
     SceneLocalToDevice[8] = *hex_address_device;
     SceneLocalToDevice[9] = *(hex_address_device+1);

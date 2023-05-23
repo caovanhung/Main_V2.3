@@ -968,6 +968,7 @@ void Aws_ProcessLoop() {
             returnStatus = subscribeToTopic( &mqttContext );
             if (returnStatus == EXIT_SUCCESS) {
                 g_awsIsConnected = true;
+                sendToService(SERVICE_CFG, 0, "AWS_CONNECTED");
             }
         }
     } else {
@@ -975,6 +976,7 @@ void Aws_ProcessLoop() {
         if (mqttStatus != MQTTSuccess ) {
             returnStatus = EXIT_FAILURE;
             g_awsIsConnected = false;
+            sendToService(SERVICE_CFG, 0, "AWS_DISCONNECTED");
             (void) Openssl_Disconnect( &networkContext );
             LogError( (get_localtime_now()),( "MQTT_ProcessLoop returned with status = %s.",MQTT_Status_strerror( mqttStatus ) ) );
         }

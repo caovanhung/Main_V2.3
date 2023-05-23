@@ -23,31 +23,6 @@ bool StringCompare(const char* str1, const char* str2) {
 }
 
 
-JSON_Object* JArray_FindStringValue(JSON_Array* array, const char* key, const char* value) {
-    int arrayCount = json_array_get_count(array);
-    for (int i = 0; i < arrayCount; i++) {
-        JSON_Object* arrayItem = json_array_get_object(array, i);
-        if (isMatchString(value, json_object_get_string(arrayItem, key)))
-        {
-            return arrayItem;
-        }
-    }
-    return NULL;
-}
-
-
-JSON_Object* JArray_FindNumberValue(JSON_Array* array, const char* key, double value) {
-    int arrayCount = json_array_get_count(array);
-    for (int i = 0; i < arrayCount; i++) {
-        JSON_Object* arrayItem = json_array_get_object(array, i);
-        if (value == json_object_get_number(arrayItem, key))
-        {
-            return arrayItem;
-        }
-    }
-    return NULL;
-}
-
 list_t* List_Create() {
     list_t* l = malloc(sizeof(list_t));
     l->count = 0;

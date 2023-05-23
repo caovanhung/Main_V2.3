@@ -520,6 +520,7 @@ extern int g_dbgLineNumber;
 #define SERVICE_BLE                  "BLE"
 #define SERVICE_TUYA                 "TUYA"
 #define SERVICE_HANET                "HANET"
+#define SERVICE_CFG                  "CFG"
 
 #define MOSQ_NameService_Manager_ServieceManager        "ServieceManager"
 /////////////////////////////////DEFINE name of extend/////////////////////////////////////////
