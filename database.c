@@ -175,7 +175,7 @@ int Db_DeleteDevice(const char* deviceId) {
 int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, int pageIndex) {
     ASSERT(groupAddr); ASSERT(groupName); ASSERT(devices);
     char* sqlCmd = malloc(strlen(devices) + 200);
-    sprintf(sqlCmd, "INSERT INTO GROUP_INF(groupAdress, name, devices, pageIndex) VALUES('%s', '%s', '%s', %d)", groupAddr, groupName, devices, pageIndex);
+    sprintf(sqlCmd, "INSERT INTO GROUP_INF(groupAdress, name, isLight, devices, pageIndex) VALUES('%s', '%s', '%d', '%s', %d)", groupAddr, groupName, isLight, devices, pageIndex);
     Sql_Exec(sqlCmd);
     if (isLight) {
         sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%s', '%s', %d)", groupAddr, groupAddr, "20", "0", pageIndex);
@@ -195,11 +195,22 @@ char* Db_FindDevicesInGroup(const char* groupAddr) {
     char sqlCommand[100];
     sprintf(sqlCommand, "SELECT * FROM group_inf WHERE groupAdress = '%s';", groupAddr);
     Sql_Query(sqlCommand, row) {
-        char* devices = sqlite3_column_text(row, 4);
+        char* devices = sqlite3_column_text(row, 5);
         resultDeviceIds = malloc(strlen(devices) + 1);
         StringCopy(resultDeviceIds, devices);
     }
     return resultDeviceIds;
+}
+
+int Db_GetGroupType(const char* groupAddr) {
+    ASSERT(groupAddr);
+    char sqlCommand[100];
+    int groupType = -1;
+    sprintf(sqlCommand, "SELECT isLight FROM group_inf WHERE groupAdress = '%s';", groupAddr);
+    Sql_Query(sqlCommand, row) {
+        groupType = sqlite3_column_int(row, 0);
+    }
+    return groupType;
 }
 
 int Db_SaveGroupDevices(const char* groupAddr, const char* devices) {
@@ -600,7 +611,7 @@ bool creat_table_database(sqlite3 **db)
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS GROUP_INF;CREATE TABLE GROUP_INF(groupAdress TEXT,state INTEGER,name TEXT,pid TEXT,devices TEXT, pageIndex INTEGER);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS GROUP_INF;CREATE TABLE GROUP_INF(groupAdress TEXT, state INTEGER, name TEXT, pid TEXT, isLight INTEGER, devices TEXT, pageIndex INTEGER);");
     if(check != 0)
     {
         printf("DELETE GROUP_INF is error!\n");

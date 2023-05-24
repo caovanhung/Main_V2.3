@@ -17,6 +17,11 @@
 #include "cJSON.h"
 
 typedef enum {
+    GroupSwitch = 0,     // Nhóm công tắc (liên động mềm)
+    GroupLight  = 1      // Nhóm đèn
+} GroupType;
+
+typedef enum {
     ValueTypeDouble = 0,
     ValueTypeString = 1
 } ValueType;
@@ -131,6 +136,7 @@ int Db_AddGroup(const char* groupAddr, const char* groupName, const char* device
 int Db_DeleteGroup(const char* groupAddr);
 int Db_DeleteAllGroup();
 char* Db_FindDevicesInGroup(const char* groupAddr);
+int Db_GetGroupType(const char* groupAddr);
 int Db_SaveGroupDevices(const char* groupAddr, const char* devices);
 
 int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex);

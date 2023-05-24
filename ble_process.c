@@ -248,7 +248,8 @@ bool GW_GetDeviceOnOffState(const char* dpAddr) {
         int sentLength = 0, i = 0;
         data[9] = dpAddrHex & (0xFF);
         data[8] = (dpAddrHex >> 8) & 0xFF;
-        return sendFrameToAnyGw(dpAddrHex, data, 13);
+        sendFrameToAnyGw(dpAddrHex, data, 13);
+        addRetryCountToSendingFrame(2);
     }
     return true;
 }
@@ -748,8 +749,8 @@ bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue)
 
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 13);
     addPriorityToSendingFrame(0);
-    // addTimeoutToSendingFrame(250);
-    // addRetryCountToSendingFrame(2);
+    addTimeoutToSendingFrame(3000);
+    addRetryCountToSendingFrame(2);
     return ret;
 }
 
@@ -890,7 +891,8 @@ bool ble_addDeviceToGroupLink(int gwIndex, const char *groupAddr, const char *de
     data[14] = *hex_address_group;
     data[15] = *(hex_address_group + 1);
 
-    return sendFrameToGwIndex(gwIndex, deviceAddrHex, data, 19);
+    sendFrameToGwIndex(gwIndex, deviceAddrHex, data, 19);
+    addRetryCountToSendingFrame(2);
 }
 
 bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *groupAddr, const char *deviceAddr, const char *dpAddr)
@@ -917,7 +919,9 @@ bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *groupAddr, 
     SET_GROUP[14] = hex_address_group[0];
     SET_GROUP[15] = hex_address_group[1];
 
-    return sendFrameToGwIndex(gwIndex, deviceAddrHex, SET_GROUP, 18);
+    sendFrameToGwIndex(gwIndex, deviceAddrHex, SET_GROUP, 18);
+    addRetryCountToSendingFrame(2);
+    return true;
 }
 
 bool ble_controlCTL(const char *dpAddr, int lightness, int colorTemperature)
@@ -1171,7 +1175,9 @@ bool ble_setSceneLocalToDeviceSwitch(const char* sceneId, const char* deviceAddr
     data[17] = (uint8_t)(param >> 16);
     data[18] = (uint8_t)(param >> 8);
     data[19] = (uint8_t)(param);
-    return sendFrameToAnyGw(dpAddrHex, data, 16 + dpCount);
+    sendFrameToAnyGw(dpAddrHex, data, 16 + dpCount);
+    addRetryCountToSendingFrame(2);
+    return true;
 }
 
 bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const char* sceneID)
@@ -1191,7 +1197,9 @@ bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const c
     SceneLocalToDevice[12] = *hex_sceneID;
     SceneLocalToDevice[13] = *(hex_sceneID+1);
 
-    return sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice, 14);
+    sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice, 14);
+    addRetryCountToSendingFrame(2);
+    return true;
 }
 
 bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID,const char* modeBlinkRgb )
@@ -1215,7 +1223,9 @@ bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const ch
 
     SceneLocalToDevice[14] = hex_modeBlinkRgb[0];
 
-    return sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice,17);
+    sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice,17);
+    addRetryCountToSendingFrame(2);
+    return true;
 }
 
 bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue)

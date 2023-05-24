@@ -49,6 +49,7 @@ bool sendInfoSceneFromDatabase();
 bool Scene_GetFullInfo(JSON* packet);
 void SyncDevicesState();
 void GetDeviceStatusForScene(Scene* scene);
+void GetDeviceStatusForGroup(const char* deviceId, int dpId);
 
 bool compareSceneEntity(JSON* entity1, JSON* entity2) {
     if (entity1 && entity2) {
@@ -561,6 +562,33 @@ void GetDeviceStatusForScene(Scene* scene) {
     JSON_Delete(devicesArray);
 }
 
+/*
+ * Tìm tất cả các nhóm mà 1 hạt công tắc nằm trong đó, sau đó gửi lệnh để get trạng thái mới nhất của tất
+ * cả thiết bị trong nhóm đó. Hàm này được gọi khi có 1 hạt công tắc thay đổi trạng thái được gửi về từ thiết bị
+ */
+void GetDeviceStatusForGroup(const char* deviceId, int dpId) {
+    ASSERT(deviceId);
+    JSON* devicesArray = cJSON_CreateArray();
+    char sqlCommand[200];
+    sprintf(sqlCommand, "SELECT * FROM group_inf WHERE isLight = 0 AND devices LIKE '%%%s|%d%%'", deviceId, dpId);
+    Sql_Query(sqlCommand, row) {
+        char* devices = sqlite3_column_text(row, 5);
+        JSON* groupDevices = parseGroupLinkDevices(devices);
+        JSON_ForEach(d, groupDevices) {
+            DeviceInfo deviceInfo;
+            int foundDevices = Db_FindDevice(&deviceInfo, JSON_GetText(d, "deviceId"));
+            if (foundDevices == 1 && !JArr_FindByText(devicesArray, NULL, deviceInfo.addr)) {
+                JArr_AddText(devicesArray, deviceInfo.addr);
+            }
+        }
+        JSON_Delete(groupDevices);
+    }
+    if (JArr_Count(devicesArray) > 0) {
+        sendPacketTo(SERVICE_BLE, TYPE_GET_DEVICE_STATUS, devicesArray);
+    }
+    JSON_Delete(devicesArray);
+}
+
 void GetDeviceStatusInterval() {
     static long long int oldTick = 0;
 
@@ -652,6 +680,7 @@ int main(int argc, char ** argv)
                                         JSON_SetNumber(payload, "causeType", EV_CAUSE_TYPE_DEVICE);
                                         Db_AddDeviceHistory(payload);
                                     }
+                                    GetDeviceStatusForGroup(dpInfo.deviceId, dpInfo.id);
                                 } else {
                                     // The response is from getting status of devices actively
                                     if (oldDpValue != dpValue) {
@@ -873,8 +902,8 @@ int main(int argc, char ** argv)
                                 else        { logInfo("Disabling scene %s", sceneId); }
                                 Db_EnableScene(sceneId, state);
                             } else {
-                                logInfo("Executing HC scene %s", sceneId);
                                 if (!isLocal) {
+                                    logInfo("Executing HC scene %s", sceneId);
                                     for (int i = 0; i < g_sceneCount; i++) {
                                         if (StringCompare(g_sceneList[i].id, sceneId)) {
                                             markSceneToRun(&g_sceneList[i], senderId);
@@ -884,6 +913,7 @@ int main(int argc, char ** argv)
                                 }
                             }
                             if (isLocal) {
+                                logInfo("Sending LC scene to BLE %s", sceneId);
                                 JSON* p = JSON_CreateObject();
                                 JSON_SetText(p, "sceneId", sceneId);
                                 JSON_SetNumber(p, "state", state);
@@ -891,6 +921,26 @@ int main(int argc, char ** argv)
                                     JSON_SetNumber(p, "state", 2);
                                 }
                                 sendPacketTo(SERVICE_BLE, reqType, p);
+                                // Update status of devices in this scene to AWS
+                                for (int s = 0; s < g_sceneCount; s++) {
+                                    if (StringCompare(g_sceneList[s].id, sceneId)) {
+                                        Scene* scene = &g_sceneList[s];
+                                        for (int act = 0; act < scene->actionCount; act++) {
+                                            if (scene->actions[act].actionType == EntityDevice) {
+                                                DeviceInfo deviceInfo;
+                                                int foundDevices = Db_FindDevice(&deviceInfo, scene->actions[act].entityId);
+                                                if (foundDevices == 1) {
+                                                    for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
+                                                        Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        GetDeviceStatusForScene(scene);
+                                        break;
+                                    }
+                                }
+
                                 JSON_Delete(p);
                             }
                         }
@@ -1341,6 +1391,7 @@ int main(int argc, char ** argv)
                                     cJSON_AddItemReferenceToArray(dpsNeedAdd, newDp);
                                 }
                             }
+                            JSON_Delete(oldDps);
 
                             // Send updated packet to BLE
                             JSON* packet = JSON_CreateObject();

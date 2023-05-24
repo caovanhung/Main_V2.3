@@ -144,6 +144,7 @@ void Ble_ControlGroup(const char* groupAddr, JSON* dictDPs) {
                 }
             }
         }
+        free(devicesStr);
 
         JSON* p = JSON_CreateObject();
         JSON_SetText(p, "pid", deviceInfo.pid);
