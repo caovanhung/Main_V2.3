@@ -25,7 +25,6 @@
 #include <time.h>
 #include <stdbool.h>
 #include <sys/un.h>
-//#include <pthread>
 /* Standard includes. */
 #include <assert.h>
 #include <stdlib.h>
@@ -72,17 +71,11 @@ MQTTFixedBuffer_t networkBuffer;
 TransportInterface_t transport;
 NetworkContext_t networkContext;
 OpensslParams_t opensslParams;
-
-pthread_mutex_t mutex_lock_t            = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t dataUpdate_Queue         = PTHREAD_COND_INITIALIZER;
-
-pthread_mutex_t mutex_lock_mosq_t       = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t dataUpdate_MosqQueue     = PTHREAD_COND_INITIALIZER;
+const char g_ipAddress[50];
 
 static bool g_awsIsConnected = false;
 static bool g_mosqIsConnected = false;
 char aws_buff[MAX_SIZE_ELEMENT_QUEUE] = {'\0'};
-static int g_syncingPageIndex = 1;
 
 typedef struct PublishPackets
 {
@@ -104,12 +97,6 @@ MQTTSubAckStatus_t globalSubAckStatus = MQTTSubAckFailure;
 
 static MQTTSubscribeInfo_t* g_awsSubscriptionList;
 static int g_awsSubscriptionCount = 0;
-static int g_awsDevicePageNum = 0, g_awsGroupPageNum = 0, g_awsScenePageNum = 0;
-static int g_awsSyncDatabaseStep = 0; // 1: getting number of pages;  2: syncing database
-
-// Array to save all devices, groups, scenes that need to synchronize from cloud
-static JSON* g_syncingDevices, *g_syncingGroups, *g_syncingScenes;
-
 static JSON* g_mergePayloads;
 
 uint32_t generateRandomNumber();
@@ -407,61 +394,30 @@ void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIden
     char* topic = malloc(pPublishInfo->topicNameLength + 1);
     memcpy(topic, pPublishInfo->pTopicName, pPublishInfo->topicNameLength);
     topic[pPublishInfo->topicNameLength] = 0;
-    logInfo("Received topic: %s", topic);
-    if (isContainString(topic, "get")) {
-        bool packetIsValid = false;
-        flag = true;
-        JSON* recvPacket = JSON_Parse(aws_buff);
+
+    if (isContainString(topic, "accountInfo")) {
+        free(topic);
+        return;
+    }
+
+    JSON* recvPacket = JSON_Parse(aws_buff);
+    if (recvPacket) {
         JSON* state = JSON_GetObject(recvPacket, "state");
-        JSON* reported = JSON_GetObject(state, "reported");
-        list_t* topicParts = String_Split(topic, "/");
-        if (StringCompare(topicParts->items[5], "accountInfo")) {
-            packetIsValid = true;
-            JSON_SetNumber(reported, "type", TYPE_GET_NUM_OF_PAGE);
-            JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
-        } else if (topicParts->count == 8 && StringCompare(topicParts->items[6], "get")) {
-            list_t* tmp = String_Split(topicParts->items[5], "_");
-            if (tmp->count == 2) {
-                int pageIndex = atoi(tmp->items[1]);
-                if (pageIndex == g_syncingPageIndex) {
-                    JSON_SetNumber(reported, "pageIndex", pageIndex);
-                    if (isContainString(topic, "d_")) {
-                        packetIsValid = true;
-                        JSON_SetNumber(reported, "type", TYPE_SYNC_DB_DEVICES);
-                        JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
-                    } else if(isContainString(topic, "s_")) {
-                        packetIsValid = true;
-                        JSON_SetNumber(reported, "type", TYPE_SYNC_DB_SCENES);
-                        JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
-                    } else if(isContainString(topic, "g_")) {
-                        packetIsValid = true;
-                        JSON_SetNumber(reported, "type", TYPE_SYNC_DB_GROUPS);
-                        JSON_SetNumber(reported, "sender", SENDER_APP_VIA_CLOUD);
+        if (state) {
+            JSON* reported = JSON_GetObject(state, "reported");
+            if (reported) {
+                int sender = JSON_GetNumber(reported, "sender");
+                if (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_VIA_CLOUD) {
+                    logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
+                    int size_queue = get_sizeQueue(queue_received_aws);
+                    if (size_queue < QUEUE_SIZE) {
+                        enqueue(queue_received_aws, aws_buff);
                     }
                 }
             }
-            List_Delete(tmp);
-        }
-
-        memset(aws_buff,'\0',MAX_SIZE_ELEMENT_QUEUE);
-        char* updatedPacket = cJSON_PrintUnformatted(recvPacket);
-        StringCopy(aws_buff, updatedPacket);
-        free(updatedPacket);
-
-        JSON_Delete(recvPacket);
-        List_Delete(topicParts);
-
-        if (packetIsValid == false) {
-            return;
         }
     }
-
-    if (flag == false || g_awsSyncDatabaseStep) {
-        int size_queue = get_sizeQueue(queue_received_aws);
-        if (size_queue < QUEUE_SIZE) {
-            enqueue(queue_received_aws, aws_buff);
-        }
-    }
+    free(topic);
 }
 
 /*-----------------------------------------------------------*/
@@ -821,73 +777,11 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
         }
         free(payload);
     } else {
-        pthread_mutex_lock(&mutex_lock_mosq_t);
         int size_queue = get_sizeQueue(queue_mos_sub);
         if (size_queue < QUEUE_SIZE) {
             enqueue(queue_mos_sub, (char *) msg->payload);
-            pthread_cond_broadcast(&dataUpdate_MosqQueue);
-            pthread_mutex_unlock(&mutex_lock_mosq_t);
-        } else {
-           pthread_mutex_unlock(&mutex_lock_mosq_t);
         }
     }
-}
-
-void Aws_BuildSubscriptionTopics() {
-    if (g_awsSubscriptionList) {
-        for (int i = 0; i < g_awsSubscriptionCount; i++) {
-            free(g_awsSubscriptionList[i].pTopicFilter);
-        }
-        free(g_awsSubscriptionList);
-        g_awsSubscriptionCount = 0;
-    }
-    // Each page type need 2 topics for getting all page and get an update)
-    int topicNum = (g_awsDevicePageNum + g_awsGroupPageNum + g_awsScenePageNum) * 2 + 2;
-    int topicIdx = 0;
-    g_awsSubscriptionList = malloc(sizeof(MQTTSubscribeInfo_t) * topicNum);
-    for (int i = 0; i < g_awsDevicePageNum; i++) {
-        g_awsSubscriptionList[topicIdx].qos = MQTTQoS0;
-        g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_DEVICE, i + 1, TOPIC_GET_SUB);
-        g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
-        topicIdx++;
-        g_awsSubscriptionList[topicIdx].qos = MQTTQoS0;
-        g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_DEVICE, i + 1, TOPIC_UPD_SUB);
-        g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
-        topicIdx++;
-    }
-
-    for (int i = 0; i < g_awsGroupPageNum; i++) {
-        g_awsSubscriptionList[topicIdx].qos = MQTTQoS0;
-        g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_GROUP, i + 1, TOPIC_GET_SUB);
-        g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
-        topicIdx++;
-        g_awsSubscriptionList[topicIdx].qos = MQTTQoS0;
-        g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_GROUP, i + 1, TOPIC_UPD_SUB);
-        g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
-        topicIdx++;
-    }
-
-    for (int i = 0; i < g_awsScenePageNum; i++) {
-        g_awsSubscriptionList[topicIdx].qos = MQTTQoS0;
-        g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_SCENE, i + 1, TOPIC_GET_SUB);
-        g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
-        topicIdx++;
-        g_awsSubscriptionList[topicIdx].qos = MQTTQoS0;
-        g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_SCENE, i + 1, TOPIC_UPD_SUB);
-        g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
-        topicIdx++;
-    }
-    g_awsSubscriptionList[topicIdx].qos = MQTTQoS0;
-    g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_MAIN, 0, TOPIC_NOTI_PUB);
-    g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
-    topicIdx++;
-
-    g_awsSubscriptionList[topicIdx].qos = MQTTQoS0;
-    g_awsSubscriptionList[topicIdx].pTopicFilter = Aws_GetTopic(PAGE_MAIN, 0, TOPIC_UPD_SUB);
-    g_awsSubscriptionList[topicIdx].topicFilterLength = strlen(g_awsSubscriptionList[topicIdx].pTopicFilter);
-    topicIdx++;
-
-    g_awsSubscriptionCount = topicIdx;
 }
 
 
@@ -895,26 +789,18 @@ void Aws_Init() {
     int returnStatus = EXIT_SUCCESS;
     networkContext.pParams = &opensslParams;
     returnStatus = initializeMqtt( &mqttContext, &networkContext );
-    // Initialize the subscribe list
 
-    g_awsSubscriptionCount = 4;
+    // Initialize the subscribe list
+    g_awsSubscriptionCount = 2;
     g_awsSubscriptionList = malloc(sizeof(MQTTSubscribeInfo_t) * g_awsSubscriptionCount);
 
     g_awsSubscriptionList[0].qos = MQTTQoS0;
-    g_awsSubscriptionList[0].pTopicFilter = Aws_GetTopic(PAGE_ANY, 0, TOPIC_GET_SUB);
+    g_awsSubscriptionList[0].pTopicFilter = Aws_GetTopic(PAGE_ANY, 0, TOPIC_UPD_SUB);
     g_awsSubscriptionList[0].topicFilterLength = strlen(g_awsSubscriptionList[0].pTopicFilter);
 
     g_awsSubscriptionList[1].qos = MQTTQoS0;
-    g_awsSubscriptionList[1].pTopicFilter = Aws_GetTopic(PAGE_ANY, 0, TOPIC_UPD_SUB);
+    g_awsSubscriptionList[1].pTopicFilter = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_SUB);
     g_awsSubscriptionList[1].topicFilterLength = strlen(g_awsSubscriptionList[1].pTopicFilter);
-
-    g_awsSubscriptionList[2].qos = MQTTQoS0;
-    g_awsSubscriptionList[2].pTopicFilter = Aws_GetTopic(PAGE_ANY, 0, TOPIC_REJECT);
-    g_awsSubscriptionList[2].topicFilterLength = strlen(g_awsSubscriptionList[2].pTopicFilter);
-
-    g_awsSubscriptionList[3].qos = MQTTQoS0;
-    g_awsSubscriptionList[3].pTopicFilter = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_SUB);
-    g_awsSubscriptionList[3].topicFilterLength = strlen(g_awsSubscriptionList[3].pTopicFilter);
 }
 
 void Aws_ProcessLoop() {
@@ -939,23 +825,6 @@ void Aws_ProcessLoop() {
             sendToService(SERVICE_CFG, 0, "AWS_DISCONNECTED");
             (void) Openssl_Disconnect( &networkContext );
             LogError( (get_localtime_now()),( "MQTT_ProcessLoop returned with status = %s.",MQTT_Status_strerror( mqttStatus ) ) );
-        }
-    }
-
-    if (g_awsIsConnected) {
-        if (g_awsDevicePageNum == 0) {
-            // Get number of pageIndexes of devices, groups, scenes
-            char* topic = Aws_GetTopic(PAGE_MAIN, 0, TOPIC_GET_PUB);
-            mqttCloudPublish(topic, "");
-            free(topic);
-            g_awsSyncDatabaseStep = 1;
-            g_awsDevicePageNum = 1;
-        } else if (g_awsSyncDatabaseStep == 1 && g_awsGroupPageNum > 0) {
-            // Send request to get first page of devices
-            char* topic = Aws_GetTopic(PAGE_DEVICE, 1, TOPIC_GET_PUB);
-            mqttCloudPublish(topic, "");
-            free(topic);
-            g_awsSyncDatabaseStep = 2;
         }
     }
 }
@@ -1128,6 +997,29 @@ void Aws_SendMergePayload() {
     }
 }
 
+void GetIpAddressLoop() {
+    static long long tick = 0;
+    if (g_awsIsConnected && timeInMilliseconds() - tick > 10000) {
+        tick = timeInMilliseconds();
+        char address[50];
+        FILE* fp = popen("python3 getIp.py", "r");
+        while (fgets(address, sizeof(address), fp) != NULL);
+        if (address) {
+            if (StringCompare(address, g_ipAddress) == false) {
+                StringCopy(g_ipAddress, address);
+                logInfo("New IP Address: %s", g_ipAddress);
+                // Update new IP address to AWS
+                char msg[200];
+                sprintf(msg, "{\"state\":{\"reported\":{\"localIP\":\"%s\", \"sender\":11}}}", g_ipAddress);
+                char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
+                mqttCloudPublish(topic, msg);
+                free(topic);
+            }
+        }
+        fclose(fp);
+    }
+}
+
 int main( int argc,char ** argv ) {
     pthread_t thr[3];
     int xRun = 1;
@@ -1140,7 +1032,7 @@ int main( int argc,char ** argv ) {
     Aws_Init();
     Mosq_Init();
     PlayAudio("server_connecting");
-
+    Aws_SyncDatabase();
     int size_queue = 0;
     bool check_flag = false;
     while (xRun!=0) {
@@ -1148,6 +1040,7 @@ int main( int argc,char ** argv ) {
         Aws_SendMergePayload();
         Mosq_ProcessLoop();
         Mosq_ProcessMessage();
+        GetIpAddressLoop();
 
         size_queue = get_sizeQueue(queue_received_aws);
         if (size_queue > 0) {
@@ -1166,7 +1059,7 @@ int main( int argc,char ** argv ) {
             char *val_input = (char*)malloc(strlen(recvMsg) + 1);
             StringCopy(val_input, recvMsg);
             printf("\n\r");
-            logInfo("Received msg from MQTT cloud: %s", val_input);
+            // logInfo("Received msg from MQTT cloud: %s", val_input);
 
             if (recvPacket) {
                 JSON* state = JSON_GetObject(recvPacket, "state");
@@ -1178,6 +1071,7 @@ int main( int argc,char ** argv ) {
                 }
                 switch(reqType) {
                     case TYPE_CTR_SCENE:
+                    case TYPE_UPDATE_GROUP_NORMAL:
                     case TYPE_GET_ALL_DEVICES:
                     case TYPE_SET_GROUP_TTL: {
                         sendPacketTo(SERVICE_CORE, reqType, reported);
@@ -1312,13 +1206,6 @@ int main( int argc,char ** argv ) {
                         sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
-                    case TYPE_UPDATE_GROUP_NORMAL:
-                    {
-                        AWS_getInfoAddGroupNormal(info_group_t, pre_detect);
-                        MOSQ_getTemplateAddGroupNormal(&payload, info_group_t);
-                        sendToService(SERVICE_CORE, pre_detect->type, payload);
-                        break;
-                     }
                     case TYPE_ADD_GROUP_LINK:
                     {
                         AWS_getInfoAddGroupNormal(info_group_t,pre_detect);
@@ -1363,165 +1250,6 @@ int main( int argc,char ** argv ) {
                         getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_UPDATE_SERVICE,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
                         get_topic(&topic,MOSQ_LayerService_Manager,MOSQ_NameService_Manager_ServieceManager,TYPE_UPDATE_SERVICE,MOSQ_ActResponse);
                         mqttLocalPublish(topic, message);
-                        break;
-                    }
-                    case TYPE_GET_NUM_OF_PAGE: {
-                        logInfo("TYPE_GET_NUM_OF_PAGE");
-                        g_awsDevicePageNum = 1;
-                        g_awsScenePageNum = 1;
-                        g_awsGroupPageNum = 1;
-                        if (JSON_HasKey(reported, "pageIndex0")) {
-                            g_awsDevicePageNum = JSON_GetNumber(reported, "pageIndex0");
-                        }
-                        if (JSON_HasKey(reported, "pageIndex2")) {
-                            g_awsScenePageNum = JSON_GetNumber(reported, "pageIndex2");
-                        }
-                        if (JSON_HasKey(reported, "pageIndex3")) {
-                            g_awsGroupPageNum = JSON_GetNumber(reported, "pageIndex3");
-                        }
-                        logInfo("g_awsDevicePageNum = %d", g_awsDevicePageNum);
-                        logInfo("g_awsGroupPageNum = %d", g_awsGroupPageNum);
-                        logInfo("g_awsScenePageNum = %d", g_awsScenePageNum);
-                        // Aws_BuildSubscriptionTopics();
-                        // g_awsIsConnected = false;
-                        // Openssl_Disconnect( &networkContext );
-                        break;
-                    }
-                    case TYPE_SYNC_DB_DEVICES: {
-                        logInfo("TYPE_SYNC_DB_DEVICES");
-                        JSON* p = JSON_CreateObject();
-                        int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
-                        if (pageIndex == 1) {
-                            JSON_Delete(g_syncingDevices);
-                            g_syncingDevices = JSON_CreateArray();
-                        }
-
-                        // Add devices from cloud to g_syncingDevices array
-                        JSON_ForEach(item, reported) {
-                            if (cJSON_IsObject(item)) {
-                                list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
-                                if (tmp->count >= 5) {
-                                    JSON* device = JArr_CreateObject(g_syncingDevices);
-                                    JSON_SetText(device, "deviceId", item->string);
-                                    JSON_SetText(device, KEY_NAME, JSON_GetText(item, "name"));
-                                    JSON_SetObject(device, "dictMeta", JSON_Clone(JSON_GetObject(item, "dictMeta")));
-                                    JSON_SetText(device, KEY_ID_GATEWAY, JSON_GetText(item, "gateWay"));
-                                    JSON_SetText(device, KEY_UNICAST, tmp->items[3]);
-                                    JSON_SetText(device, "deviceAddr", tmp->items[3]);
-                                    JSON_SetText(device, KEY_DEVICE_KEY, tmp->items[4]);
-                                    JSON_SetNumber(device, KEY_PROVIDER, atoi(tmp->items[0]));
-                                    JSON_SetText(device, KEY_PID, tmp->items[1]);
-                                    JSON_SetText(device, "devicePid", tmp->items[1]);
-                                    JSON_SetNumber(device, "pageIndex", pageIndex);
-                                } else {
-                                    logError("Parsing Device Error: %s", item->string);
-                                }
-                                List_Delete(tmp);
-                            }
-                        }
-
-                        if (pageIndex < g_awsDevicePageNum) {
-                            // Send request to get next page
-                            g_syncingPageIndex = pageIndex + 1;
-                            char* topic = Aws_GetTopic(PAGE_DEVICE, g_syncingPageIndex, TOPIC_GET_PUB);
-                            mqttCloudPublish(topic, "");
-                            free(topic);
-                        } else {
-                            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, g_syncingDevices);
-                            // Send request to get first page of groups
-                            g_syncingPageIndex = 1;
-                            char* topic = Aws_GetTopic(PAGE_GROUP, 1, TOPIC_GET_PUB);
-                            mqttCloudPublish(topic, "");
-                            free(topic);
-                            PlayAudio("ready");
-                            // g_awsSyncDatabaseStep = 0;
-                        }
-                        break;
-                    }
-                    case TYPE_SYNC_DB_GROUPS: {
-                        logInfo("TYPE_SYNC_DB_GROUPS");
-                        JSON* p = JSON_CreateObject();
-                        int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
-                        if (pageIndex == 1) {
-                            JSON_Delete(g_syncingGroups);
-                            g_syncingGroups = JSON_CreateArray();
-                        }
-
-                        // Add groups from cloud to g_syncingGroups array
-                        JSON_ForEach(item, reported) {
-                            if (cJSON_IsObject(item)) {
-                                JSON* group = JArr_CreateObject(g_syncingGroups);
-                                list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
-                                if (tmp->count >= 2) {
-                                    JSON_SetText(group, "groupAddr", item->string);
-                                    JSON_SetText(group, "groupName", JSON_GetText(item, "name"));
-                                    JSON_SetText(group, "devices", JSON_GetText(item, "devices"));
-                                    JSON_SetText(group, "pid", JSON_GetText(item, "pid"));
-                                    JSON_SetNumber(group, "pageIndex", pageIndex);
-                                    if (StringLength(tmp->items[1]) == 1) {
-                                        JSON_SetNumber(group, "isLight", 0);
-                                    } else {
-                                        JSON_SetNumber(group, "isLight", 1);
-                                    }
-                                }
-                                List_Delete(tmp);
-                            }
-                        }
-
-                        if (pageIndex < g_awsGroupPageNum) {
-                            // Send request to get next page
-                            g_syncingPageIndex = pageIndex + 1;
-                            char* topic = Aws_GetTopic(PAGE_GROUP, g_syncingPageIndex, TOPIC_GET_PUB);
-                            mqttCloudPublish(topic, "");
-                            free(topic);
-                        } else {
-                            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, g_syncingGroups);
-                            // Send request to get first page of scenes
-                            g_syncingPageIndex = 1;
-                            char* topic = Aws_GetTopic(PAGE_SCENE, 1, TOPIC_GET_PUB);
-                            mqttCloudPublish(topic, "");
-                            free(topic);
-                            // g_awsSyncDatabaseStep = 0;
-                        }
-                        break;
-                    }
-                    case TYPE_SYNC_DB_SCENES: {
-                        logInfo("TYPE_SYNC_DB_SCENES");
-                        JSON* p = JSON_CreateObject();
-                        int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
-                        if (pageIndex == 1) {
-                            JSON_Delete(g_syncingScenes);
-                            g_syncingScenes = JSON_CreateArray();
-                        }
-
-                        // Add scenes from cloud to g_syncingScenes array
-                        JSON_ForEach(item, reported) {
-                            if (cJSON_IsObject(item)) {
-                                JSON* scene = JArr_CreateObject(g_syncingScenes);
-                                JSON_SetText(scene, "id", item->string);
-                                JSON_SetText(scene, "name", JSON_GetText(item, "name"));
-                                JSON_SetNumber(scene, "state", JSON_GetNumber(item, "state"));
-                                JSON_SetNumber(scene, "isLocal", JSON_GetNumber(item, "isLocal"));
-                                char* sceneType = JSON_GetText(item, "scenes");
-                                sceneType[1] = 0;
-                                JSON_SetText(scene, "sceneType", sceneType);
-                                JSON* actions = JSON_Clone(JSON_GetObject(item, "actions"));
-                                JSON* conditions = JSON_Clone(JSON_GetObject(item, "conditions"));
-                                JSON_SetObject(scene, "actions", actions);
-                                JSON_SetObject(scene, "conditions", conditions);
-                            }
-                        }
-
-                        if (pageIndex < g_awsScenePageNum) {
-                            // Send request to get next page
-                            g_syncingPageIndex = pageIndex + 1;
-                            char* topic = Aws_GetTopic(PAGE_SCENE, g_syncingPageIndex, TOPIC_GET_PUB);
-                            mqttCloudPublish(topic, "");
-                            free(topic);
-                        } else {
-                            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, g_syncingScenes);
-                            g_awsSyncDatabaseStep = 0;
-                        }
                         break;
                     }
                 }

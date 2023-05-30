@@ -23,6 +23,8 @@ int List_Push(list_t* l, const void* item, size_t size);
 void List_ToString(list_t* l, const char* separator, char* resultStr);
 list_t* String_Split(const char* str, const char* delim);
 
+// char* JSON_GetFirstObjectName(JSON* obj);
+
 void PlayAudio(const char* audioName);
 
 #endif   /* HELPER_H */

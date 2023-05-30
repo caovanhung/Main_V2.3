@@ -1003,55 +1003,9 @@ int main(int argc, char ** argv)
                     }
                     case TYPE_SYNC_DB_DEVICES: {
                         logInfo("TYPE_SYNC_DB_DEVICES");
-                        JSON* devicesNeedRemove = JSON_CreateArray();
-                        JSON* devicesNeedAdd = JSON_CreateArray();
-                        JSON* localDevices = Db_GetAllDevices();
-                        JSON* cloudDevices = payload;
-                        // Find all devices that have in the local database but not have in the cloud database
-                        JSON_ForEach(localDevice, localDevices) {
-                            bool found = false;
-                            JSON_ForEach(cloudDevice, cloudDevices) {
-                                if (compareDeviceById(localDevice, cloudDevice)) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (!found) {
-                                cJSON_AddItemReferenceToArray(devicesNeedRemove, localDevice);
-                            }
-                        }
-
-                        // Find all devices that have in the cloud database but not have in the local database
-                        JSON_ForEach(cloudDevice, cloudDevices) {
-                            bool found = false;
-                            JSON_ForEach(localDevice, localDevices) {
-                                if (compareDeviceById(localDevice, cloudDevice)) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (!found) {
-                                cJSON_AddItemReferenceToArray(devicesNeedAdd, cloudDevice);
-                            }
-                        }
-
-                        // Delete devices if any
-                        JSON_ForEach(d, devicesNeedRemove) {
-                            char* deviceId = JSON_GetText(d, "deviceId");
-                            DeviceInfo deviceInfo;
-                            int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
-                            if (foundDevices == 1) {
-                                JSON* p = JSON_CreateObject();
-                                JSON_SetText(p, "deviceAddr", deviceInfo.addr);
-                                sendPacketTo(SERVICE_BLE, TYPE_DEL_DEVICE, p);
-                                JSON_Delete(p);
-                            }
-                            Db_DeleteDevice(deviceId);
-                            logInfo("Removed device %s", deviceId);
-                        }
-
-                        // Add new devices if any
-                        JSON_ForEach(d, devicesNeedAdd) {
+                        Db_DeleteAllDevices();
+                        // Add new devices from cloud
+                        JSON_ForEach(d, payload) {
                             // logInfo(cJSON_PrintUnformatted(d));
                             int provider = JSON_GetNumber(d, KEY_PROVIDER);
                             char* deviceId = JSON_GetText(d, "deviceId");
@@ -1283,13 +1237,17 @@ int main(int argc, char ** argv)
                     }
                     case TYPE_UPDATE_GROUP_NORMAL: {
                         logInfo("TYPE_UPDATE_GROUP_NORMAL");
-                        JSON* srcObj = payload;
-                        JSON* localPacket = ConvertToLocalPacket(reqType, object_string);
-                        char* groupAddr = JSON_GetText(localPacket, "groupAddr");
-                        char* devicesStr = Db_FindDevicesInGroup(groupAddr);
-                        if (devicesStr) {
-                            JSON* oldDevices = parseGroupNormalDevices(devicesStr);
-                            JSON* newDevices = JSON_GetObject(localPacket, "devices");
+                        JSON_ForEach(o, payload) {
+                            if (!cJSON_IsObject(o)) {
+                                continue;
+                            }
+                            char* groupAddr = o->string;
+                            char* oldDevicesStr = Db_FindDevicesInGroup(groupAddr);
+                            char* newDevicesStr = JSON_GetText(o, "devices");
+                            JSON* oldDevices = parseGroupNormalDevices(oldDevicesStr);
+                            JSON* newDevices = parseGroupNormalDevices(newDevicesStr);
+                            free(oldDevicesStr);
+
                             // Find all devices that are need to be removed
                             JSON* dpsNeedRemove = JSON_CreateArray();
                             JSON_ForEach(oldDevice, oldDevices) {
@@ -1343,10 +1301,8 @@ int main(int argc, char ** argv)
                                 }
                             }
                             JSON_Delete(packet);
-                            Db_SaveGroupDevices(groupAddr, JSON_GetText(srcObj, "devices"));
+                            Db_SaveGroupDevices(groupAddr, newDevicesStr);
                         }
-                        JSON_Delete(localPacket);
-                        free(devicesStr);
                         break;
                     }
                     case TYPE_ADD_GROUP_LINK: {

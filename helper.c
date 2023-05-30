@@ -82,8 +82,20 @@ list_t* String_Split(const char* str, const char* delim) {
 }
 
 
+// char* JSON_GetFirstObjectName(JSON* obj) {
+//     char* name = NULL;
+//     JSON_ForEach(o, obj) {
+//         if (cJSON_IsObject(o)) {
+//             return o->string;
+//         }
+//     }
+// }
+
+
 void PlayAudio(const char* audioName) {
     char str[100];
     sprintf(str, "aplay /home/szbaijie/audio/%s.wav", audioName);
     system(str);
 }
+
+

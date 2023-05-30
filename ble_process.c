@@ -254,9 +254,9 @@ bool GW_GetDeviceOnOffState(const char* dpAddr) {
     return true;
 }
 
-bool ble_bindGateWay(int gwIndex, provison_inf *PRV)
+bool GW_ConfigGateway(int gwIndex, provison_inf *PRV)
 {
-    ASSERT(gwIndex < GATEWAY_NUM); ASSERT(PRV);
+    ASSERT(gwIndex < GATEWAY_NUM); ASSERT(PRV); ASSERT(PRV->appkey); ASSERT(PRV->netkey);
     int i = 0;
     int tmp_len = 0;
     g_uartSendingIdx = gwIndex == 0 ? 3 : 2;

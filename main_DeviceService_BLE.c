@@ -556,9 +556,9 @@ int main( int argc,char ** argv )
                     PlayAudio("configuring_gateway");
                     sendToService(SERVICE_CFG, 0, "LED_FAST_FLASH");
                     ble_getInfoProvison(&PRV, payload);
-                    ble_bindGateWay(0, &PRV);
+                    GW_ConfigGateway(0, &PRV);
                     sleep(1);
-                    ble_bindGateWay(1, &PRV);
+                    GW_ConfigGateway(1, &PRV);
                     sendToService(SERVICE_CFG, 0, "LED_ON");
                     PlayAudio("gateway_end_restarting");
                     PlayAudio("device_restart_warning");

@@ -15,53 +15,58 @@ void CoreInit() {
 
 
 JSON* parseGroupNormalDevices(const char* devices) {
-    ASSERT(devices);
     JSON* devicesArray = cJSON_CreateArray();
-    list_t* splitList = String_Split(devices, "|");
-    for (int i = 0; i < splitList->count; i++) {
-        JSON* arrayItem = JSON_CreateObject();
-        DeviceInfo deviceInfo;
-        int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
-        if (foundDevices) {
-            JSON_SetText(arrayItem, "deviceId", deviceInfo.id);
-            JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
-            JSON_SetText(arrayItem, "pid", deviceInfo.pid);
-            JSON_SetNumber(arrayItem, "gwIndex", deviceInfo.gwIndex);
-            JSON_SetNumber(arrayItem, "pageIndex", deviceInfo.pageIndex);
+    if (devices) {
+        list_t* splitList = String_Split(devices, "|");
+        for (int i = 0; i < splitList->count; i++) {
+            JSON* arrayItem = JSON_CreateObject();
+            DeviceInfo deviceInfo;
+            int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
+            if (foundDevices) {
+                JSON_SetText(arrayItem, "deviceId", deviceInfo.id);
+                JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+                JSON_SetText(arrayItem, "pid", deviceInfo.pid);
+                JSON_SetNumber(arrayItem, "gwIndex", deviceInfo.gwIndex);
+                JSON_SetNumber(arrayItem, "pageIndex", deviceInfo.pageIndex);
+            }
+            cJSON_AddItemToArray(devicesArray, arrayItem);
         }
-        cJSON_AddItemToArray(devicesArray, arrayItem);
+        List_Delete(splitList);
     }
     return devicesArray;
 }
 
 JSON* parseGroupLinkDevices(const char* devices) {
     JSON* devicesArray = cJSON_CreateArray();
-    list_t* splitList = String_Split(devices, "|");
-    if (splitList->count % 2 == 0) {
-        JSON* arrayItem;
-        for (int i = 0; i < splitList->count; i++) {
-            if (i % 2 == 0) {
-                arrayItem = NULL;
-                DeviceInfo deviceInfo;
-                int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
-                if (foundDevices) {
-                    arrayItem = JSON_CreateObject();
-                    JSON_SetText(arrayItem, "deviceId", splitList->items[i]);
-                    JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
-                }
-            } else if (arrayItem != NULL) {
-                int dpId = atoi(splitList->items[i]);
-                DpInfo dpInfo;
-                int dpFounds = Db_FindDp(&dpInfo, JSON_GetText(arrayItem, "deviceId"), dpId);
-                if (dpFounds == 1) {
-                    JSON_SetNumber(arrayItem, "dpId", dpId);
-                    JSON_SetText(arrayItem, "dpAddr", dpInfo.addr);
-                    cJSON_AddItemToArray(devicesArray, arrayItem);
-                } else {
-                    JSON_Delete(arrayItem);
+    if (devices) {
+        list_t* splitList = String_Split(devices, "|");
+        if (splitList->count % 2 == 0) {
+            JSON* arrayItem;
+            for (int i = 0; i < splitList->count; i++) {
+                if (i % 2 == 0) {
+                    arrayItem = NULL;
+                    DeviceInfo deviceInfo;
+                    int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
+                    if (foundDevices) {
+                        arrayItem = JSON_CreateObject();
+                        JSON_SetText(arrayItem, "deviceId", splitList->items[i]);
+                        JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+                    }
+                } else if (arrayItem != NULL) {
+                    int dpId = atoi(splitList->items[i]);
+                    DpInfo dpInfo;
+                    int dpFounds = Db_FindDp(&dpInfo, JSON_GetText(arrayItem, "deviceId"), dpId);
+                    if (dpFounds == 1) {
+                        JSON_SetNumber(arrayItem, "dpId", dpId);
+                        JSON_SetText(arrayItem, "dpAddr", dpInfo.addr);
+                        cJSON_AddItemToArray(devicesArray, arrayItem);
+                    } else {
+                        JSON_Delete(arrayItem);
+                    }
                 }
             }
         }
+        List_Delete(splitList);
     }
     return devicesArray;
 }

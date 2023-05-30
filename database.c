@@ -172,6 +172,15 @@ int Db_DeleteDevice(const char* deviceId) {
     return 1;
 }
 
+int Db_DeleteAllDevices() {
+    char sqlCmd[100];
+    sprintf(sqlCmd, "DELETE FROM devices_inf");
+    Sql_Exec(sqlCmd);
+    sprintf(sqlCmd, "DELETE FROM devices");
+    Sql_Exec(sqlCmd);
+    return 1;
+}
+
 int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, const char* pid, int pageIndex) {
     ASSERT(groupAddr); ASSERT(groupName); ASSERT(devices);
     char* sqlCmd = malloc(strlen(devices) + 200);

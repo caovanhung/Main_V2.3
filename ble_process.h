@@ -218,7 +218,7 @@ bool ble_getInfoProvison(provison_inf *PRV, JSON* packet);
                 PRV: the struct data for provision
 * out param:    NO
 *******************************************************************/
-bool ble_bindGateWay(int gwIndex, provison_inf *PRV);
+bool GW_ConfigGateway(int gwIndex, provison_inf *PRV);
 int get_count_element_of_DV(const char* pid_);
 void get_string_add_DV_write_GW(char **result,const char* address_device,const char* element_count,const char* deviceID);
 int set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,const char* deviceKey);

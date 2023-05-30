@@ -67,6 +67,140 @@ char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType) 
     return topic;
 }
 
+JSON* Aws_GetShadow(const char* shadowName) {
+    char result[50000];
+    char request[500];
+    char url[200];
+    sprintf(url, "https://a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", g_thingId, shadowName);
+    char* certName = "c8f9a13dc7c253251b9e250439897bc010f501edd780348ecc1c2e91add22237";
+    sprintf(request, "curl --tlsv1.2 --cacert /usr/bin/AmazonRootCA1.pem --cert /usr/bin/%s-certificate.pem.crt --key /usr/bin/%s-private.pem.key  %s", certName, certName, url);
+    printf(request);
+    printf("\n");
+    FILE* fp = popen(request, "r");
+    while (fgets(result, sizeof(result), fp) != NULL);
+    fclose(fp);
+    if (result) {
+        JSON* obj = JSON_Parse(result);
+        if (obj && JSON_HasKey(obj, "state")) {
+            JSON_RemoveKey(obj, "metadata");
+            JSON* state = JSON_GetObject(obj, "state");
+            return JSON_GetObject(state, "reported");
+            return obj;
+        }
+    }
+    return NULL;
+}
+
+void Aws_SyncDatabase() {
+    // Get number of pages
+    JSON* accountInfo = Aws_GetShadow("accountInfo");
+    if (accountInfo) {
+        int devicePages = JSON_HasKey(accountInfo, "pageIndex0")? JSON_GetNumber(accountInfo, "pageIndex0") : 1;
+        int groupPages = JSON_HasKey(accountInfo, "pageIndex3")? JSON_GetNumber(accountInfo, "pageIndex3") : 1;
+        int scenePages = JSON_HasKey(accountInfo, "pageIndex2")? JSON_GetNumber(accountInfo, "pageIndex2") : 1;
+        JSON_Delete(accountInfo);
+        // Sync devices from aws
+        for (int i = 1; i <= devicePages; i++) {
+            char str[10];
+            sprintf(str, "d_%d", i);
+            JSON* devices = Aws_GetShadow(str);
+            if (devices) {
+                // Add devices from cloud to syncingDevices array
+                JSON* syncingDevices = JSON_CreateArray();
+                int pageIndex = JSON_HasKey(devices, "pageIndex")? JSON_GetNumber(devices, "pageIndex") : 1;
+                JSON_ForEach(d, devices) {
+                    if (cJSON_IsObject(d)) {
+                        list_t* tmp = String_Split(JSON_GetText(d, "devices"), "|");
+                        if (tmp->count >= 5) {
+                            JSON* device = JArr_CreateObject(syncingDevices);
+                            JSON_SetText(device, "deviceId", d->string);
+                            JSON_SetText(device, KEY_NAME, JSON_GetText(d, "name"));
+                            JSON_SetObject(device, "dictMeta", JSON_Clone(JSON_GetObject(d, "dictMeta")));
+                            JSON_SetText(device, KEY_ID_GATEWAY, JSON_GetText(d, "gateWay"));
+                            JSON_SetText(device, KEY_UNICAST, tmp->items[3]);
+                            JSON_SetText(device, "deviceAddr", tmp->items[3]);
+                            JSON_SetText(device, KEY_DEVICE_KEY, tmp->items[4]);
+                            JSON_SetNumber(device, KEY_PROVIDER, atoi(tmp->items[0]));
+                            JSON_SetText(device, KEY_PID, tmp->items[1]);
+                            JSON_SetText(device, "devicePid", tmp->items[1]);
+                            JSON_SetNumber(device, "pageIndex", pageIndex);
+                        } else {
+                            printf("[Error] Parsing Device Error: %s\n", d->string);
+                        }
+                        List_Delete(tmp);
+                    }
+                }
+                sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
+            }
+            JSON_Delete(devices);
+        }
+
+        // Sync groups from aws
+        for (int i = 1; i <= groupPages; i++) {
+            char str[10];
+            sprintf(str, "g_%d", i);
+            JSON* groups = Aws_GetShadow(str);
+            if (groups) {
+                // Add groups from cloud to syncingGroups array
+                JSON* syncingGroups = JSON_CreateArray();
+                int pageIndex = JSON_HasKey(groups, "pageIndex")? JSON_GetNumber(groups, "pageIndex") : 1;
+                JSON_ForEach(g, groups) {
+                    if (cJSON_IsObject(g)) {
+                        JSON* group = JArr_CreateObject(syncingGroups);
+                        list_t* tmp = String_Split(JSON_GetText(g, "devices"), "|");
+                        if (tmp->count >= 2) {
+                            JSON_SetText(group, "groupAddr", g->string);
+                            JSON_SetText(group, "groupName", JSON_GetText(g, "name"));
+                            JSON_SetText(group, "devices", JSON_GetText(g, "devices"));
+                            JSON_SetText(group, "pid", JSON_GetText(g, "pid"));
+                            JSON_SetNumber(group, "pageIndex", pageIndex);
+                            if (StringLength(tmp->items[1]) == 1) {
+                                JSON_SetNumber(group, "isLight", 0);
+                            } else {
+                                JSON_SetNumber(group, "isLight", 1);
+                            }
+                        }
+                        List_Delete(tmp);
+                    }
+                }
+                sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, syncingGroups);
+            }
+            JSON_Delete(groups);
+        }
+
+        // Sync scenes from aws
+        for (int i = 1; i <= scenePages; i++) {
+            char str[10];
+            sprintf(str, "s_%d", i);
+            JSON* scenes = Aws_GetShadow(str);
+            if (scenes) {
+                // Add scenes from cloud to syncingScenes array
+                JSON* syncingScenes = JSON_CreateArray();
+                int pageIndex = JSON_HasKey(scenes, "pageIndex")? JSON_GetNumber(scenes, "pageIndex") : 1;
+                JSON_ForEach(s, scenes) {
+                    if (cJSON_IsObject(s)) {
+                        JSON* scene = JArr_CreateObject(syncingScenes);
+                        JSON_SetText(scene, "id", s->string);
+                        JSON_SetText(scene, "name", JSON_GetText(s, "name"));
+                        JSON_SetNumber(scene, "state", JSON_GetNumber(s, "state"));
+                        JSON_SetNumber(scene, "isLocal", JSON_GetNumber(s, "isLocal"));
+                        char* sceneType = JSON_GetText(s, "scenes");
+                        sceneType[1] = 0;
+                        JSON_SetText(scene, "sceneType", sceneType);
+                        JSON* actions = JSON_Clone(JSON_GetObject(s, "actions"));
+                        JSON* conditions = JSON_Clone(JSON_GetObject(s, "conditions"));
+                        JSON_SetObject(scene, "actions", actions);
+                        JSON_SetObject(scene, "conditions", conditions);
+                    }
+                }
+                sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, syncingScenes);
+            }
+            JSON_Delete(scenes);
+        }
+        PlayAudio("ready");
+    }
+}
+
 /*
 Note: Have optimite *result = malloc(max_size_message_received);
 */
