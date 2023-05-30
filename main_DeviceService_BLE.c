@@ -553,13 +553,21 @@ int main( int argc,char ** argv )
             switch (reqType) {
                 case TYPE_ADD_GW: {
                     provison_inf PRV;
+                    PlayAudio("configuring_gateway");
+                    sendToService(SERVICE_CFG, 0, "LED_FAST_FLASH");
                     ble_getInfoProvison(&PRV, payload);
                     ble_bindGateWay(0, &PRV);
                     sleep(1);
                     ble_bindGateWay(1, &PRV);
+                    sendToService(SERVICE_CFG, 0, "LED_ON");
+                    PlayAudio("gateway_end_restarting");
+                    PlayAudio("device_restart_warning");
+                    sleep(1);
+                    system("reboot");
                     break;
                 }
                 case TYPE_CTR_DEVICE: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* pid = JSON_GetText(payload, "pid");
                     cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
                     int lightness = -1, colorTemperature = -1;
@@ -622,6 +630,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_CTR_GROUP_NORMAL: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* pid = JSON_GetText(payload, "pid");
                     cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
                     int lightness = -1, colorTemperature = -1;
@@ -652,6 +661,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_CTR_SCENE: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* sceneId = JSON_GetText(payload, "sceneId");
                     int state = JSON_GetNumber(payload, "state");
                     if (state >= 2) {
@@ -666,6 +676,7 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_ADD_GROUP_NORMAL:
                 case TYPE_DEL_GROUP_NORMAL: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* devicesArray = JSON_GetObject(payload, "devices");
                     JSON_ForEach(device, devicesArray) {
@@ -682,6 +693,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_UPDATE_GROUP_NORMAL: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
                     JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
@@ -701,6 +713,7 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_ADD_GROUP_LINK:
                 case TYPE_DEL_GROUP_LINK: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* devicesArray = JSON_GetObject(payload, "devices");
                     JSON_ForEach(device, devicesArray) {
@@ -718,6 +731,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_UPDATE_GROUP_LINK: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
                     JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
@@ -738,6 +752,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_ADD_DEVICE: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                     char* devicePid = JSON_GetText(payload, "devicePid");
                     char* deviceKey = JSON_GetText(payload, "deviceKey");
@@ -751,26 +766,31 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_DEL_DEVICE: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* pid = JSON_GetText(payload, "devicePid");
                     char* deviceId = JSON_GetText(payload, "deviceId");
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                    // int gwIndex = JSON_GetNumber(payload, "gwIndex");
                     if (deviceAddr && !StringCompare(pid, HG_BLE_IR_TV) &&
                                       !StringCompare(pid, HG_BLE_IR_FAN) &&
                                       !StringCompare(pid, HG_BLE_IR_AC)) {
-                        setResetDeviceSofware(deviceAddr);
+                        GW_DeleteDevice(deviceAddr);
                         logInfo("Deleted deviceId: %s, address: %s", deviceId, deviceAddr);
                     }
                     break;
                 }
                 case TYPE_ADD_SCENE: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     addSceneLC(payload);
                     break;
                 }
                 case TYPE_DEL_SCENE: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     delSceneLC(payload);
                     break;
                 }
                 case TYPE_UPDATE_SCENE: {
+                    sendToService(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     bool ret = false;
                     char* sceneId = JSON_GetText(payload, "sceneId");
                     JSON* actionsNeedRemove = JSON_GetObject(payload, "actionsNeedRemove");

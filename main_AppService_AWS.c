@@ -807,69 +807,29 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc) {
         exit(-1);
     }
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_AWS, 0);
-    mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, 0);
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_CONTROL_LOCAL, 0);
 }
 
-void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) 
-{
-    long long int TimeCreated = timeInMilliseconds();
-    if(!memcmp(msg->topic,MOSQ_LayerService_App,strlen(MOSQ_LayerService_App)-1))
-    {
-        pthread_mutex_lock(&mutex_lock_mosq_t);
-        int size_queue = get_sizeQueue(queue_mos_sub);
-        if(size_queue < QUEUE_SIZE)
-        {
-            enqueue(queue_mos_sub,(char *) msg->payload);
-            pthread_cond_broadcast(&dataUpdate_MosqQueue);
-            pthread_mutex_unlock(&mutex_lock_mosq_t);            
-        }
-        else
-        {
-           pthread_mutex_unlock(&mutex_lock_mosq_t); 
-        }
-    }
-    else if(isMatchString(msg->topic,MOSQ_TOPIC_MANAGER_SETTING)) //process init MQTT local
-    {
-        pthread_mutex_lock(&mutex_lock_mosq_t);
-        int size_queue = get_sizeQueue(queue_mos_sub);
-        if(size_queue < QUEUE_SIZE)
-        {
-            char *message;
-            JSON_Value *schema = NULL;
-            schema = json_parse_string((char *) msg->payload);
-            char type = json_object_get_number(json_object(schema),KEY_TYPE);
-            getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,type,MOSQ_ActResponse,"INIT",0,(char *) msg->payload);
-            enqueue(queue_mos_sub,message);
-            pthread_cond_broadcast(&dataUpdate_MosqQueue);
-            pthread_mutex_unlock(&mutex_lock_mosq_t);            
-        }
-        else
-        {
-           pthread_mutex_unlock(&mutex_lock_mosq_t); 
-        }
-    } 
-    else //process AWS message
-    {
-        char *result;
-        char* control_local_buff = calloc((int)msg->payloadlen+1,sizeof(char));
-        strncpy(control_local_buff,msg->payload,msg->payloadlen);
-        control_local_buff[(int)msg->payloadlen] = '\0';
-        AWS_short_message_received(control_local_buff);
-        pthread_mutex_lock(&mutex_lock_t);
+void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
+    if (StringCompare(msg->topic, MOSQ_TOPIC_CONTROL_LOCAL)) {
+        char* payload = calloc((int)msg->payloadlen + 1, sizeof(char));
+        strncpy(payload, msg->payload, msg->payloadlen);
+        payload[(int)msg->payloadlen] = '\0';
         int size_queue = get_sizeQueue(queue_received_aws);
-        if(size_queue < QUEUE_SIZE)
-        {
-            enqueue(queue_received_aws,result);
-            pthread_cond_broadcast(&dataUpdate_Queue);
-            pthread_mutex_unlock(&mutex_lock_t);
+        if(size_queue < QUEUE_SIZE) {
+            enqueue(queue_received_aws, payload);
         }
-        else
-        {
-           pthread_mutex_unlock(&mutex_lock_t); 
+        free(payload);
+    } else {
+        pthread_mutex_lock(&mutex_lock_mosq_t);
+        int size_queue = get_sizeQueue(queue_mos_sub);
+        if (size_queue < QUEUE_SIZE) {
+            enqueue(queue_mos_sub, (char *) msg->payload);
+            pthread_cond_broadcast(&dataUpdate_MosqQueue);
+            pthread_mutex_unlock(&mutex_lock_mosq_t);
+        } else {
+           pthread_mutex_unlock(&mutex_lock_mosq_t);
         }
-        if(control_local_buff != NULL) free(control_local_buff);
-        if(result != NULL) free(result);
     }
 }
 
@@ -1179,6 +1139,7 @@ int main( int argc,char ** argv ) {
     getHcInformation();
     Aws_Init();
     Mosq_Init();
+    PlayAudio("server_connecting");
 
     int size_queue = 0;
     bool check_flag = false;
@@ -1274,16 +1235,6 @@ int main( int argc,char ** argv ) {
                         sendToService(SERVICE_CORE, pre_detect->type, payload);
                         break;
                     }
-                    // case TYPE_CTR_SCENE:
-                    // {
-                    //     TimeCreat = timeInMilliseconds();
-                    //     AWS_getInfoControlSecene(inf_scene,pre_detect);
-                    //     MOSQ_getTemplateControSecene(&payload,inf_scene);
-                    //     getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_CTR_SCENE,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                    //     get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_CTR_SCENE,MOSQ_ActResponse);
-                    //     mqttLocalPublish(topic, message);
-                    //     break;
-                    // }
                     case TYPE_ADD_DEVICE:
                     {
                         TimeCreat = timeInMilliseconds();
@@ -1406,7 +1357,7 @@ int main( int argc,char ** argv ) {
                     }
                     case TYPE_UPDATE_SERVICE:
                     {
-                        LogInfo((get_localtime_now()),("TYPE_UPDATE_SERVICE "));
+                        logInfo("TYPE_UPDATE_SERVICE ");
                         MOSQ_getTemplateUpdateService(&payload,pre_detect);
                         TimeCreat = timeInMilliseconds();
                         getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_UPDATE_SERVICE,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
@@ -1478,10 +1429,12 @@ int main( int argc,char ** argv ) {
                         } else {
                             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, g_syncingDevices);
                             // Send request to get first page of groups
-                            // char* topic = Aws_GetTopic(PAGE_GROUP, 1, TOPIC_GET_PUB);
-                            // mqttCloudPublish(topic, "");
-                            // free(topic);
-                            g_awsSyncDatabaseStep = 0;
+                            g_syncingPageIndex = 1;
+                            char* topic = Aws_GetTopic(PAGE_GROUP, 1, TOPIC_GET_PUB);
+                            mqttCloudPublish(topic, "");
+                            free(topic);
+                            PlayAudio("ready");
+                            // g_awsSyncDatabaseStep = 0;
                         }
                         break;
                     }
@@ -1500,10 +1453,10 @@ int main( int argc,char ** argv ) {
                                 JSON* group = JArr_CreateObject(g_syncingGroups);
                                 list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
                                 if (tmp->count >= 2) {
-                                    logInfo(cJSON_PrintUnformatted(group));
                                     JSON_SetText(group, "groupAddr", item->string);
                                     JSON_SetText(group, "groupName", JSON_GetText(item, "name"));
                                     JSON_SetText(group, "devices", JSON_GetText(item, "devices"));
+                                    JSON_SetText(group, "pid", JSON_GetText(item, "pid"));
                                     JSON_SetNumber(group, "pageIndex", pageIndex);
                                     if (StringLength(tmp->items[1]) == 1) {
                                         JSON_SetNumber(group, "isLight", 0);
@@ -1517,59 +1470,58 @@ int main( int argc,char ** argv ) {
 
                         if (pageIndex < g_awsGroupPageNum) {
                             // Send request to get next page
-                            char* topic = Aws_GetTopic(PAGE_GROUP, pageIndex + 1, TOPIC_GET_PUB);
+                            g_syncingPageIndex = pageIndex + 1;
+                            char* topic = Aws_GetTopic(PAGE_GROUP, g_syncingPageIndex, TOPIC_GET_PUB);
                             mqttCloudPublish(topic, "");
                             free(topic);
                         } else {
                             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, g_syncingGroups);
-                            // // Send request to get first page of scenes
-                            // char* topic = Aws_GetTopic(PAGE_SCENE, 1, TOPIC_GET_PUB);
-                            // mqttCloudPublish(topic, "");
-                            // free(topic);
-                            g_awsSyncDatabaseStep = 0;
+                            // Send request to get first page of scenes
+                            g_syncingPageIndex = 1;
+                            char* topic = Aws_GetTopic(PAGE_SCENE, 1, TOPIC_GET_PUB);
+                            mqttCloudPublish(topic, "");
+                            free(topic);
+                            // g_awsSyncDatabaseStep = 0;
                         }
                         break;
                     }
                     case TYPE_SYNC_DB_SCENES: {
                         logInfo("TYPE_SYNC_DB_SCENES");
-                        // JSON* p = JSON_CreateObject();
-                        // int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
-                        // if (pageIndex == 1) {
-                        //     JSON_Delete(g_syncingScenes);
-                        //     g_syncingScenes = JSON_CreateArray();
-                        // }
+                        JSON* p = JSON_CreateObject();
+                        int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
+                        if (pageIndex == 1) {
+                            JSON_Delete(g_syncingScenes);
+                            g_syncingScenes = JSON_CreateArray();
+                        }
 
-                        // // Add groups from cloud to g_syncingScenes array
-                        // JSON_ForEach(item, reported) {
-                        //     if (cJSON_IsObject(item)) {
-                        //         JSON* scene = JArr_CreateObject(g_syncingScenes);
-                        //         list_t* tmp = String_Split(JSON_GetText(item, "devices"), "|");
-                        //         if (tmp->count >= 5) {
-                        //             JSON_SetText(device, "deviceId", item->string);
-                        //             JSON_SetText(device, KEY_NAME, JSON_GetText(item, "name"));
-                        //             JSON_SetObject(device, "dictMeta", JSON_Clone(JSON_GetObject(item, "dictMeta")));
-                        //             JSON_SetText(device, KEY_ID_GATEWAY, JSON_GetText(item, "gateWay"));
-                        //             JSON_SetText(device, KEY_UNICAST, tmp->items[3]);
-                        //             JSON_SetText(device, "deviceAddr", tmp->items[3]);
-                        //             JSON_SetText(device, KEY_DEVICE_KEY, tmp->items[4]);
-                        //             JSON_SetNumber(device, KEY_PROVIDER, atoi(tmp->items[0]));
-                        //             JSON_SetText(device, KEY_PID, tmp->items[1]);
-                        //             JSON_SetText(device, "devicePid", tmp->items[1]);
-                        //             JSON_SetNumber(device, "pageIndex", pageIndex);
-                        //         }
-                        //         List_Delete(tmp);
-                        //     }
-                        // }
+                        // Add scenes from cloud to g_syncingScenes array
+                        JSON_ForEach(item, reported) {
+                            if (cJSON_IsObject(item)) {
+                                JSON* scene = JArr_CreateObject(g_syncingScenes);
+                                JSON_SetText(scene, "id", item->string);
+                                JSON_SetText(scene, "name", JSON_GetText(item, "name"));
+                                JSON_SetNumber(scene, "state", JSON_GetNumber(item, "state"));
+                                JSON_SetNumber(scene, "isLocal", JSON_GetNumber(item, "isLocal"));
+                                char* sceneType = JSON_GetText(item, "scenes");
+                                sceneType[1] = 0;
+                                JSON_SetText(scene, "sceneType", sceneType);
+                                JSON* actions = JSON_Clone(JSON_GetObject(item, "actions"));
+                                JSON* conditions = JSON_Clone(JSON_GetObject(item, "conditions"));
+                                JSON_SetObject(scene, "actions", actions);
+                                JSON_SetObject(scene, "conditions", conditions);
+                            }
+                        }
 
-                        // if (pageIndex < g_awsScenePageNum) {
-                        //     // Send request to get next page
-                        //     char* topic = Aws_GetTopic(PAGE_SCENE, pageIndex + 1, TOPIC_GET_PUB);
-                        //     mqttCloudPublish(topic, "");
-                        //     free(topic);
-                        // } else {
-                        //     sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, g_syncingScenes);
-                        //     g_awsSyncDatabaseStep = 0;
-                        // }
+                        if (pageIndex < g_awsScenePageNum) {
+                            // Send request to get next page
+                            g_syncingPageIndex = pageIndex + 1;
+                            char* topic = Aws_GetTopic(PAGE_SCENE, g_syncingPageIndex, TOPIC_GET_PUB);
+                            mqttCloudPublish(topic, "");
+                            free(topic);
+                        } else {
+                            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, g_syncingScenes);
+                            g_awsSyncDatabaseStep = 0;
+                        }
                         break;
                     }
                 }

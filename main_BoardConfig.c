@@ -55,6 +55,8 @@ static uint8_t g_mode = MODE_NORMAL;
 static int g_ledDelayTime = 0;
 static char g_wifiSSID[100] = {0};
 static char g_wifiPASS[100] = {0};
+static char g_homeId[100] = {0};
+static char g_accountId[100] = {0};
 static bool g_wifiConnectDone = false;
 static bool g_wifiIsConnected = false;
 
@@ -65,7 +67,8 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc) {
         LogError((get_localtime_now()),("Error with result code: %d\n", rc));
         exit(-1);
     }
-    mosquitto_subscribe(mosq, NULL, "MANAGER_SERVICES/Setting/Wifi", 0);
+    mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, 0);
+    // mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_CONTROL_LOCAL, 0);
     mosquitto_subscribe(mosq, NULL, "CFG/#", 0);
 }
 
@@ -76,7 +79,6 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
     JSON* recvMsg = JSON_Parse(msg->payload);
     if (StringCompare(msg->topic, "MANAGER_SERVICES/Setting/Wifi")) {
         JSON* wifiInfo = JSON_GetObject(recvMsg, "wifi_info");
-        JSON* homeInfo = JSON_GetObject(recvMsg, "home_info");
         char* ssid = JSON_GetText(wifiInfo, "ssid");
         char* pass = JSON_GetText(wifiInfo, "pass");
         if (ssid) {
@@ -86,6 +88,21 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
             StringCopy(g_wifiPASS, pass);
         }
         logInfo("SSID: %s, PASS: %s", ssid, pass);
+        g_homeId[0] = 0;
+        g_accountId[0] = 0;
+
+        if (JSON_HasKey(recvMsg, "home_info")) {
+            JSON* homeInfo = JSON_GetObject(recvMsg, "home_info");
+            char* homeId = JSON_GetText(homeInfo, "home_id");
+            char* accountId = JSON_GetText(homeInfo, "account_id");
+            if (homeId) {
+                StringCopy(g_homeId, homeId);
+            }
+            if (accountId) {
+                StringCopy(g_accountId, accountId);
+            }
+            logInfo("HomeId: %s, AccountId: %s", g_homeId, g_accountId);
+        }
     } else {
         JSON* payload = JSON_GetText(recvMsg, "Payload");
         if (StringCompare(payload, "AWS_CONNECTED")) {
@@ -94,6 +111,16 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
         } else if (StringCompare(payload, "AWS_DISCONNECTED")) {
             logInfo("AWS_DISCONNECTED");
             LED_OFF;
+        } else if (StringCompare(payload, "LED_ON")) {
+            LED_ON;
+        } else if (StringCompare(payload, "LED_OFF")) {
+            LED_OFF;
+        } else if (StringCompare(payload, "LED_FAST_FLASH")) {
+            LED_FAST_FLASH;
+        } else if (StringCompare(payload, "LED_SLOW_FLASH")) {
+            LED_SLOW_FLASH;
+        } else if (StringCompare(payload, "LED_FLASH_1_TIME")) {
+            g_ledDelayTime = 1; pinWrite(USER_LED, 0);  // Turn off LED
         }
     }
     JSON_Delete(recvMsg);
@@ -135,8 +162,14 @@ void LedProcessLoop() {
 
     if (g_ledDelayTime > 0 && timeInMilliseconds() - oldTick > g_ledDelayTime) {
         oldTick = timeInMilliseconds();
-
-        pinToggle(USER_LED);
+        if (g_ledDelayTime >= 10) {
+            pinToggle(USER_LED);
+        }
+        if (g_ledDelayTime < 10) {
+            g_ledDelayTime++;
+        } else if (g_ledDelayTime == 10) {
+            g_ledDelayTime = 0;
+        }
     }
 }
 
@@ -149,6 +182,7 @@ void ConnectWifiLoop() {
     switch (state) {
     case 0:
         if (g_wifiSSID[0] != 0) {
+            PlayAudio("wifi_connecting");
             logInfo("Rescan available networks: nmcli d wifi rescan");
             char str[400];
             sprintf(str, "nmcli c delete %s", g_wifiSSID);
@@ -225,6 +259,9 @@ void MainLoop() {
                     // Create wifi hotspot
                     LED_SLOW_FLASH;
                     g_wifiConnectDone = false;
+                    system("nmcli r wifi off");
+                    // system("rfkill unblock wlan");
+                    system("nmcli r wifi on");
                     g_createApFile = popen("create_ap -n wlan0 hc2023", "r");
                 }
             } else {
@@ -243,12 +280,22 @@ void MainLoop() {
                 count = 0;
                 if (g_wifiIsConnected) {
                     LED_ON;
+                    // Save homeId and accountId to app.json file
+                    if (g_homeId[0] != 0 && g_accountId[0] != 0) {
+                        char str[500];
+                        FILE* f = fopen("app.json", "w");
+                        fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\"}", g_accountId, g_homeId);
+                        fclose(f);
+                        PlayAudio("wifi_config_success");
+                        char* message = "{\"type\":102}";
+                        mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
+                    }
                 } else {
                     LED_OFF;
                 }
-                logInfo("Done configuring");
                 system("pkill -15 create_ap");
                 pclose(g_createApFile);
+                logInfo("Done configuring");
                 state = 0;
             }
             break;
@@ -261,14 +308,23 @@ int main(int argc, char ** argv) {
     pinMode(USER_BUTTON, INPUT);
     LED_ON;
     Mosq_Init();
+    // system("nmcli r wifi off");
     sleep(1);
+    // system("nmcli r wifi on");
     LED_OFF;
+
+    long long a = 0;
 
     while (1) {
         Mosq_ProcessLoop();
         MainLoop();
         ConnectWifiLoop();
         LedProcessLoop();
+        // if (timeInMilliseconds() - a > 3000) {
+        //     a = timeInMilliseconds();
+        //     char* message = "{\"type\":102}";
+        //     mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
+        // }
         usleep(1000);
     }
     return 0;

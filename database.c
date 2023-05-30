@@ -172,7 +172,7 @@ int Db_DeleteDevice(const char* deviceId) {
     return 1;
 }
 
-int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, int pageIndex) {
+int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, const char* pid, int pageIndex) {
     ASSERT(groupAddr); ASSERT(groupName); ASSERT(devices);
     char* sqlCmd = malloc(strlen(devices) + 200);
     sprintf(sqlCmd, "INSERT INTO GROUP_INF(groupAdress, name, isLight, devices, pageIndex) VALUES('%s', '%s', '%d', '%s', %d)", groupAddr, groupName, isLight, devices, pageIndex);
@@ -183,6 +183,8 @@ int Db_AddGroup(const char* groupAddr, const char* groupName, const char* device
         sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%s', '%s', %d)", groupAddr, groupAddr, "22", "0", pageIndex);
         Sql_Exec(sqlCmd);
         sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%s', '%s', %d)", groupAddr, groupAddr, "23", "0", pageIndex);
+        Sql_Exec(sqlCmd);
+        sprintf(sqlCmd, "INSERT INTO DEVICES_INF(deviceId, unicast, name, pid, pageIndex) VALUES('%s', '%s', '%s', '%s', '%d')", groupAddr, groupAddr, groupName, pid, pageIndex);
         Sql_Exec(sqlCmd);
     }
     free(sqlCmd);
@@ -367,19 +369,43 @@ int Db_LoadSceneToRam() {
         int conditionCount = 0;
         JSON_ForEach(condition, conditionsArray) {
             SceneCondition* cond = &g_sceneList[g_sceneCount].conditions[conditionCount];
-            cond->timeReached = 0;
-            cond->conditionType = JSON_GetNumber(condition, "conditionType");
-            cond->repeat = JSON_GetNumber(condition, "repeat");
-            cond->schMinutes = JSON_GetNumber(condition, "schMinutes");
             StringCopy(cond->entityId, JSON_GetText(condition, "entityId"));
-            if (cond->conditionType == EntityDevice) {
-                StringCopy(cond->pid, JSON_GetText(condition, "pid"));
-                StringCopy(cond->dpAddr, JSON_GetText(condition, "dpAddr"));
-                StringCopy(cond->expr, "==");
-                cond->dpId = JSON_GetNumber(condition, "dpId");
-                cond->dpValue = JSON_GetNumber(condition, "dpValue");
-                cond->valueType = JSON_GetNumber(condition, "valueType");
-                StringCopy(cond->dpValueStr, JSON_GetText(condition, "dpValueStr")); //get dpValueStr for camraHanet
+            JSON* exprArray = JSON_GetObject(condition, "expr");
+            cond->timeReached = 0;
+            if (StringCompare(cond->entityId, "timer")) {
+                cond->conditionType = EntitySchedule;
+                cond->repeat = atoi(JSON_GetText(exprArray, "loops"));
+                char* time = JSON_GetText(exprArray, "time");
+                list_t* timeItems = String_Split(time, ":");
+                if (timeItems->count == 2) {
+                    cond->schMinutes = atoi(timeItems->items[0]) * 60 + atoi(timeItems->items[1]);
+                }
+                List_Delete(timeItems);
+            } else {
+                cond->conditionType = EntityDevice;
+                DeviceInfo deviceInfo;
+                int foundDevices = Db_FindDevice(&deviceInfo, cond->entityId);
+                if (foundDevices == 1) {
+                    StringCopy(cond->expr, JArr_GetText(exprArray, 1));
+                    cond->dpId = atoi(JArr_GetText(exprArray, 0) + 3);   // Template is "$dp1"
+                    DpInfo dpInfo;
+                    int foundDps = Db_FindDp(&dpInfo, cond->entityId, cond->dpId);
+                    if (foundDps == 1 || StringCompare(deviceInfo.pid, HG_BLE_IR)) {
+                        StringCopy(cond->pid, deviceInfo.pid);
+                        if (foundDps == 1) {
+                            StringCopy(cond->dpAddr, dpInfo.addr);
+                        }
+                    }
+                }
+                JSON* objItem = JArr_GetObject(exprArray, 2);
+                if (cJSON_IsString(objItem)) {
+                    cond->valueType = ValueTypeString;
+                    StringCopy(cond->dpValueStr, JArr_GetText(exprArray, 2));
+                } else if(cJSON_IsNumber(objItem) || cJSON_IsBool(objItem)){
+                    cond->valueType = ValueTypeDouble;
+                    int dpValue = JArr_GetNumber(exprArray, 2);
+                    cond->dpValue = dpValue;
+                }
             }
             conditionCount++;
             if (conditionCount > 1000) {
@@ -431,7 +457,7 @@ int Db_AddScene(JSON* sceneInfo) {
     JSON* conditionsObj = JSON_GetObject(sceneInfo, "conditions");
     char* actions = cJSON_PrintUnformatted(actionsObj);
     char* conditions = cJSON_PrintUnformatted(conditionsObj);
-    char* sqlCmd = malloc(StringLength(actions) + StringLength(conditions) + 200);
+    char* sqlCmd = malloc(StringLength(actions) + StringLength(conditions) + 500);
     sprintf(sqlCmd, "INSERT INTO SCENE_INF(sceneId, name, state, isLocal, sceneType, actions, conditions)  \
                                     VALUES('%s',    '%s', '%d',  '%d',    '%s',      '%s',    '%s')",
                                            sceneId, name, state, isLocal, sceneType, actions, conditions);

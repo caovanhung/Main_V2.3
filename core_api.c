@@ -103,6 +103,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
                 JSON_SetNumber(dp, "value", o->valueint);
                 JSON_SetText(dp, "valueString", o->valuestring);
                 cJSON_AddItemToArray(newDictDps, dp);
+                Aws_SaveDpValue(deviceId, dpId, o->valueint, dpInfo.pageIndex);
                 if (causeId) {
                     JSON* history = JSON_CreateObject();
                     JSON_SetText(history, "deviceId", deviceId);
@@ -130,8 +131,7 @@ void Ble_ControlGroup(const char* groupAddr, JSON* dictDPs) {
     ASSERT(groupAddr);
     ASSERT(dictDPs);
     DeviceInfo deviceInfo;
-    // int foundDevices = Db_FindDevice(&deviceInfo, groupAddr); //groupAddr no have into table devices_inf in database
-    int foundDevices = 1;
+    int foundDevices = Db_FindDevice(&deviceInfo, groupAddr); //groupAddr no have into table devices_inf in database
     if (foundDevices == 1) {
         // Update status of devices in this group to AWS
         char* devicesStr = Db_FindDevicesInGroup(groupAddr);

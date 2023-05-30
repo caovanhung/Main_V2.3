@@ -80,3 +80,10 @@ list_t* String_Split(const char* str, const char* delim) {
     }
     return resultList;
 }
+
+
+void PlayAudio(const char* audioName) {
+    char str[100];
+    sprintf(str, "aplay /home/szbaijie/audio/%s.wav", audioName);
+    system(str);
+}

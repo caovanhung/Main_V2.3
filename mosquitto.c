@@ -165,7 +165,7 @@ bool getFormTranMOSQ(char **ResultTemplate,const char * layer_service,const char
 void Aws_DeleteDevice(const char* deviceId, int pageIndex) {
     ASSERT(deviceId);
     char payload[200];
-    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", GW_RESPONSE_DEVICE_KICKOUT, SENDER_HC_VIA_CLOUD, deviceId);
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_DEL_DEVICE, SENDER_HC_VIA_CLOUD, deviceId);
     sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_KICKOUT, pageIndex, payload);
 }
 

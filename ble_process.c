@@ -863,7 +863,7 @@ bool ble_addDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *address_group,
     SET_GROUP[15] = *(hex_address_group+1);
 
     bool ret = sendFrameToGwIndex(gwIndex, dpAddrHex, SET_GROUP, 18);
-    addRetryCountToSendingFrame(2);
+    addRetryCountToSendingFrame(3);
     return ret;
 }
 
@@ -892,7 +892,8 @@ bool ble_addDeviceToGroupLink(int gwIndex, const char *groupAddr, const char *de
     data[15] = *(hex_address_group + 1);
 
     sendFrameToGwIndex(gwIndex, deviceAddrHex, data, 19);
-    addRetryCountToSendingFrame(2);
+    addRetryCountToSendingFrame(3);
+    return true;
 }
 
 bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *groupAddr, const char *deviceAddr, const char *dpAddr)
@@ -920,7 +921,7 @@ bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *groupAddr, 
     SET_GROUP[15] = hex_address_group[1];
 
     sendFrameToGwIndex(gwIndex, deviceAddrHex, SET_GROUP, 18);
-    addRetryCountToSendingFrame(2);
+    addRetryCountToSendingFrame(3);
     return true;
 }
 
@@ -1067,7 +1068,7 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     if (frame->flag == 0x919d) {
         // Online/Offline
         return 0;// GW_RESPONSE_DEVICE_STATE;
-    } else if (frame->opcode == 0x804a) {
+    } else if (frame->opcode == 0xe111 && frame->paramSize == 4 && frame->param[0] == 0x02 && frame->param[1] == 0x16 && frame->param[2] == 0x00 && frame->param[3] == 0x01) {
         // Device is kicked out from mesh network
         return GW_RESPONSE_DEVICE_KICKOUT;
     } else if (frame->paramSize >= 7 && frame->opcode == 0x801f && frame->param[5] == 0x00 && frame->param[6] == 0x10) {
@@ -1144,18 +1145,15 @@ void getStringResetDeviveSofware(char **result,const char* addressDevice)
     strcat(*result, tmp_2);
 }
 
-bool setResetDeviceSofware(const char *addressDevice)
+bool GW_DeleteDevice(const char *deviceAddr)
 {
-    char *str_send_uart;
-    unsigned char *hex_send_uart;
-    long int addrHex = strtol(addressDevice, NULL, 16);
-    getStringResetDeviveSofware(&str_send_uart,addressDevice);
-    int len_str = (int)strlen(str_send_uart);
-    hex_send_uart  = (char*) malloc(len_str * sizeof(char));
-    String2HexArr(str_send_uart,hex_send_uart);
-    sendFrameToAnyGw(addrHex, hex_send_uart, len_str/2);
-    free(str_send_uart);
-    free(hex_send_uart);
+    ASSERT(deviceAddr);
+    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,      0xE0,0x11,0x02, 0x00,0x00,  0x16,0x00,0x01};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    sendFrameToAnyGw(dpAddrHex, data, 18);
+    addRetryCountToSendingFrame(3);
     return true;
 }
 
@@ -1176,7 +1174,7 @@ bool ble_setSceneLocalToDeviceSwitch(const char* sceneId, const char* deviceAddr
     data[18] = (uint8_t)(param >> 8);
     data[19] = (uint8_t)(param);
     sendFrameToAnyGw(dpAddrHex, data, 16 + dpCount);
-    addRetryCountToSendingFrame(2);
+    addRetryCountToSendingFrame(3);
     return true;
 }
 
@@ -1198,7 +1196,7 @@ bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const c
     SceneLocalToDevice[13] = *(hex_sceneID+1);
 
     sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice, 14);
-    addRetryCountToSendingFrame(2);
+    addRetryCountToSendingFrame(3);
     return true;
 }
 
@@ -1224,7 +1222,7 @@ bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const ch
     SceneLocalToDevice[14] = hex_modeBlinkRgb[0];
 
     sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice,17);
-    addRetryCountToSendingFrame(2);
+    addRetryCountToSendingFrame(3);
     return true;
 }
 
@@ -1251,7 +1249,9 @@ bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, 
     CallSceneLocalToDevice[19] = hex_state[0];
     CallSceneLocalToDevice[20] = dpValue;
 
-    return sendFrameToAnyGw(deviceAddrHex, CallSceneLocalToDevice, 21);
+    sendFrameToAnyGw(deviceAddrHex, CallSceneLocalToDevice, 21);
+    addRetryCountToSendingFrame(3);
+    return true;
 }
 
 bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID)
@@ -1293,7 +1293,7 @@ bool ble_callSceneLocalToHC(const char* address_device,const char* sceneID)
     CallSceneLocalToHC[13] = hex_sceneID[1];
 
     bool ret = sendFrameToAnyGw(deviceAddrHex, CallSceneLocalToHC, 14);
-    addRetryCountToSendingFrame(1);
+    addPriorityToSendingFrame(0);
     return ret;
 }
 
@@ -1358,7 +1358,9 @@ bool GW_CtrlGroupLightOnoff(const char *groupAddr, uint8_t onoff) {
     data[8] = (addrHex >> 8) & 0x00FF;
     data[9] = (addrHex & 0x00FF);
     data[12] = onoff;
-    return sendFrameToAnyGw(addrHex, data, 13);
+    sendFrameToAnyGw(addrHex, data, 13);
+    addPriorityToSendingFrame(0);
+    return true;
 }
 
 bool GW_CtrlGroupLightCT(const char *dpAddr, int lightness, int colorTemperature) {
@@ -1392,7 +1394,9 @@ bool GW_CtrlGroupLightCT(const char *dpAddr, int lightness, int colorTemperature
     SET_CT[15] = hex_colorTemperature[0];
     SET_CT[14] = hex_colorTemperature[1];
 
-    return sendFrameToAnyGw(dpAddrHex, SET_CT, 16);
+    sendFrameToAnyGw(dpAddrHex, SET_CT, 16);
+    addPriorityToSendingFrame(0);
+    addPriorityToSendingFrame(0);
 }
 
 bool GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl) {
@@ -1412,7 +1416,6 @@ bool GW_ControlIRCmd(const char* command) {
     uint16_t addr = ((uint16_t)data[9] << 8) + data[8];
     bool ret = sendFrameToAnyGw(addr, data, strlen(command) / 2);
     addPriorityToSendingFrame(0);
-    addRetryCountToSendingFrame(1);
     return ret;
 }
 
@@ -1433,7 +1436,6 @@ bool GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remo
     data[22] = (uint8_t)(swing);
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 23);
     addPriorityToSendingFrame(0);
-    addRetryCountToSendingFrame(1);
     return ret;
 }
 
@@ -1465,7 +1467,6 @@ bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t co
     data[22] |= (uint8_t)(fan << 2);
     data[22] |= (uint8_t)(swing);
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 23);
-    addRetryCountToSendingFrame(1);
     return ret;
 }
 
@@ -1484,7 +1485,6 @@ bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t
     data[18] = (uint8_t)(1 << 6);
     data[18] |= (uint8_t)(commandIndex << 1);
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 19);
-    addRetryCountToSendingFrame(1);
     return ret;
 }
 
@@ -1502,7 +1502,6 @@ bool GW_AddSceneConditionIR(const char* deviceAddr, const char* sceneId, uint16_
     data[19] = (uint8_t)voiceCode;
     data[20] = (uint8_t)(voiceCode >> 8);
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 21);
-    addRetryCountToSendingFrame(1);
     return ret;
 }
 
@@ -1518,7 +1517,6 @@ bool GW_DeleteSceneConditionIR(const char* deviceAddr, const char* sceneId) {
     data[17] = (uint8_t)(sceneIdHex);
     data[18] = (uint8_t)(1 << 6);
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 19);
-    addRetryCountToSendingFrame(1);
     return ret;
 }
 

@@ -278,6 +278,8 @@ void ResponseWaiting() {
 }
 
 void markSceneToRun(Scene* scene, const char* causeId) {
+    ASSERT(scene);
+    logInfo("markSceneToRun. SceneId = %s", scene->id);
     // Just setting the runningActionIndex vatiable to 0 and the actions of scene will be executed
     // in ExecuteScene() function
     scene->delayStart = timeInMilliseconds();
@@ -629,6 +631,7 @@ int main(int argc, char ** argv)
     Mosq_Init();
     Db_LoadSceneToRam();
     sleep(1);
+
     while(xRun!=0) {
         Mosq_ProcessLoop();
         ResponseWaiting();
@@ -981,10 +984,14 @@ int main(int argc, char ** argv)
                         break;
                     }
                     case TYPE_DEL_DEVICE: {
-                        JSON* localPacket = ConvertToLocalPacket(reqType, object_string);
-                        char* deviceId = JSON_GetText(localPacket, "deviceId");
-                        if (JSON_HasKey(localPacket, "deviceAddr")) {
-                            sendPacketTo(SERVICE_BLE, TYPE_DEL_DEVICE, localPacket);
+                        char* deviceId = JSON_GetText(payload, "deviceId");
+                        DeviceInfo deviceInfo;
+                        int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
+                        if (foundDevices == 1) {
+                            JSON_SetNumber(payload, "gwIndex", deviceInfo.gwIndex);
+                            JSON_SetText(payload, "deviceAddr", deviceInfo.addr);
+                            JSON_SetText(payload, "devicePid", deviceInfo.pid);
+                            sendPacketTo(SERVICE_BLE, TYPE_DEL_DEVICE, payload);
                             Db_DeleteDevice(deviceId);
                             JSON_SetNumber(payload, "eventType", EV_DEVICE_DELETED);
                             Db_AddDeviceHistory(payload);
@@ -992,7 +999,6 @@ int main(int argc, char ** argv)
                         } else {
                             logError("device %s is not found", deviceId);
                         }
-                        JSON_Delete(localPacket);
                         break;
                     }
                     case TYPE_SYNC_DB_DEVICES: {
@@ -1073,22 +1079,29 @@ int main(int argc, char ** argv)
                     case TYPE_SYNC_DB_GROUPS: {
                         logInfo("TYPE_SYNC_DB_GROUPS");
                         Db_DeleteAllGroup();
+                        int groupCount = 0;
                         JSON_ForEach(group, payload) {
                             char* groupAddr = JSON_GetText(group, "groupAddr");
                             char* groupName = JSON_GetText(group, "groupName");
                             char* devices = JSON_GetObject(group, "devices");
                             int isLight = JSON_GetNumber(group, "isLight");
+                            char* pid = JSON_GetText(group, "pid");
                             int pageIndex = JSON_GetNumber(group, "pageIndex");
-                            Db_AddGroup(groupAddr, groupName, devices, isLight, pageIndex);
+                            Db_AddGroup(groupAddr, groupName, devices, isLight, pid, pageIndex);
+                            groupCount++;
                         }
+                        logInfo("Added %d groups", groupCount);;
                         break;
                     }
                     case TYPE_SYNC_DB_SCENES: {
                         logInfo("TYPE_SYNC_DB_SCENES");
                         Db_DeleteAllScene();
+                        int sceneCount = 0;
                         JSON_ForEach(scene, payload) {
                             Db_AddScene(scene);
+                            sceneCount++;
                         }
+                        logInfo("Added %d scenes", sceneCount);;
                         break;
                     }
                     case TYPE_ADD_GW: {
@@ -1230,6 +1243,11 @@ int main(int argc, char ** argv)
                             }
                         } else {
                             logInfo("Scene %s is not found", sceneId);
+                            int isLocal = JSON_GetNumber(newScene, "isLocal");
+                            if (!isLocal) {
+                                Db_AddScene(newScene);
+                                logInfo("Added new HC scene");
+                            }
                         }
 
                         break;
@@ -1240,15 +1258,18 @@ int main(int argc, char ** argv)
                         char* groupAddr = JSON_GetText(localPacket, "groupAddr");
                         sendPacketTo(SERVICE_BLE, reqType, localPacket);
                         JSON* devicesArray = JSON_GetObject(localPacket, "devices");
-                        JSON* srcObj = JSON_Parse(object_string);
-                        // Insert group information to database
-                        Db_AddGroup(groupAddr, JSON_GetText(srcObj, "name"), JSON_GetText(srcObj, "devices"), true, 1);
-                        // Add this request to response list for checking response
-                        JSON_ForEach(device, devicesArray) {
-                            addDeviceToRespList(reqType, groupAddr, JSON_GetText(device, "deviceAddr"));
+                        if (JArr_Count(devicesArray) > 0) {
+                            JSON* d = JArr_GetObject(devicesArray, 0);
+                            JSON* srcObj = JSON_Parse(object_string);
+                            // Insert group information to database
+                            Db_AddGroup(groupAddr, JSON_GetText(srcObj, "name"), JSON_GetText(srcObj, "devices"), true, JSON_GetText(d, "devicePid"), 1);
+                            // Add this request to response list for checking response
+                            JSON_ForEach(device, devicesArray) {
+                                addDeviceToRespList(reqType, groupAddr, JSON_GetText(device, "deviceAddr"));
+                            }
+                            JSON_Delete(srcObj);
                         }
                         JSON_Delete(localPacket);
-                        JSON_Delete(srcObj);
                         break;
                     }
                     case TYPE_DEL_GROUP_NORMAL: {
@@ -1336,7 +1357,7 @@ int main(int argc, char ** argv)
                         JSON* devicesArray = JSON_GetObject(localPacket, "devices");
                         JSON* srcObj = payload;
                         // Insert group information to database
-                        Db_AddGroup(groupAddr, JSON_GetText(srcObj, "name"), JSON_GetText(srcObj, "devices"), false, 1);
+                        Db_AddGroup(groupAddr, JSON_GetText(srcObj, "name"), JSON_GetText(srcObj, "devices"), false, NULL, 1);
                         // Add this request to response list for checking response
                         JSON_ForEach(device, devicesArray) {
                             addDeviceToRespList(reqType, groupAddr, JSON_GetText(device, "dpAddr"));

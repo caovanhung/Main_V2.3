@@ -132,7 +132,7 @@ int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr);
 int Db_SaveDeviceState(const char* deviceId, int state);
 int Db_DeleteDevice(const char* deviceId);
 
-int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, int pageIndex);
+int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, const char* pid, int pageIndex);
 int Db_DeleteGroup(const char* groupAddr);
 int Db_DeleteAllGroup();
 char* Db_FindDevicesInGroup(const char* groupAddr);

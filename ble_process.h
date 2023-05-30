@@ -240,7 +240,7 @@ int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* origin
 int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame);
 
 void getStringResetDeviveSofware(char **result,const char* addressDevice);
-bool setResetDeviceSofware(const char *addressDevice);
+bool GW_DeleteDevice(const char* deviceAddr);
 
 char *get_dpid(const char *code);
 
