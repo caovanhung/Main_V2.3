@@ -1,0 +1,12 @@
+[Unit]
+Description=Homegy CORE Service
+After=rc-local.service  hg_ble.service
+
+[Service]
+User=root
+WorkingDirectory=/home/szbaijie/hc_bin
+ExecStart=/home/szbaijie/hc_bin/HG_CORE
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

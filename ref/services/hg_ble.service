@@ -1,0 +1,16 @@
+[Unit]
+Description=Homegy BLE Service
+After=dev-%i.device systemd-user-sessions.service plymouth-quit-wait.service getty-pre.target
+
+[Service]
+User=root
+WorkingDirectory=/home/szbaijie/hc_bin
+ExecStart=/home/szbaijie/hc_bin/HG_BLE
+Restart=always
+StandardInput=tty-force
+StandardOutput=inherit
+StandardError=inherit
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

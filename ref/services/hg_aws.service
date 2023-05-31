@@ -1,0 +1,12 @@
+[Unit]
+Description=Homegy AWS Service
+After=rc-local.service  hg_core.service  hg_cfg.service
+
+[Service]
+User=root
+WorkingDirectory=/home/szbaijie/hc_bin
+ExecStart=/home/szbaijie/hc_bin/HG_AWS
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

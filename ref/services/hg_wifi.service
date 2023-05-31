@@ -1,0 +1,11 @@
+[Unit]
+Description=Homegy Wifi Service
+
+[Service]
+User=root
+WorkingDirectory=/home/szbaijie/hc_bin
+ExecStart=/home/szbaijie/hc_bin/HG_WIFI
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
