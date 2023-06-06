@@ -22,6 +22,18 @@ bool StringCompare(const char* str1, const char* str2) {
     return false;
 }
 
+bool StringContains(const char* mainString, const char* subString) {
+    if (mainString && subString){
+        char *p = strstr(mainString, subString);
+        if (p != NULL) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+    return false;
+}
+
 
 list_t* List_Create() {
     list_t* l = malloc(sizeof(list_t));

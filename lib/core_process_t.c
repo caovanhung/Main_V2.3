@@ -2,46 +2,32 @@
 
 char* Hex2String( char *hex,unsigned int len)
 {
-	int i;
-	char *app = malloc(sizeof(char)*3);//char *app = malloc(sizeof(char)) error heap-buffer-overflow
-	char *buff = malloc(len*2+1);
+    int i;
+    char *app = malloc(sizeof(char)*3);//char *app = malloc(sizeof(char)) error heap-buffer-overflow
+    char *buff = malloc(len*2+1);
 
-	strcpy(buff,"");
-	for (i=0;i<len;i++)
-	{
-		sprintf(app,"%02x",hex[i]);
-		strcat(buff,app);
-	}
-	buff[2*len] = '\0';
-	return buff;
-}
-
-bool isContainString(const char *string_contain,const char *string_match) {
-    if (string_contain && string_match && string_match[0] != 0)
+    strcpy(buff,"");
+    for (i=0;i<len;i++)
     {
-        char *p = strstr(string_contain, string_match);
-        if (p != NULL) {
-            return true;
-        }
-        else {
-            return false;
-        }
+        sprintf(app,"%02x",hex[i]);
+        strcat(buff,app);
     }
-    return false;
+    buff[2*len] = '\0';
+    return buff;
 }
 
 
 void String2HexArr(char *givenStr, unsigned char *hexStr)
 {
-	int length = (int)strlen(givenStr);
-	int i  = 0;
+    int length = (int)strlen(givenStr);
+    int i  = 0;
     char temp1[3] = {'\0'};
-	for(i = 0;i< length/2;i ++) 
-	{
-		temp1[0] = givenStr[i*2];
-		temp1[1] = givenStr[i*2+1];
-		hexStr[i] = strtol(temp1,NULL,16);
-	}
+    for(i = 0;i< length/2;i ++) 
+    {
+        temp1[0] = givenStr[i*2];
+        temp1[1] = givenStr[i*2+1];
+        hexStr[i] = strtol(temp1,NULL,16);
+    }
 }
 
 // uint16_t String2Hex(char *str, unsigned char *hexStr)
@@ -60,31 +46,31 @@ void String2HexArr(char *givenStr, unsigned char *hexStr)
 int String2Int(const char *str)
 {
     if (str) {
-	   return atoi(str);
+       return atoi(str);
     }
     return 0;
 }
 
 int Int2String(int i,char *str)
 {
-	int len = 0;
-	len = sprintf(str, "%d", i);
-	return len;
+    int len = 0;
+    len = sprintf(str, "%d", i);
+    return len;
 }
 
 bool isMatchString(const char *string_1,const char *string_2 )
 {
-	if(string_1 != NULL && string_2 != NULL)
-	{
-		if(strcmp((char *)string_1,(char *)string_2) == 0)
-		{
-			return true;
-		}
-		else
-			return false;		
-	}
-	else
-		return false;
+    if(string_1 != NULL && string_2 != NULL)
+    {
+        if(strcmp((char *)string_1,(char *)string_2) == 0)
+        {
+            return true;
+        }
+        else
+            return false;       
+    }
+    else
+        return false;
 }
 
 char *strremove(char *str, const char *sub) 
@@ -107,17 +93,17 @@ char *strremove(char *str, const char *sub)
 
 int Min2Sec(const char *minutes,const char *seconds)
 {
-	int min = String2Int(minutes);
-	int sec = String2Int(seconds);
-	return min*60+sec;
+    int min = String2Int(minutes);
+    int sec = String2Int(seconds);
+    return min*60+sec;
 }
 
 long long Hex2Dec(char *hex)
 {
-	long long decimal = 0, base = 1;
+    long long decimal = 0, base = 1;
     int i = 0, length;
 
-	length = strlen(hex);
+    length = strlen(hex);
     for(i = length--; i >= 0; i--)
     {
         if(hex[i] >= '0' && hex[i] <= '9')
@@ -136,7 +122,7 @@ long long Hex2Dec(char *hex)
             base *= 16;
         }
     }
-	return decimal;
+    return decimal;
 }
 
 
@@ -145,19 +131,19 @@ char ** generate_fields(int rows, int length)
    int i = 0;
    char ** options = (char **)malloc(rows*sizeof(char*));
    for(i = 0; i < rows; i++)
-	   options[i] = (char *)malloc(length*sizeof(char));
+       options[i] = (char *)malloc(length*sizeof(char));
    return options;
 }
 
 
 void free_fields(char ** options,int rows)
 {
-	int i = 0;
-	for(i = 0; i < rows; i++)
-	{
-		free(options[i]);
-	}
-	free(options);
+    int i = 0;
+    for(i = 0; i < rows; i++)
+    {
+        free(options[i]);
+    }
+    free(options);
 }
 
 void splitString(char str[], char delim, char **result, int *numParts) {

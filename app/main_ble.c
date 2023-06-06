@@ -577,9 +577,9 @@ int main( int argc,char ** argv )
                         int dpValue = JSON_GetNumber(o, "value");
                         char valueStr[5];
                         sprintf(valueStr, "%d", dpValue);
-                        if (isContainString(HG_BLE_SWITCH, pid)) {
+                        if (StringContains(HG_BLE_SWITCH, pid)) {
                             GW_HgSwitchOnOff(dpAddr, dpValue);
-                        } else if (isContainString(HG_BLE_CURTAIN, pid) || dpId == 20) {
+                        } else if (StringContains(HG_BLE_CURTAIN, pid) || dpId == 20) {
                             ble_controlOnOFF(dpAddr, valueStr);
                         } else if (dpId == 24) {
                             ble_controlHSL(dpAddr, valueStr);
@@ -640,9 +640,9 @@ int main( int argc,char ** argv )
                         int dpValue = JSON_GetNumber(o, "value");
                         char valueStr[5];
                         sprintf(valueStr, "%d", dpValue);
-                        if (isContainString(HG_BLE_SWITCH, pid)) {
+                        if (StringContains(HG_BLE_SWITCH, pid)) {
                             GW_HgSwitchOnOff_NoResp(dpAddr, dpValue);
-                        } else if (isContainString(HG_BLE_CURTAIN, pid) || dpId == 20) {
+                        } else if (StringContains(HG_BLE_CURTAIN, pid) || dpId == 20) {
                             GW_CtrlGroupLightOnoff(dpAddr, dpValue);
                         } else if (dpId == 24) {
                             ble_controlHSL(dpAddr, valueStr);
@@ -886,7 +886,7 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
             int dpId = JSON_GetNumber(action, "dpId");
             int dpValue = JSON_GetNumber(action, "dpValue");
             if (pid != NULL) {
-                if (isContainString(HG_BLE_SWITCH, pid)) {
+                if (StringContains(HG_BLE_SWITCH, pid)) {
                     int dpParam = (dpId - 1)*0x10 + dpValue;
                     dpParam = dpParam << 24;
                     JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
@@ -901,15 +901,15 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                         JSON_SetNumber(mergedActionItem, "param", newParam);
                         JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
                     }
-                } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
+                } else if (StringContains(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
                     ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x00");
                     // Add this device to response list to check TIMEOUT later
                     addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
-                } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
+                } else if (StringContains(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
                     ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x01");
                     // Add this device to response list to check TIMEOUT later
                     addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
-                } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
+                } else if (StringContains(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
                     ble_setSceneLocalToDeviceLightCCT_HOMEGY(deviceAddr, sceneId);
                     // Add this device to response list to check TIMEOUT later
                     addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
@@ -941,7 +941,7 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
 //             JSON* action     = JArr_GetObject(actions, i);
 //             char* deviceAddr = JSON_GetText(action, "entityAddr");
 //             if (deviceAddr != NULL) {
-//                 if (!isContainString(commonDevices, deviceAddr)) {
+//                 if (!StringContains(commonDevices, deviceAddr)) {
 //                     ble_delSceneLocalToDevice(deviceAddr, sceneId);
 //                     strcat(commonDevices, deviceAddr);
 //                 }
@@ -972,7 +972,7 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
             int dpId = JSON_GetNumber(action, "dpId");
 
             if (pid != NULL) {
-                if (isContainString(HG_BLE_SWITCH, pid)) {
+                if (StringContains(HG_BLE_SWITCH, pid)) {
                     int dpParam = (dpId - 1)*0x10 + 2;
                     dpParam = dpParam << 24;
                     JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
@@ -987,11 +987,11 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
                         JSON_SetNumber(mergedActionItem, "param", newParam);
                         JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
                     }
-                } else if (isContainString(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
+                } else if (StringContains(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
                     ble_delSceneLocalToDevice(deviceAddr, sceneId);
-                } else if (isContainString(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
+                } else if (StringContains(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
                     ble_delSceneLocalToDevice(deviceAddr, sceneId);
-                } else if (isContainString(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
+                } else if (StringContains(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
                     ble_delSceneLocalToDevice(deviceAddr, sceneId);
                 }
             }

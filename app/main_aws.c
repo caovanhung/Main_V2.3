@@ -395,10 +395,10 @@ void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIden
     memcpy(topic, pPublishInfo->pTopicName, pPublishInfo->topicNameLength);
     topic[pPublishInfo->topicNameLength] = 0;
 
-    if (isContainString(topic, "accountInfo")) {
-        free(topic);
-        return;
-    }
+    // if (StringContains(topic, "accountInfo")) {
+    //     free(topic);
+    //     return;
+    // }
 
     JSON* recvPacket = JSON_Parse(aws_buff);
     if (recvPacket) {

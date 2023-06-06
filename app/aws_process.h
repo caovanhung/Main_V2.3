@@ -176,7 +176,7 @@ typedef enum {
 
 void getHcInformation();
 char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType);
-JSON* Aws_GetShadow(const char* shadowName);
+JSON* Aws_GetShadow(const char* thingName, const char* shadowName);
 void Aws_SyncDatabase();
 //for pre-process
 bool AWS_short_message_received(char *value);

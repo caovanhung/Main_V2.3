@@ -32,6 +32,9 @@
 #include "cJSON.h"
 #include "gpio.h"
 
+#define TYPE_CONFIG_WIFI        99
+#define TYPE_CONFIG_WIFI_GW     100
+
 #define USER_BUTTON         (PF + 0)
 #define USER_LED            (PD + 23)
 #define LED_ON              g_ledDelayTime = 0; pinWrite(USER_LED, 1)
@@ -56,6 +59,7 @@ static int g_ledDelayTime = 0;
 static char g_wifiSSID[100] = {0};
 static char g_wifiPASS[100] = {0};
 static char g_homeId[100] = {0};
+static bool g_needConfigGw = false;
 static char g_accountId[100] = {0};
 static bool g_wifiConnectDone = false;
 static bool g_wifiIsConnected = false;
@@ -78,30 +82,34 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
     logInfo("Payload: %s", msg->payload);
     JSON* recvMsg = JSON_Parse(msg->payload);
     if (StringCompare(msg->topic, "MANAGER_SERVICES/Setting/Wifi")) {
-        JSON* wifiInfo = JSON_GetObject(recvMsg, "wifi_info");
-        char* ssid = JSON_GetText(wifiInfo, "ssid");
-        char* pass = JSON_GetText(wifiInfo, "pass");
-        if (ssid) {
-            StringCopy(g_wifiSSID, ssid);
-        }
-        if (pass) {
-            StringCopy(g_wifiPASS, pass);
-        }
-        logInfo("SSID: %s, PASS: %s", ssid, pass);
-        g_homeId[0] = 0;
-        g_accountId[0] = 0;
+        int type = JSON_GetNumber(recvMsg, "type");
+        if (type == TYPE_CONFIG_WIFI || type == TYPE_CONFIG_WIFI_GW) {
+            JSON* wifiInfo = JSON_GetObject(recvMsg, "wifi_info");
+            char* ssid = JSON_GetText(wifiInfo, "ssid");
+            char* pass = JSON_GetText(wifiInfo, "pass");
+            if (ssid) {
+                StringCopy(g_wifiSSID, ssid);
+            }
+            if (pass) {
+                StringCopy(g_wifiPASS, pass);
+            }
+            logInfo("SSID: %s, PASS: %s", ssid, pass);
+            g_homeId[0] = 0;
+            g_accountId[0] = 0;
+            g_needConfigGw = type == TYPE_CONFIG_WIFI_GW? true : false;
 
-        if (JSON_HasKey(recvMsg, "home_info")) {
-            JSON* homeInfo = JSON_GetObject(recvMsg, "home_info");
-            char* homeId = JSON_GetText(homeInfo, "home_id");
-            char* accountId = JSON_GetText(homeInfo, "account_id");
-            if (homeId) {
-                StringCopy(g_homeId, homeId);
+            if (JSON_HasKey(recvMsg, "home_info")) {
+                JSON* homeInfo = JSON_GetObject(recvMsg, "home_info");
+                char* homeId = JSON_GetText(homeInfo, "home_id");
+                char* accountId = JSON_GetText(homeInfo, "account_id");
+                if (homeId) {
+                    StringCopy(g_homeId, homeId);
+                }
+                if (accountId) {
+                    StringCopy(g_accountId, accountId);
+                }
+                logInfo("HomeId: %s, AccountId: %s", g_homeId, g_accountId);
             }
-            if (accountId) {
-                StringCopy(g_accountId, accountId);
-            }
-            logInfo("HomeId: %s, AccountId: %s", g_homeId, g_accountId);
         }
     } else {
         JSON* payload = JSON_GetText(recvMsg, "Payload");
@@ -287,8 +295,10 @@ void MainLoop() {
                         fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\"}", g_accountId, g_homeId);
                         fclose(f);
                         PlayAudio("wifi_config_success");
-                        char* message = "{\"type\":102}";
-                        mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
+                        if (g_needConfigGw) {
+                            char* message = "{\"type\":102}";
+                            mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
+                        }
                     }
                 } else {
                     LED_OFF;
@@ -308,9 +318,7 @@ int main(int argc, char ** argv) {
     pinMode(USER_BUTTON, INPUT);
     LED_ON;
     Mosq_Init();
-    // system("nmcli r wifi off");
     sleep(1);
-    // system("nmcli r wifi on");
     LED_OFF;
 
     long long a = 0;

@@ -15,6 +15,7 @@ void getHcInformation() {
     JSON* setting = JSON_Parse(buff);
     char* homeId = JSON_GetText(setting, "homeId");
     char* thingId = JSON_GetText(setting, "thingId");
+    JSON_Delete(setting);
     free(g_homeId);
     free(g_thingId);
     g_homeId = malloc(StringLength(homeId));
@@ -68,11 +69,11 @@ char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType) 
     return topic;
 }
 
-JSON* Aws_GetShadow(const char* shadowName) {
+JSON* Aws_GetShadow(const char* thingName, const char* shadowName) {
     char result[50000];
     char request[500];
     char url[200];
-    sprintf(url, "https://a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", g_thingId, shadowName);
+    sprintf(url, "https://a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", thingName, shadowName);
     char* certName = "c8f9a13dc7c253251b9e250439897bc010f501edd780348ecc1c2e91add22237";
     sprintf(request, "curl --tlsv1.2 --cacert /usr/bin/AmazonRootCA1.pem --cert /usr/bin/%s-certificate.pem.crt --key /usr/bin/%s-private.pem.key  %s", certName, certName, url);
     printf(request);
@@ -94,7 +95,7 @@ JSON* Aws_GetShadow(const char* shadowName) {
 
 void Aws_SyncDatabase() {
     // Get number of pages
-    JSON* accountInfo = Aws_GetShadow("accountInfo");
+    JSON* accountInfo = Aws_GetShadow(g_thingId, "accountInfo");
     if (accountInfo) {
         int devicePages = JSON_HasKey(accountInfo, "pageIndex0")? JSON_GetNumber(accountInfo, "pageIndex0") : 1;
         int groupPages = JSON_HasKey(accountInfo, "pageIndex3")? JSON_GetNumber(accountInfo, "pageIndex3") : 1;
@@ -104,7 +105,7 @@ void Aws_SyncDatabase() {
         for (int i = 1; i <= devicePages; i++) {
             char str[10];
             sprintf(str, "d_%d", i);
-            JSON* devices = Aws_GetShadow(str);
+            JSON* devices = Aws_GetShadow(g_thingId, str);
             if (devices) {
                 // Add devices from cloud to syncingDevices array
                 JSON* syncingDevices = JSON_CreateArray();
@@ -140,7 +141,7 @@ void Aws_SyncDatabase() {
         for (int i = 1; i <= groupPages; i++) {
             char str[10];
             sprintf(str, "g_%d", i);
-            JSON* groups = Aws_GetShadow(str);
+            JSON* groups = Aws_GetShadow(g_thingId, str);
             if (groups) {
                 // Add groups from cloud to syncingGroups array
                 JSON* syncingGroups = JSON_CreateArray();
@@ -173,7 +174,7 @@ void Aws_SyncDatabase() {
         for (int i = 1; i <= scenePages; i++) {
             char str[10];
             sprintf(str, "s_%d", i);
-            JSON* scenes = Aws_GetShadow(str);
+            JSON* scenes = Aws_GetShadow(g_thingId, str);
             if (scenes) {
                 // Add scenes from cloud to syncingScenes array
                 JSON* syncingScenes = JSON_CreateArray();

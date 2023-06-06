@@ -26,7 +26,7 @@ char* Hex2String( char *hex,unsigned int len);
 * function:     Convert a string to array hex 2 byte
 * in param:     givenStr: input string need convert
 *               hexStr  : input hex after convert                     
-* out param:	return result into pointer hexStr 
+* out param:    return result into pointer hexStr 
 *******************************************************************/
 void String2HexArr(char *givenStr, unsigned char *hexStr);
 
@@ -44,16 +44,6 @@ int Int2String(int i,char *str);
 * out param:        return true if same, or false if not same
 *******************************************************************/
 bool isMatchString(const char *string_1,const char *string_2 );
-
-
-/*******************************************************************
-* name:             isContainString
-* function:         which checks if a given string contains another given string
-* in param:         string_contain: 
-                    string_match  : string need check
-* out param:        True if success or False if Failed
-*******************************************************************/
-bool isContainString(const char *string_contain,const char *string_match);
 
 /*******************************************************************
 * name:             strremove

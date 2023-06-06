@@ -18,6 +18,9 @@ HG_WIFI: app/main_wifi.o lib/time_t.o lib/queue.o lib/parson.o lib/core_process_
 HG_CFG: app/main_cfg.o lib/time_t.o lib/parson.o lib/helper.o lib/cJSON.o lib/gpio.o
 	$(CC)   app/main_cfg.o lib/time_t.o lib/parson.o lib/helper.o lib/cJSON.o lib/gpio.o -lm -o HG_CFG $(CFLAGS)
 
+ota: ota/main_ota.o lib/core_mqtt_state.o lib/openssl_posix.o lib/sockets_posix.o lib/backoff_algorithm.o lib/clock_posix.o lib/core_mqtt.o lib/core_mqtt_serializer.o lib/parson.o lib/queue.o app/aws_process.o lib/core_process_t.o app/aws_mosquitto.o lib/time_t.o lib/helper.o app/messages.o lib/cJSON.o
+	$(CC) ota/main_ota.o lib/core_mqtt_state.o lib/openssl_posix.o lib/sockets_posix.o lib/backoff_algorithm.o lib/clock_posix.o lib/core_mqtt.o lib/core_mqtt_serializer.o lib/parson.o lib/queue.o app/aws_process.o lib/core_process_t.o app/aws_mosquitto.o lib/time_t.o lib/helper.o app/messages.o lib/cJSON.o -lm -o HG_OTA $(CFLAGS)
+
 clean:
 	rm app/*.o
 	rm lib/*.o

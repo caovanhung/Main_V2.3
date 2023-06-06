@@ -126,9 +126,9 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
 
     int size_queue = get_sizeQueue(queue_received);
     if (size_queue < QUEUE_SIZE) {
-        if(isContainString( msg->topic,MOSQ_LayerService_Core)){
+        if(StringContains( msg->topic,MOSQ_LayerService_Core)){
             enqueue(queue_received,(char *) msg->payload);
-        } else if (isContainString( msg->topic,"/topic/detected/")){
+        } else if (StringContains( msg->topic,"/topic/detected/")){
             JSON_Value *root_value = json_value_init_object();
             JSON_Object *root_object = json_value_get_object(root_value);
             json_object_set_string(root_object, MOSQ_NameService, SERVICE_HANET);
