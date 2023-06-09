@@ -156,8 +156,9 @@ int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr) {
 
 int Db_SaveDeviceState(const char* deviceId, int state) {
     ASSERT(deviceId);
+    long long int currentTime = timeInMilliseconds();
     char sqlCmd[200];
-    sprintf(sqlCmd, "UPDATE devices_inf SET state='%d' WHERE deviceId='%s';", state, deviceId);
+    sprintf(sqlCmd, "UPDATE devices_inf SET state='%d', last_updated='%lld' WHERE deviceId='%s';", state, currentTime, deviceId);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -187,12 +188,10 @@ int Db_AddGroup(const char* groupAddr, const char* groupName, const char* device
     sprintf(sqlCmd, "INSERT INTO GROUP_INF(groupAdress, name, isLight, devices, pageIndex) VALUES('%s', '%s', '%d', '%s', %d)", groupAddr, groupName, isLight, devices, pageIndex);
     Sql_Exec(sqlCmd);
     if (isLight) {
-        sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%s', '%s', %d)", groupAddr, groupAddr, "20", "0", pageIndex);
-        Sql_Exec(sqlCmd);
-        sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%s', '%s', %d)", groupAddr, groupAddr, "22", "0", pageIndex);
-        Sql_Exec(sqlCmd);
-        sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%s', '%s', %d)", groupAddr, groupAddr, "23", "0", pageIndex);
-        Sql_Exec(sqlCmd);
+        for (int dp = 20; dp <= 24; dp++) {
+            sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, address, dpId, dpValue, pageIndex) VALUES('%s', '%s', '%d', '%d', %d)", groupAddr, groupAddr, dp, 0, pageIndex);
+            Sql_Exec(sqlCmd);
+        }
         sprintf(sqlCmd, "INSERT INTO DEVICES_INF(deviceId, unicast, name, pid, pageIndex) VALUES('%s', '%s', '%s', '%s', '%d')", groupAddr, groupAddr, groupName, pid, pageIndex);
         Sql_Exec(sqlCmd);
     }
@@ -239,6 +238,8 @@ int Db_DeleteGroup(const char* groupAddr) {
     sprintf(sqlCmd, "DELETE FROM group_inf WHERE groupAdress = '%s'", groupAddr);
     Sql_Exec(sqlCmd);
     sprintf(sqlCmd, "DELETE FROM devices WHERE address = '%s'", groupAddr);
+    Sql_Exec(sqlCmd);
+    sprintf(sqlCmd, "DELETE FROM devices_inf WHERE unicast = '%s'", groupAddr);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -338,6 +339,26 @@ int Db_LoadSceneToRam() {
         StringCopy(g_sceneList[g_sceneCount].id, sqlite3_column_text(row, 0));
         g_sceneList[g_sceneCount].type = atoi(sqlite3_column_text(row, 4));
 
+        // Load preconditions
+        char* preconditions = sqlite3_column_text(row, 10);
+        JSON* pre = JSON_Parse(preconditions);
+        if (pre) {
+            char* loops = JSON_GetText(pre, "loops");
+            g_sceneList[g_sceneCount].effectRepeat = strtol(loops, NULL, 2);
+            char* start = JSON_GetText(pre, "start");
+            char* end = JSON_GetText(pre, "end");
+            list_t* timeItems = String_Split(start, ":");
+            if (timeItems->count == 2) {
+                g_sceneList[g_sceneCount].effectFrom = atoi(timeItems->items[0]) * 60 + atoi(timeItems->items[1]);
+            }
+            List_Delete(timeItems);
+            timeItems = String_Split(end, ":");
+            if (timeItems->count == 2) {
+                g_sceneList[g_sceneCount].effectTo = atoi(timeItems->items[0]) * 60 + atoi(timeItems->items[1]);
+            }
+            List_Delete(timeItems);
+        }
+
         // Load actions
         char* actions = sqlite3_column_text(row, 5);
         JSON* actionsArray = JSON_Parse(actions);
@@ -383,7 +404,7 @@ int Db_LoadSceneToRam() {
             cond->timeReached = 0;
             if (StringCompare(cond->entityId, "timer")) {
                 cond->conditionType = EntitySchedule;
-                cond->repeat = atoi(JSON_GetText(exprArray, "loops"));
+                cond->repeat = JSON_GetNumber(condition, "repeat"); //atoi(JSON_GetText(exprArray, "loops"));
                 char* time = JSON_GetText(exprArray, "time");
                 list_t* timeItems = String_Split(time, ":");
                 if (timeItems->count == 2) {
@@ -431,11 +452,13 @@ int Db_LoadSceneToRam() {
 }
 
 int Db_SaveSceneCondRepeat(const char* sceneId, int conditionIndex, uint8_t repeat) {
-    char* sqlCmd[200];
+    char sqlCmd[200];
     char* conditions = NULL;
     sprintf(sqlCmd, "SELECT conditions FROM scene_inf WHERE sceneId='%s'", sceneId);
     Sql_Query(sqlCmd, row) {
-        conditions = sqlite3_column_text(row, 0);
+        char* cond = sqlite3_column_text(row, 0);
+        conditions = malloc(strlen(cond) + 1);
+        StringCopy(conditions, cond);
     }
     if (conditions) {
         JSON* conditionsArray = JSON_Parse(conditions);
@@ -447,13 +470,17 @@ int Db_SaveSceneCondRepeat(const char* sceneId, int conditionIndex, uint8_t repe
             }
             i++;
         }
-        conditions = cJSON_PrintUnformatted(conditionsArray);
-        sprintf(sqlCmd, "UPDATE scene_inf SET conditions='%s')", conditions);
-        Sql_Exec(sqlCmd);
+        char* condStr = cJSON_PrintUnformatted(conditionsArray);
+        char* updateSql = malloc(StringLength(condStr) + 500);
+        sprintf(updateSql, "UPDATE scene_inf SET conditions='%s' WHERE sceneId='%s'", condStr, sceneId);
+        Sql_Exec(updateSql);
         Db_LoadSceneToRam();
-        free(conditions);
         JSON_Delete(conditionsArray);
+        free(condStr);
+        free(updateSql);
+        free(conditions);
     }
+    return 0;
 }
 
 int Db_AddScene(JSON* sceneInfo) {
@@ -466,15 +493,24 @@ int Db_AddScene(JSON* sceneInfo) {
     JSON* conditionsObj = JSON_GetObject(sceneInfo, "conditions");
     char* actions = cJSON_PrintUnformatted(actionsObj);
     char* conditions = cJSON_PrintUnformatted(conditionsObj);
+    char* preconditions;
+    if (JSON_HasKey(sceneInfo, "preconditions")) {
+        preconditions = cJSON_PrintUnformatted(JSON_GetObject(sceneInfo, "preconditions"));
+    } else {
+        preconditions = "";
+    }
     char* sqlCmd = malloc(StringLength(actions) + StringLength(conditions) + 500);
-    sprintf(sqlCmd, "INSERT INTO SCENE_INF(sceneId, name, state, isLocal, sceneType, actions, conditions)  \
-                                    VALUES('%s',    '%s', '%d',  '%d',    '%s',      '%s',    '%s')",
-                                           sceneId, name, state, isLocal, sceneType, actions, conditions);
+    sprintf(sqlCmd, "INSERT INTO SCENE_INF(sceneId, name, state, isLocal, sceneType, actions, conditions, preconditions)  \
+                                    VALUES('%s',    '%s', '%d',  '%d',    '%s',      '%s',    '%s',       '%s')",
+                                           sceneId, name, state, isLocal, sceneType, actions, conditions, preconditions);
     Sql_Exec(sqlCmd);
     Db_LoadSceneToRam();
     free(sqlCmd);
     free(actions);
     free(conditions);
+    if (!StringCompare(preconditions, "")) {
+        free(preconditions);
+    }
     return 1;
 }
 
@@ -570,6 +606,7 @@ int Db_AddDeviceHistory(JSON* packet) {
     sprintf(sqlCmd, "INSERT INTO device_histories(time  , causeType, causeId, eventType, deviceId, dpId, dpValue) \
                                            VALUES('%lld', %d       , '%s'   , %d        , '%s'    , %d  , '%d'  )",
                                                   time  , causeType, causeId, eventType, deviceId, dpId, dpValue);
+    // printf("[Db_AddDeviceHistory]: %s", sqlCmd);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -653,7 +690,7 @@ bool creat_table_database(sqlite3 **db)
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS SCENE_INF;CREATE TABLE SCENE_INF(sceneId TEXT,isLocal INTEGER,state INTEGER,name TEXT,sceneType TEXT,actions TEXT,conditions TEXT,created INTEGER,last_updated INTEGER, pageIndex INTEGER);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS SCENE_INF;CREATE TABLE SCENE_INF(sceneId TEXT,isLocal INTEGER,state INTEGER,name TEXT,sceneType TEXT,actions TEXT,conditions TEXT,created INTEGER,last_updated INTEGER, pageIndex INTEGER, preconditions TEXT);");
     if(check != 0)
     {
         printf("DELETE SCENE_INF is error!\n");

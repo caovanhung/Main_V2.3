@@ -15,7 +15,6 @@ void getHcInformation() {
     JSON* setting = JSON_Parse(buff);
     char* homeId = JSON_GetText(setting, "homeId");
     char* thingId = JSON_GetText(setting, "thingId");
-    JSON_Delete(setting);
     free(g_homeId);
     free(g_thingId);
     g_homeId = malloc(StringLength(homeId));
@@ -23,6 +22,7 @@ void getHcInformation() {
     StringCopy(g_homeId, homeId);
     StringCopy(g_thingId, thingId);
     myLogInfo("HomeId: %s, ThingId: %s", g_homeId, g_thingId);
+    JSON_Delete(setting);
 }
 
 char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType) {
@@ -368,6 +368,7 @@ bool AWS_get_info_device(Info_device *inf_device,Pre_parse *pre_detect)
         return false;
     }
     inf_device->deviceID        = pre_detect->object;
+    inf_device->senderId        = pre_detect->senderId;
     inf_device->IDgateway       = (char*)json_object_get_string(pre_detect->JS_object, "gateWay");
     inf_device->pageIndex       = pre_detect->pageIndex;
     inf_device->name            = (char*)json_object_get_string(pre_detect->JS_object, KEY_NAME);
@@ -438,6 +439,7 @@ bool MOSQ_getTemplateAddDevice(char **result,Info_device *inf_device)
     json_object_set_number(root_object, "last_updated", 2222);
     json_object_set_number(root_object, "state", TYPE_DEVICE_ONLINE);
     json_object_set_number(root_object, "pageIndex", inf_device->pageIndex);
+    json_object_set_string(root_object, "senderId", inf_device->senderId);
 
 
     json_object_dotset_number(root_object, "protocol_para.provider",    inf_device->provider );
@@ -457,46 +459,6 @@ bool MOSQ_getTemplateAddDevice(char **result,Info_device *inf_device)
     strcpy(*result,serialized_string);
     json_free_serialized_string(serialized_string);
     json_value_free(root_value);
-    return true;
-}
-
-/*
-Note: Have optimite *result = malloc(max_size_message_received);
-*/
-bool AWS_getInfoScene(Info_scene *inf_scene,Pre_parse *pre_detect)
-{
-    inf_scene->sceneId              = pre_detect->object;
-    inf_scene->name                 = (char*)json_object_get_string(pre_detect->JS_object, KEY_NAME);
-    inf_scene->sceneState           = 1;
-    inf_scene->sceneControl         = 0;
-    char *scene_inf =  (char*)json_object_get_string(pre_detect->JS_object, SCENE_INF);
-    char sceneType_[3];
-    memset(sceneType_, '\0', sizeof(sceneType_));
-    strncpy(sceneType_, scene_inf, 1);
-    if(isMatchString(sceneType_,"0"))
-    {
-        inf_scene->sceneType = "0";
-    }
-    else if(isMatchString(sceneType_,"1"))
-    {
-        inf_scene->sceneType = "1";
-    }
-    else if(isMatchString(sceneType_,"2"))
-    {
-        inf_scene->sceneType = "2";
-    }
-    inf_scene->isLocal      =  json_object_get_boolean(pre_detect->JS_object, KEY_IS_LOCAL);
-    inf_scene->actions      =  (char*)json_serialize_to_string_pretty(json_object_get_value(pre_detect->JS_object, KEY_ACTIONS));
-    inf_scene->conditions   =  (char*)json_serialize_to_string_pretty(json_object_get_value(pre_detect->JS_object, KEY_CONDITIONS));
-    // if(inf_scene->isLocal)
-    // {
-    //  if(inf_scene->conditions ==NULL)
-    //  {
-    //      return false;
-    //  }
-    //  else
-    //      return true;
-    // }
     return true;
 }
 

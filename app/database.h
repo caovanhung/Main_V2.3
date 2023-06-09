@@ -95,7 +95,7 @@ typedef struct {
     char            expr[5];        // Biểu thức so sánh để so sánh giá trị thực tế của dp và dpValue để quyết định xem điều kiện có thỏa mãn hay không
     int             schMinutes;     // Thời điểm trong ngày cần thực hiện nếu entityType = đặt lịch
     uint8_t         repeat;         // Danh sách thứ trong tuần cần lặp lại nếu entityType = đặt lịch
-    uint8_t         timeReached;    // Private variable for conditionType = EntitySchedule (0: this condition is not satisfied, 1: this condition is satified)
+    int             timeReached;    // Private variable for conditionType = EntitySchedule (0: this condition is not satisfied, 1: this condition is satified)
 } SceneCondition;
 
 typedef struct {

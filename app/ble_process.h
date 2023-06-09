@@ -122,14 +122,7 @@ void BLE_SendUartFrameLoop();
 bool GW_GetDeviceOnOffState(const char* dpAddr);
 bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue);
 bool GW_HgSwitchOnOff_NoResp(const char* dpAddr, uint8_t dpValue);
-
-/*
- * On/Off control
- * Models: HG_BLE_LIGHT_WHITE (20), RD_BLE_LIGHT_WHITE (20), RD_BLE_LIGHT_WHITE_TEST (20),
- *         RD_BLE_LIGHT_RGB (20), HG_BLE_CURTAIN_2_LAYER, HG_BLE_ROLLING_DOOR, HG_BLE_CURTAIN_NORMAL,
- *         LIGHT_GROUP (20)
- */
-bool ble_controlOnOFF(const char *address_element, const char *state);
+bool GW_CtrlLightOnOff(const char *deviceAddr, uint8_t onoff);
 
 /*
  * Control lightness and color temperature
@@ -143,13 +136,8 @@ bool ble_controlCTL(const char *address_element, int lightness, int colorTempera
  * Control HSL color of RGB light
  * Models: RD_BLE_LIGHT_RGB (24), LIGHT_GROUP (24)
  */
-bool ble_controlHSL(const char *address_element, const char *HSL);
-
-/*
- * Control blink mode of RGB light
- * Models: RD_BLE_LIGHT_RGB (21), LIGHT_GROUP (21)
- */
-bool ble_controlModeBlinkRGB(const char *address_element, const char *modeBlinkRgb);
+bool GW_SetLightHSL(const char *address_element, const char *HSL);
+bool GW_SetRGBLightBlinkMode(const char *dpAddr, uint8_t blinkMode);
 
 /*
  * Dim LED of switch
@@ -159,14 +147,9 @@ bool ble_dimLedSwitch_HOMEGY(const char *address_device, int lightness);
 /*
  * Add/Delete a CCT light to/from a group
  */
-bool ble_addDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
-bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
-
-/*
- * Add a switch to a group
- */
-bool ble_addDeviceToGroupLink(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
-
+bool GW_AddGroupLight(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
+bool GW_AddGroupSwitch(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
+bool GW_DeleteGroup(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
 /*
  * Lock agency
  */
@@ -180,8 +163,8 @@ bool ble_logTouch(const char *address_element, uint8_t dpId, int state);
 /*
  * Add/delete local scene
  */
-bool ble_setSceneLocalToDeviceSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param);
-bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const char* sceneID);
+bool GW_SetSceneActionForSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param);
+bool GW_SetSceneActionForLight(const char* address_device,const char* sceneID);
 bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID,const char* modeBlinkRgb );
 bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue);
 bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID);
@@ -243,7 +226,7 @@ bool GW_DeleteDevice(const char* deviceAddr);
 
 char *get_dpid(const char *code);
 
-bool  GW_CtrlGroupLightOnoff(const char *groupAddr, uint8_t onoff);
+bool  GW_CtrlGroupLightOnOff(const char *groupAddr, uint8_t onoff);
 bool GW_CtrlGroupLightCT(const char *dpAddr, int lightness, int colorTemperature);
 bool  GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl);
 

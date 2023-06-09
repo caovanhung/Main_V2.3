@@ -5,4 +5,4 @@ def get_ip_address():
     return s.getsockname()[0]
 
 ipAddress = get_ip_address()
-print(ipAddress)
+print(ipAddress, end='')

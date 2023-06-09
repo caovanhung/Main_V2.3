@@ -13,7 +13,6 @@ void CoreInit() {
     g_checkRespList   = JSON_CreateArray();
 }
 
-
 JSON* parseGroupNormalDevices(const char* devices) {
     JSON* devicesArray = cJSON_CreateArray();
     if (devices) {
@@ -71,6 +70,93 @@ JSON* parseGroupLinkDevices(const char* devices) {
     return devicesArray;
 }
 
+// Add device that need to check response to response list
+JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr) {
+    ASSERT(itemId); ASSERT(deviceAddr);
+    JSON* item = requestIsInRespList(reqType, itemId);
+    if (item == NULL) {
+        char reqTypeStr[10];
+        sprintf(reqTypeStr, "%d.%s", reqType, itemId);
+        item = JArr_CreateObject(g_checkRespList);
+        JSON_SetText(item, "reqType", reqTypeStr);
+        JSON_SetNumber(item, "createdTime", timeInMilliseconds());
+        JSON* devices = JSON_AddArray(item, "devices");
+    }
+    JSON* devices = JSON_GetObject(item, "devices");
+    if (JArr_FindByText(devices, "addr", deviceAddr) == NULL) {
+        JSON *device = JArr_CreateObject(devices);
+        JSON_SetText(device, "addr", deviceAddr);
+        JSON_SetNumber(device, "status", -1);
+    }
+    return item;
+}
+
+JSON* requestIsInRespList(int reqType, const char* itemId) {
+    ASSERT(itemId);
+    char reqTypeStr[10];
+    sprintf(reqTypeStr, "%d.%s", reqType, itemId);
+    JSON* item = JArr_FindByText(g_checkRespList, "reqType", reqTypeStr);
+    return item;
+}
+
+void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr, int status) {
+    ASSERT(itemId); ASSERT(deviceAddr);
+    JSON* item = requestIsInRespList(reqType, itemId);
+    if (item) {
+        JSON* devices = JSON_GetObject(item, "devices");
+        JSON* device = JArr_FindByText(devices, "addr", deviceAddr);
+        if (device) {
+            JSON_SetNumber(device, "status", status);
+        }
+    }
+}
+
+int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr) {
+    JSON* item = requestIsInRespList(reqType, itemId);
+    if (item) {
+        JSON* devices = JSON_GetObject(item, "devices");
+        JSON* device = JArr_FindByText(devices, "addr", deviceAddr);
+        if (device) {
+            return (int)JSON_GetNumber(device, "status");
+        }
+    }
+    return 0;
+}
+
+
+void Aws_DeleteDevice(const char* deviceId, int pageIndex) {
+    ASSERT(deviceId);
+    char payload[200];
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_DEL_DEVICE, SENDER_HC_VIA_CLOUD, deviceId);
+    sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_KICKOUT, pageIndex, payload);
+}
+
+void Aws_SaveDeviceState(const char* deviceId, int state, int pageIndex) {
+    ASSERT(deviceId);
+    char payload[200];
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%d}}}}", TYPE_UPDATE_DEVICE, SENDER_HC_VIA_CLOUD, deviceId, state);
+    sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_STATE, pageIndex, payload);
+}
+
+void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex) {
+    ASSERT(deviceId);
+    char payload[200];
+    sprintf(payload,"{\"deviceId\":\"%s\", \"state\":2, \"dpId\":%d, \"dpValue\":%d}", deviceId, dpId, value);
+    sendToServicePageIndex(SERVICE_AWS, GW_RESP_DEVICE_STATUS, pageIndex, payload);
+}
+
+void Aws_UpdateGroupValue(const char* groupAddr, uint8_t onoff) {
+    DeviceInfo deviceInfo;
+    int foundDevices = Db_FindDevice(&deviceInfo, groupAddr);
+    if (foundDevices == 1) {
+        int pageIndex = deviceInfo.pageIndex;
+        char payload[200];
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"dictDPs\":{\"20\":%s}}}}}", TYPE_CTR_GROUP_NORMAL, SENDER_HC_VIA_CLOUD, groupAddr, onoff?"true":"false");
+        sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
+    }
+}
+
+
 void Ble_ControlDeviceArray(const char* deviceId, uint8_t* dpIds, double* dpValues, int dpCount, const char* causeId) {
     ASSERT(deviceId);
     ASSERT(dpIds);
@@ -108,7 +194,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
                 JSON_SetNumber(dp, "value", o->valueint);
                 JSON_SetText(dp, "valueString", o->valuestring);
                 cJSON_AddItemToArray(newDictDps, dp);
-                Aws_SaveDpValue(deviceId, dpId, o->valueint, dpInfo.pageIndex);
+                // Aws_SaveDpValue(deviceId, dpId, o->valueint, dpInfo.pageIndex);
                 if (causeId) {
                     JSON* history = JSON_CreateObject();
                     JSON_SetText(history, "deviceId", deviceId);
@@ -136,8 +222,14 @@ void Ble_ControlGroup(const char* groupAddr, JSON* dictDPs) {
     ASSERT(groupAddr);
     ASSERT(dictDPs);
     DeviceInfo deviceInfo;
-    int foundDevices = Db_FindDevice(&deviceInfo, groupAddr); //groupAddr no have into table devices_inf in database
+    int foundDevices = Db_FindDevice(&deviceInfo, groupAddr);
     if (foundDevices == 1) {
+        // Update status of this group to AWS
+        if (JSON_HasKey(dictDPs, "20")) {
+            uint8_t onoffValue = JSON_GetNumber(dictDPs, "20");
+            Aws_UpdateGroupValue(groupAddr, onoffValue);
+        }
+
         // Update status of devices in this group to AWS
         char* devicesStr = Db_FindDevicesInGroup(groupAddr);
         JSON* groupDevices = parseGroupNormalDevices(devicesStr);
@@ -207,61 +299,4 @@ void Wifi_ControlDevice(const char* deviceId, const char* code) {
     JSON_SetText(p, "code", code);
     sendPacketTo(SERVICE_TUYA, TYPE_CTR_DEVICE, p);
     JSON_Delete(p);
-}
-
-
-
-
-
-// Add device that need to check response to response list
-JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr) {
-    ASSERT(itemId); ASSERT(deviceAddr);
-    JSON* item = requestIsInRespList(reqType, itemId);
-    if (item == NULL) {
-        char reqTypeStr[10];
-        sprintf(reqTypeStr, "%d.%s", reqType, itemId);
-        item = JArr_CreateObject(g_checkRespList);
-        JSON_SetText(item, "reqType", reqTypeStr);
-        JSON_SetNumber(item, "createdTime", timeInMilliseconds());
-        JSON* devices = JSON_AddArray(item, "devices");
-    }
-    JSON* devices = JSON_GetObject(item, "devices");
-    if (JArr_FindByText(devices, "addr", deviceAddr) == NULL) {
-        JSON *device = JArr_CreateObject(devices);
-        JSON_SetText(device, "addr", deviceAddr);
-        JSON_SetNumber(device, "status", -1);
-    }
-    return item;
-}
-
-JSON* requestIsInRespList(int reqType, const char* itemId) {
-    ASSERT(itemId);
-    char reqTypeStr[10];
-    sprintf(reqTypeStr, "%d.%s", reqType, itemId);
-    JSON* item = JArr_FindByText(g_checkRespList, "reqType", reqTypeStr);
-    return item;
-}
-
-void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr, int status) {
-    ASSERT(itemId); ASSERT(deviceAddr);
-    JSON* item = requestIsInRespList(reqType, itemId);
-    if (item) {
-        JSON* devices = JSON_GetObject(item, "devices");
-        JSON* device = JArr_FindByText(devices, "addr", deviceAddr);
-        if (device) {
-            JSON_SetNumber(device, "status", status);
-        }
-    }
-}
-
-int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr) {
-    JSON* item = requestIsInRespList(reqType, itemId);
-    if (item) {
-        JSON* devices = JSON_GetObject(item, "devices");
-        JSON* device = JArr_FindByText(devices, "addr", deviceAddr);
-        if (device) {
-            return (int)JSON_GetNumber(device, "status");
-        }
-    }
-    return 0;
 }

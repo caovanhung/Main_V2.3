@@ -269,9 +269,24 @@ void ResponseWaiting() {
             List_Delete(failedDevices);
             // Send notification to user
             if (reqType != TYPE_CTR_DEVICE) {
-                char noti[100];
-                sprintf(noti, "Thành công: %d, Thất bại: %d", successCount, failedCount + notRespCount);
+                char noti[200];
+                sprintf(noti, "{\\\"successCount\\\": %d, \\\"failedCount\\\": %d, \\\"noResponseCount\\\": %d, \\\"done\\\":true}", successCount, failedCount, notRespCount);
                 sendNotiToUser(noti);
+            }
+        } else {
+            int oldSuccessCount = JSON_HasKey(respItem, "successCount")? JSON_GetNumber(respItem, "successCount") : 0;
+            int oldFailedCount = JSON_HasKey(respItem, "failedCount")? JSON_GetNumber(respItem, "failedCount") : 0;
+            int oldNoResponseCount = JSON_HasKey(respItem, "noResponseCount")? JSON_GetNumber(respItem, "noResponseCount") : 0;
+            if (successCount != oldSuccessCount || failedCount != oldFailedCount || notRespCount != oldNoResponseCount) {
+                JSON_SetNumber(respItem, "successCount", successCount);
+                JSON_SetNumber(respItem, "failedCount", failedCount);
+                JSON_SetNumber(respItem, "noResponseCount", notRespCount);
+                // Send real time status notification to user
+                if (reqType != TYPE_CTR_DEVICE) {
+                    char noti[200];
+                    sprintf(noti, "{\\\"successCount\\\": %d, \\\"failedCount\\\": %d, \\\"noResponseCount\\\": %d, \\\"done\\\":false}", successCount, failedCount, notRespCount);
+                    sendNotiToUser(noti);
+                }
             }
         }
     }
@@ -313,15 +328,15 @@ void checkSceneCondition(Scene* scene) {
         int todayMinutes = info->tm_hour * 60 + info->tm_min;
         if (scene->effectFrom < scene->effectTo) {
             // effectFrom and effectTo are in the same day
-            uint8_t weekdayMark = (0x40 >> info->tm_mday) & scene->effectRepeat;
-            if (weekdayMark && todayMinutes >= scene->effectFrom && todayMinutes > scene->effectTo) {
+            uint8_t weekdayMark = (0x40 >> info->tm_wday) & scene->effectRepeat;
+            if (weekdayMark && todayMinutes >= scene->effectFrom && todayMinutes <= scene->effectTo) {
                 effectTime = true;
             }
         } else {
             // effectFrom and effectTo are in the different days
-            uint8_t todayMark = (0x40 >> info->tm_mday) & scene->effectRepeat;
+            uint8_t todayMark = (0x40 >> info->tm_wday) & scene->effectRepeat;
             uint8_t tomorrowMark = (scene->effectRepeat & 0x01)? scene->effectRepeat | 0x80 : scene->effectRepeat;
-            tomorrowMark = (0x40 >> info->tm_mday) & (tomorrowMark >> 1);
+            tomorrowMark = (0x40 >> info->tm_wday) & (tomorrowMark >> 1);
             if ((todayMark && todayMinutes >= scene->effectFrom) ||
                 (tomorrowMark && todayMinutes <= scene->effectTo)) {
                 effectTime = true;
@@ -523,20 +538,19 @@ void ExecuteScene() {
                     // Get current date time
                     time_t rawtime; struct tm *info; time( &rawtime ); info = localtime(&rawtime);
                     int todayMinutes = info->tm_hour * 60 + info->tm_min;
-                    if ((0x40 >> info->tm_mday) & cond->repeat) {
-                        // After scene is executed, timeReached will be -1
+                    if ((0x40 >> info->tm_wday) & cond->repeat) {
                         if (cond->timeReached == 0 && todayMinutes == cond->schMinutes) {
                             cond->timeReached = 1;
                             checkSceneCondition(scene);     // Check other conditions of this scene
                         } else if (todayMinutes > cond->schMinutes) {
+                            // When scene was created, if no repeating, repeat will be set to 0xFF
+                            // So after scene is executed, we have to set repeat to 0 to disable any checking later
+                            if (cond->repeat == 0xFF && cond->timeReached == -1) {
+                                cond->repeat = 0;
+                                Db_SaveSceneCondRepeat(scene->id, i, cond->repeat);
+                                break;
+                            }
                             cond->timeReached = 0;
-                        }
-                        // When scene was created, if no repeating, repeat will be set to 0xFF
-                        // So after scene is executed, we have to set repeat to 0 to disable any checking later
-                        if (cond->repeat == 0xFF && cond->timeReached == -1) {
-                            cond->repeat = 0;
-                            Db_SaveSceneCondRepeat(scene->id, i, cond->repeat);
-                            break;
                         }
                     }
                 }
@@ -594,21 +608,21 @@ void GetDeviceStatusForGroup(const char* deviceId, int dpId) {
 void GetDeviceStatusInterval() {
     static long long int oldTick = 0;
 
-    if (timeInMilliseconds() - oldTick > 60000) {
+    if (timeInMilliseconds() - oldTick > 120000) {
         oldTick = timeInMilliseconds();
         char sqlCmd[500];
         char pid[1000];
-        sprintf(pid, "%s,%s,%s", HG_BLE_SWITCH, HG_BLE_IR, HG_BLE_CURTAIN);
-        sprintf(sqlCmd, "SELECT address FROM devices \
-                        JOIN devices_inf ON devices.deviceId = devices_inf.deviceId \
-                        WHERE (instr('%s', pid) > 0 OR dpId='20') AND (%lld - updateTime > 60)", pid, oldTick);
+        sprintf(pid, "%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN);
+        sprintf(sqlCmd, "SELECT unicast FROM devices_inf \
+                        WHERE (instr('%s', pid) > 0) AND (last_updated IS NULL OR %lld - last_updated > 50000) AND deviceKey IS NOT NULL", pid, oldTick);
         JSON* devicesArray = cJSON_CreateArray();
         Sql_Query(sqlCmd, row) {
-            JSON* item = JArr_CreateObject(devicesArray);
             char* addr = sqlite3_column_text(row, 0);
-            JSON_SetText(item, "addr", addr);
+            JArr_AddText(devicesArray, addr);
         }
-        sendPacketTo(SERVICE_BLE, TYPE_GET_DEVICE_STATUS, devicesArray);
+        if (JArr_Count(devicesArray) > 0) {
+            sendPacketTo(SERVICE_BLE, TYPE_GET_DEVICE_STATUS, devicesArray);
+        }
         JSON_Delete(devicesArray);
     }
 }
@@ -716,6 +730,7 @@ int main(int argc, char ** argv)
                     }
                     case GW_RESPONSE_IR: {
                         uint8_t respType = JSON_GetNumber(payload, "respType");
+                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                         if (respType == 0) {
                             uint16_t brandId = JSON_GetNumber(payload, "brandId");
                             uint8_t  remoteId = JSON_GetNumber(payload, "remoteId");
@@ -725,7 +740,7 @@ int main(int argc, char ** argv)
                             uint8_t  swing = JSON_GetNumber(payload, "swing");
                             // Find device with brandId and remoteId
                             char sql[500];
-                            sprintf(sql, "select * from devices where dpId=1 AND CAST(dpValue as INTEGER)=%d", brandId);
+                            sprintf(sql, "select * from devices where address='%s' AND dpId=1 AND CAST(dpValue as INTEGER)=%d", deviceAddr, brandId);
                             Sql_Query(sql, row) {
                                 char* deviceId = sqlite3_column_text(row, 0);
                                 sprintf(sql, "select * from devices where deviceId='%s' and dpId=2 and CAST(dpValue as INTEGER)=%d", deviceId, remoteId);
@@ -744,11 +759,20 @@ int main(int argc, char ** argv)
                         } else {
                             uint16_t voiceId = JSON_GetNumber(payload, "voiceId");
                             char sql[500];
-                            sprintf(sql, "select d.deviceId from devices d JOIN devices_inf di ON d.deviceId=di.deviceId where dpId=1 AND pid='BLEHGAA0301'");
+                            sprintf(sql, "select d.deviceId from devices d JOIN devices_inf di ON d.deviceId=di.deviceId where address='%s' AND dpId=1 AND pid='BLEHGAA0301'", deviceAddr);
                             Sql_Query(sql, row) {
                                 char* deviceId = sqlite3_column_text(row, 0);
                                 Db_SaveDpValue(deviceId, 1, voiceId);
+                                JSON* history = JSON_CreateObject();
+                                JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                                JSON_SetNumber(history, "causeType", 0);
+                                JSON_SetText(history, "deviceId", deviceId);
+                                JSON_SetNumber(history, "dpId", 1);
+                                JSON_SetNumber(history, "dpValue", voiceId);
+                                Db_AddDeviceHistory(history);
+                                JSON_Delete(history);
                                 checkSceneForDevice(deviceId, 1, true);
+                                // Clear voiceId in database to prevent executing scene later
                                 Db_SaveDpValue(deviceId, 1, 0);
                             }
                         }
@@ -971,7 +995,6 @@ int main(int argc, char ** argv)
                                 }
                                 JSON_SetNumber(localPacket, "gatewayId", gatewayId);
                                 sendPacketTo(SERVICE_BLE, TYPE_ADD_DEVICE, localPacket);
-                                JSON_Delete(localPacket);
                             } else {
                                 logError("Gateway %s is not found", gatewayAddr);
                             }
@@ -979,8 +1002,14 @@ int main(int argc, char ** argv)
 
                         // Insert device to database
                         addNewDevice(&db, payload);
-                        JSON_SetNumber(payload, "eventType", EV_DEVICE_ADDED);
-                        Db_AddDeviceHistory(payload);
+                        JSON* history = JSON_CreateObject();
+                        JSON_SetNumber(history, "eventType", EV_DEVICE_ADDED);
+                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
+                        JSON_SetText(history, "causeId", JSON_GetText(payload, "senderId"));
+                        JSON_SetText(history, "deviceId", deviceId);
+                        Db_AddDeviceHistory(history);
+                        JSON_Delete(history);
+                        JSON_Delete(localPacket);
                         break;
                     }
                     case TYPE_DEL_DEVICE: {
@@ -1009,6 +1038,7 @@ int main(int argc, char ** argv)
                             // logInfo(cJSON_PrintUnformatted(d));
                             int provider = JSON_GetNumber(d, KEY_PROVIDER);
                             char* deviceId = JSON_GetText(d, "deviceId");
+                            char* pid = JSON_GetText(d, "pid");
                             if (deviceId) {
                                 if (provider == HOMEGY_BLE) {
                                     char* gatewayAddr = JSON_GetText(d, KEY_ID_GATEWAY);
@@ -1037,7 +1067,7 @@ int main(int argc, char ** argv)
                         JSON_ForEach(group, payload) {
                             char* groupAddr = JSON_GetText(group, "groupAddr");
                             char* groupName = JSON_GetText(group, "groupName");
-                            char* devices = JSON_GetObject(group, "devices");
+                            char* devices = JSON_GetText(group, "devices");
                             int isLight = JSON_GetNumber(group, "isLight");
                             char* pid = JSON_GetText(group, "pid");
                             int pageIndex = JSON_GetNumber(group, "pageIndex");
@@ -1207,8 +1237,12 @@ int main(int argc, char ** argv)
                         break;
                     }
                     case TYPE_ADD_GROUP_NORMAL: {
+                        logInfo("TYPE_ADD_GROUP_NORMAL");
                         // Send request to BLE
                         JSON* localPacket = ConvertToLocalPacket(reqType, object_string);
+                        char* tmp = cJSON_PrintUnformatted(localPacket);
+                        logInfo("parsed Packet: %s", tmp);
+                        free(tmp);
                         char* groupAddr = JSON_GetText(localPacket, "groupAddr");
                         sendPacketTo(SERVICE_BLE, reqType, localPacket);
                         JSON* devicesArray = JSON_GetObject(localPacket, "devices");
@@ -1493,6 +1527,8 @@ bool Scene_GetFullInfo(JSON* packet) {
     int isLocal = JSON_GetNumber(packet, "isLocal");
     JSON* newActionsArray = JSON_CreateArray();
     int i = 1;
+
+    // Parse actions
     JSON_ForEach(action, actionsArray) {
         JSON* executorProperty = JSON_GetObject(action, "executorProperty");
         char* actionExecutor = JSON_GetText(action, "actionExecutor");
@@ -1564,6 +1600,8 @@ bool Scene_GetFullInfo(JSON* packet) {
             JSON_SetNumber(action, "commandIndex", i++);
         }
     }
+
+    // Parse conditions
     JSON* conditionsArray = JSON_GetObject(packet, "conditions");
     JSON_ForEach(condition, conditionsArray) {
         int schMinutes = 0;
@@ -1571,7 +1609,10 @@ bool Scene_GetFullInfo(JSON* packet) {
         JSON* exprArray = JSON_GetObject(condition, "expr");
         char* entityId = JSON_GetText(condition, "entityId");
         if (StringCompare(entityId, "timer")) {
-            repeat = atoi(JSON_GetText(exprArray, "loops"));
+            repeat = strtol(JSON_GetText(exprArray, "loops"), NULL, 2);
+            if (repeat == 0) {
+                repeat = 0xFF;
+            }
             char* time = JSON_GetText(exprArray, "time");
             list_t* timeItems = String_Split(time, ":");
             if (timeItems->count == 2) {
@@ -1679,6 +1720,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
                             arrayItem = JSON_CreateObject();
                             JSON_SetText(arrayItem, "deviceId", splitList->items[i]);
                             JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+                            JSON_SetText(arrayItem, "devicePid", deviceInfo.pid);
                             JSON_SetNumber(arrayItem, "gwIndex", deviceInfo.gwIndex);
                         }
                     } else if (arrayItem != NULL) {
@@ -1701,6 +1743,7 @@ JSON* ConvertToLocalPacket(int reqType, const char* cloudPacket) {
                     int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
                     if (foundDevices) {
                         JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+                        JSON_SetText(arrayItem, "devicePid", deviceInfo.pid);
                         JSON_SetNumber(arrayItem, "gwIndex", deviceInfo.gwIndex);
                     }
                     cJSON_AddItemToArray(devicesArray, arrayItem);

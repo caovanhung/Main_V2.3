@@ -32,8 +32,9 @@
 
 extern struct mosquitto * mosq;
 
-#define sendToService(serviceToSend, typeAction, payload)  g_dbgFileName = FILENAME; g_dbgLineNumber =  __LINE__; sendToServiceFunc(mosq, serviceToSend, typeAction, payload);
-bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, const char* payload);
+#define sendToServiceNoDebug(serviceToSend, typeAction, payload)  sendToServiceFunc(mosq, serviceToSend, typeAction, payload, false);
+#define sendToService(serviceToSend, typeAction, payload)  g_dbgFileName = FILENAME; g_dbgLineNumber =  __LINE__; sendToServiceFunc(mosq, serviceToSend, typeAction, payload, true);
+bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, const char* payload, bool printDebug);
 
 #define sendToServicePageIndex(serviceToSend, typeAction, pageIndex, payload)  g_dbgFileName = FILENAME; g_dbgLineNumber =  __LINE__; sendToServicePageIndexFunc(mosq, serviceToSend, typeAction, pageIndex, payload);
 bool sendToServicePageIndexFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, int pageIndex, const char* payload);
@@ -54,9 +55,7 @@ bool get_topic(char **result_topic,const char * layer_service,const char * servi
 bool getFormTranMOSQ(char **ResultTemplate, const char * layer_service,const char * service,int type_action,const char * extend,const char *Id,long long TimeCreat,const char* payload);
 
 
-void Aws_DeleteDevice(const char* deviceId, int pageIndex);
-void Aws_SaveDeviceState(const char* deviceId, int state, int pageIndex);
-void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex);
+
 
 void Aws_updateGroupState(const char* groupAddr, int state);
 void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const list_t* failedDevices);

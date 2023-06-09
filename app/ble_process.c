@@ -63,7 +63,7 @@ void addRetryCountToSendingFrame(uint8_t retryCount) {
 }
 
 void addTimeoutToSendingFrame(uint16_t timeout) {
-    g_uartSendingFrames[g_uartSendingFramesIdx].timeout = timeout;
+    g_uartSendingFrames[g_uartSendingFramesIdx].timeout = timeout + (rand() % 50);
 }
 
 bool sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
@@ -77,7 +77,7 @@ bool sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
             memcpy(g_uartSendingFrames[i].data, data, len);
             g_uartSendingFrames[i].dataLength = len;
             g_uartSendingFrames[i].retryCount = 1;
-            g_uartSendingFrames[i].timeout = 1000;
+            g_uartSendingFrames[i].timeout = 250 + rand() % 50;
             g_uartSendingFramesIdx = i;
             return true;
         }
@@ -116,7 +116,10 @@ void BLE_SendToGateway(int gwIndex) {
     case 0: {
         // Find frame to send
         UartSendingFrame* frame = findFrameToSend(gwIndex);
-        if (frame != NULL) {
+        long long int currentTime = timeInMilliseconds();
+        uint8_t anotherGwIndex = gwIndex == 0? 1 : 0;
+        if (frame != NULL && currentTime - sentTime[anotherGwIndex] > 10) {
+            // printf("currentTime: %ld, sentTime: %ld\n", currentTime, sentTime[anotherGwIndex]);
             sentFrame[gwIndex].timeout = frame->timeout;
             sentFrame[gwIndex].retryCount = frame->retryCount;
             sentFrame[gwIndex].respType = frame->respType;
@@ -127,6 +130,7 @@ void BLE_SendToGateway(int gwIndex) {
             frame->respType = 0;
             state[gwIndex] = 1;
             failedCount[gwIndex] = 0;
+            sentTime[gwIndex] = timeInMilliseconds();
         }
         break;
     }
@@ -134,7 +138,6 @@ void BLE_SendToGateway(int gwIndex) {
         // Send frame to gateway
         g_uartSendingIdx = gwIndex == 0? 3 : 2;
         UART0_Send(g_gatewayFds[gwIndex], sentFrame[gwIndex].data, sentFrame[gwIndex].dataLength);
-        sentTime[gwIndex] = timeInMilliseconds();
         state[gwIndex] = 2;
 
         if (failedCount[gwIndex] == 0) {
@@ -151,14 +154,14 @@ void BLE_SendToGateway(int gwIndex) {
         break;
     }
     case 2: {
-        // Wait for response
-        long long int currentTime = timeInMilliseconds();
-        if (g_uartDeviceResps[respIdx[gwIndex]].status == 0) {
-            g_uartDeviceResps[respIdx[gwIndex]].respType = 0;
-            g_uartDeviceResps[respIdx[gwIndex]].deviceAddr = 0;
-            logInfo("Sending to 0x%04X took %d ms", sentFrame[gwIndex].addr, currentTime - sentTime[gwIndex]);
-            state[gwIndex] = 0;  // Command is success. Goto step 0 to process next frame
-        }
+        // // Wait for response
+        // long long int currentTime = timeInMilliseconds();
+        // if (g_uartDeviceResps[respIdx[gwIndex]].status == 0) {
+        //     g_uartDeviceResps[respIdx[gwIndex]].respType = 0;
+        //     g_uartDeviceResps[respIdx[gwIndex]].deviceAddr = 0;
+        //     logInfo("Sending to 0x%04X took %d ms", sentFrame[gwIndex].addr, currentTime - sentTime[gwIndex]);
+        //     state[gwIndex] = 0;  // Command is success. Goto step 0 to process next frame
+        // }
 
         // Timeout handling
         if (timeInMilliseconds() - sentTime[gwIndex] > sentFrame[gwIndex].timeout) {
@@ -169,33 +172,33 @@ void BLE_SendToGateway(int gwIndex) {
                 // TIMEOUT occurs
                 g_uartDeviceResps[respIdx[gwIndex]].respType = 0;
                 g_uartDeviceResps[respIdx[gwIndex]].deviceAddr = 0;
-                logInfo("Sending to 0x%04X is TIMEOUT", sentFrame[gwIndex].addr);
-                // Send TIMEOUT response to CORE service
-                JSON* p = JSON_CreateObject();
-                if (sentFrame[gwIndex].respType == GW_RESPONSE_GROUP) {
-                    char str[50];
-                    sprintf(str, "%04X", sentFrame[gwIndex].addr);
-                    JSON_SetText(p, "deviceAddr", str);
-                    JSON_SetText(p, "groupAddr", sentFrame[gwIndex].itemId);
-                    JSON_SetNumber(p, "status", 1);
-                    sendPacketTo(SERVICE_CORE, sentFrame[gwIndex].respType, p);
-                } else if (sentFrame[gwIndex].respType == GW_RESPONSE_ADD_SCENE) {
-                    char str[50];
-                    sprintf(str, "%04X", sentFrame[gwIndex].addr);
-                    JSON_SetText(p, "deviceAddr", str);
-                    JSON_SetText(p, "sceneAddr", sentFrame[gwIndex].itemId);
-                    JSON_SetNumber(p, "status", 1);
-                    sendPacketTo(SERVICE_CORE, sentFrame[gwIndex].respType, p);
-                } else if (sentFrame[gwIndex].respType == GW_RESP_DEVICE_STATUS) {
-                    JSON* devicesArray = JSON_AddArray(p, "devices");
-                    JSON* arrayItem = JArr_CreateObject(devicesArray);
-                    char str[50];
-                    sprintf(str, "%04X", sentFrame[gwIndex].addr);
-                    JSON_SetText(arrayItem, "deviceAddr", str);
-                    JSON_SetNumber(arrayItem, "deviceState", TYPE_DEVICE_OFFLINE);
-                    sendPacketTo(SERVICE_CORE, GW_RESPONSE_DEVICE_STATE, p);
-                }
-                JSON_Delete(p);
+                // logInfo("Sending to 0x%04X is TIMEOUT", sentFrame[gwIndex].addr);
+                // // Send TIMEOUT response to CORE service
+                // JSON* p = JSON_CreateObject();
+                // if (sentFrame[gwIndex].respType == GW_RESPONSE_GROUP) {
+                //     char str[50];
+                //     sprintf(str, "%04X", sentFrame[gwIndex].addr);
+                //     JSON_SetText(p, "deviceAddr", str);
+                //     JSON_SetText(p, "groupAddr", sentFrame[gwIndex].itemId);
+                //     JSON_SetNumber(p, "status", 1);
+                //     sendPacketTo(SERVICE_CORE, sentFrame[gwIndex].respType, p);
+                // } else if (sentFrame[gwIndex].respType == GW_RESPONSE_ADD_SCENE) {
+                //     char str[50];
+                //     sprintf(str, "%04X", sentFrame[gwIndex].addr);
+                //     JSON_SetText(p, "deviceAddr", str);
+                //     JSON_SetText(p, "sceneAddr", sentFrame[gwIndex].itemId);
+                //     JSON_SetNumber(p, "status", 1);
+                //     sendPacketTo(SERVICE_CORE, sentFrame[gwIndex].respType, p);
+                // } else if (sentFrame[gwIndex].respType == GW_RESP_DEVICE_STATUS) {
+                //     JSON* devicesArray = JSON_AddArray(p, "devices");
+                //     JSON* arrayItem = JArr_CreateObject(devicesArray);
+                //     char str[50];
+                //     sprintf(str, "%04X", sentFrame[gwIndex].addr);
+                //     JSON_SetText(arrayItem, "deviceAddr", str);
+                //     JSON_SetNumber(arrayItem, "deviceState", TYPE_DEVICE_OFFLINE);
+                //     sendPacketTo(SERVICE_CORE, GW_RESPONSE_DEVICE_STATE, p);
+                // }
+                // JSON_Delete(p);
                 state[gwIndex] = 0;      // Goto step 0 to process next frame
             }
         }
@@ -205,8 +208,8 @@ void BLE_SendToGateway(int gwIndex) {
 }
 
 void BLE_SendUartFrameLoop() {
-    BLE_SendToGateway(1);
     BLE_SendToGateway(0);
+    BLE_SendToGateway(1);
 }
 
 void BLE_PrintFrame(char* str, ble_rsp_frame_t* frame) {
@@ -741,7 +744,7 @@ bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue)
 {
     ASSERT(dpAddr);
 
-    uint8_t data[] = {0xe8, 0xff,  0x00,0x00,0x00,0x00,0x00,0x00,  0xff,0xff,  0x82,0x02, 0x00};
+    uint8_t data[] = {0xe8, 0xff,  0x00,0x00,0x00,0x00,0x02,0x00,  0xff,0xff,  0x82,0x02, 0x00};
     long int dpAddrHex = strtol(dpAddr, NULL, 16);
     data[9] = dpAddrHex & (0xFF);
     data[8] = (dpAddrHex >> 8) & 0xFF;
@@ -749,8 +752,6 @@ bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue)
 
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 13);
     addPriorityToSendingFrame(0);
-    addTimeoutToSendingFrame(3000);
-    addRetryCountToSendingFrame(2);
     return ret;
 }
 
@@ -796,22 +797,14 @@ void ble_getStringControlOnOff(char **result,const char* strAddress,const char* 
     strcat(*result, tmp_3);
 }
 
-bool ble_controlOnOFF(const char *address_element,const char *state)
-{
-    ASSERT(address_element); ASSERT(state);
-
-    char *str_send_uart;
-    unsigned char *hex_send_uart;
-    long int dpAddrHex = strtol(address_element, NULL, 16);
-    ble_getStringControlOnOff(&str_send_uart,address_element,state);
-
-    int len_str = (int)strlen(str_send_uart);
-    hex_send_uart  = (char*) malloc(len_str * sizeof(char));
-    String2HexArr(str_send_uart,hex_send_uart);
-    sendFrameToAnyGw(dpAddrHex, hex_send_uart, len_str/2);
-    addPriorityToSendingFrame(0);
-    free(hex_send_uart);
-    free(str_send_uart);
+bool GW_CtrlLightOnOff(const char *deviceAddr, uint8_t onoff) {
+    ASSERT(deviceAddr);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x02,0x00,  0xff,0xff,  0x82,0x02  ,0x00};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[12] = onoff;
+    sendFrameToAnyGw(dpAddrHex, data, 13);
     return true;
 }
 
@@ -839,11 +832,11 @@ bool ble_dimLedSwitch_HOMEGY(const char *address_device,int lightness)
     return sendFrameToAnyGw(addrHex, SET_DIM, 14);
 }
 
-bool ble_addDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *address_group,const char *address_device,const char *address_element)
+bool GW_AddGroupLight(int gwIndex, const char *address_group,const char *address_device,const char *address_element)
 {
     ASSERT(address_group); ASSERT(address_device); ASSERT(address_element);
 
-    uint8_t  SET_GROUP[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00   ,0x00,0x00 ,0x80,0x1b  ,0x00,0x00,0x00,0x00,  0x00,0x10};
+    uint8_t  SET_GROUP[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x02,0x00   ,0xff,0xff ,0x80,0x1b  ,0x00,0x00,0x00,0x00,  0x00,0x10};
     long int dpAddrHex = strtol(address_device, NULL, 16);
     uint8_t hex_address_group[5];
     uint8_t hex_address_device[5];
@@ -863,16 +856,16 @@ bool ble_addDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *address_group,
     SET_GROUP[15] = *(hex_address_group+1);
 
     bool ret = sendFrameToGwIndex(gwIndex, dpAddrHex, SET_GROUP, 18);
-    addRetryCountToSendingFrame(3);
+    addTimeoutToSendingFrame(500);
     return ret;
 }
 
 
-bool ble_addDeviceToGroupLink(int gwIndex, const char *groupAddr, const char *deviceAddr, const char *dpAddr)
+bool GW_AddGroupSwitch(int gwIndex, const char *groupAddr, const char *deviceAddr, const char *dpAddr)
 {
     ASSERT(groupAddr);  ASSERT(deviceAddr);  ASSERT(dpAddr);
 
-    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00   ,0x00,0x00 ,0x80,0x1b  ,0x00,0x00,0x00,0x00,  0x00,0x10,0x01};
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x02,0x00,  0xff,0xff,  0x80,0x1b  ,0x00,0x00,0x00,0x00,  0x00,0x10,0x01};
     long int deviceAddrHex = strtol(deviceAddr, NULL, 16);
     uint8_t hex_address_group[5];
     uint8_t hex_address_device[5];
@@ -892,16 +885,16 @@ bool ble_addDeviceToGroupLink(int gwIndex, const char *groupAddr, const char *de
     data[15] = *(hex_address_group + 1);
 
     sendFrameToGwIndex(gwIndex, deviceAddrHex, data, 19);
-    addRetryCountToSendingFrame(3);
+    addTimeoutToSendingFrame(500);
     return true;
 }
 
-bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *groupAddr, const char *deviceAddr, const char *dpAddr)
+bool GW_DeleteGroup(int gwIndex, const char *groupAddr, const char *deviceAddr, const char *dpAddr)
 {
     ASSERT(groupAddr); ASSERT(deviceAddr); ASSERT(dpAddr);
 
 
-    uint8_t  SET_GROUP[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00   ,0x00,0x00 ,0x80,0x1c  ,0x00,0x00,0x00,0x00,  0x00,0x10};
+    uint8_t  SET_GROUP[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x02,0x00   ,0xff,0xff ,0x80,0x1c  ,0x00,0x00,0x00,0x00,  0x00,0x10};
     long int deviceAddrHex = strtol(deviceAddr, NULL, 16);
     uint8_t hex_address_group[5];
     uint8_t hex_address_device[5];
@@ -921,7 +914,7 @@ bool ble_deleteDeviceToGroupLightCCT_HOMEGY(int gwIndex, const char *groupAddr, 
     SET_GROUP[15] = hex_address_group[1];
 
     sendFrameToGwIndex(gwIndex, deviceAddrHex, SET_GROUP, 18);
-    addRetryCountToSendingFrame(3);
+    addTimeoutToSendingFrame(500);
     return true;
 }
 
@@ -962,7 +955,7 @@ bool ble_controlCTL(const char *dpAddr, int lightness, int colorTemperature)
     return ret;
 }
 
-bool ble_controlHSL(const char *dpAddr, const char *HSL)
+bool GW_SetLightHSL(const char *dpAddr, const char *HSL)
 {
     ASSERT(dpAddr); ASSERT(HSL);
 
@@ -990,26 +983,17 @@ bool ble_controlHSL(const char *dpAddr, const char *HSL)
 }
 
 
-bool ble_controlModeBlinkRGB(const char *dpAddr, const char *modeBlinkRgb)
-{
-    ASSERT(dpAddr); ASSERT(modeBlinkRgb);
+bool GW_SetRGBLightBlinkMode(const char *dpAddr, uint8_t blinkMode) {
+    ASSERT(dpAddr);
 
-    uint8_t  SET_BLINK[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0x82,0x50,0x19,0x09,  0x00};
+    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0x82,0x50,0x19,0x09,  0x00};
 
     long int dpAddrHex = strtol(dpAddr, NULL, 16);
-    uint8_t hex_address[5];
-    uint8_t hex_modeBlinkRgb[2];
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[14] = blinkMode;
 
-    String2HexArr((char*)dpAddr, hex_address);
-    String2HexArr((char*)modeBlinkRgb,hex_modeBlinkRgb);
-
-    SET_BLINK[8] = hex_address[0];
-    SET_BLINK[9] = hex_address[1];
-
-    SET_BLINK[14] = hex_modeBlinkRgb[0];
-
-    bool ret = sendFrameToAnyGw(dpAddrHex, SET_BLINK, 15);
-    addPriorityToSendingFrame(0);
+    bool ret = sendFrameToAnyGw(dpAddrHex, data, 15);
     return ret;
 }
 
@@ -1110,11 +1094,6 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     } else if (frame->opcode == 0x8245 && frame->paramSize >= 1) {
         // Add scene LC
         return GW_RESPONSE_ADD_SCENE;
-    } else if (frame->opcode >> 8 == 0x5E && frame->paramSize == 7 && (uint8_t)frame->opcode >= 0x6E && (uint8_t)frame->opcode <= 0x78) {
-        uint16_t tmp = (uint16_t)frame->param[0];
-        tmp = (tmp << 8) | (uint8_t)frame->opcode;
-        temp->dpValue = tmp;
-        return GW_RESPONSE_IR;
     } else if (frame->opcode >> 8 == 0x5E && frame->paramSize >= 6) {
         temp->dpValue =  frame->param[5];
         temp->causeType = 3;
@@ -1125,6 +1104,9 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     } else if (frame->opcode == 0xE511 && frame->paramSize >= 9 && frame->param[0] == 0x02) {
         if (frame->param[1] == 0x0A) {
             temp->dpValue = 0;
+            return GW_RESPONSE_IR;
+        } else if (frame->param[1] == 0x09) {
+            temp->dpValue = ((uint16_t)frame->param[3] << 8) | frame->param[2];
             return GW_RESPONSE_IR;
         }
     }
@@ -1157,10 +1139,10 @@ bool GW_DeleteDevice(const char *deviceAddr)
     return true;
 }
 
-bool ble_setSceneLocalToDeviceSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param) {
+bool GW_SetSceneActionForSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param) {
     ASSERT(sceneId); ASSERT(deviceAddr); ASSERT(dpCount <= 4);
 
-    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,      0x82,0x46,  0x00,0x00, 0x00,  0x00,       0x00,0x00,0x00,0x00,};
+    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x02,0x00, 0xff,0xff,      0x82,0x46,  0x00,0x00, 0x00,  0x00,       0x00,0x00,0x00,0x00,};
     long int dpAddrHex = strtol(deviceAddr, NULL, 16);
     long int sceneIdHex = strtol(sceneId, NULL, 16);
     data[8] = (uint8_t)(dpAddrHex >> 8);
@@ -1174,15 +1156,15 @@ bool ble_setSceneLocalToDeviceSwitch(const char* sceneId, const char* deviceAddr
     data[18] = (uint8_t)(param >> 8);
     data[19] = (uint8_t)(param);
     sendFrameToAnyGw(dpAddrHex, data, 16 + dpCount);
-    addRetryCountToSendingFrame(3);
+    addTimeoutToSendingFrame(500);
     return true;
 }
 
-bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const char* sceneID)
+bool GW_SetSceneActionForLight(const char* address_device,const char* sceneID)
 {
     ASSERT(address_device); ASSERT(sceneID);
     long int dpAddrHex = strtol(address_device, NULL, 16);
-    uint8_t  SceneLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,      0x82,0x46,  0x00,0x00};
+    uint8_t  SceneLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x02,0x00, 0xff,0xff,      0x82,0x46,  0x00,0x00};
     uint8_t hex_address_device[5];
     uint8_t hex_sceneID[5];
 
@@ -1196,7 +1178,7 @@ bool ble_setSceneLocalToDeviceLightCCT_HOMEGY(const char* address_device,const c
     SceneLocalToDevice[13] = *(hex_sceneID+1);
 
     sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice, 14);
-    addRetryCountToSendingFrame(3);
+    addTimeoutToSendingFrame(500);
     return true;
 }
 
@@ -1222,7 +1204,7 @@ bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const ch
     SceneLocalToDevice[14] = hex_modeBlinkRgb[0];
 
     sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice,17);
-    addRetryCountToSendingFrame(3);
+    addTimeoutToSendingFrame(500);
     return true;
 }
 
@@ -1271,7 +1253,9 @@ bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID)
     DelLocalToDevice[12] = hex_sceneID[0];
     DelLocalToDevice[13] = hex_sceneID[1];
 
-    return sendFrameToAnyGw(deviceAddrHex, DelLocalToDevice, 14);
+    sendFrameToAnyGw(deviceAddrHex, DelLocalToDevice, 14);
+    addTimeoutToSendingFrame(500);
+    return true;
 }
 
 bool ble_callSceneLocalToHC(const char* address_device,const char* sceneID)
@@ -1351,7 +1335,7 @@ bool ble_logTouch(const char *address_element, uint8_t dpId, int state)
     return sendFrameToAnyGw(addrHex, LOG_TOUCH, 18);
 }
 
-bool GW_CtrlGroupLightOnoff(const char *groupAddr, uint8_t onoff) {
+bool GW_CtrlGroupLightOnOff(const char *groupAddr, uint8_t onoff) {
     ASSERT(groupAddr);
     long int addrHex = strtol(groupAddr, NULL, 16);
     uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0xff,0xff, 0x82,0x03,0x00};
@@ -1410,8 +1394,8 @@ bool GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl) {
 }
 
 bool GW_ControlIRCmd(const char* command) {
-    ASSERT(command); ASSERT(strlen(command) >= 46);
-    uint8_t data[50];
+    ASSERT(command);
+    uint8_t data[500];
     String2HexArr(command, data);
     uint16_t addr = ((uint16_t)data[9] << 8) + data[8];
     bool ret = sendFrameToAnyGw(addr, data, strlen(command) / 2);
@@ -1485,6 +1469,7 @@ bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t
     data[18] = (uint8_t)(1 << 6);
     data[18] |= (uint8_t)(commandIndex << 1);
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 19);
+    addTimeoutToSendingFrame(500);
     return ret;
 }
 

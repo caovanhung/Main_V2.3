@@ -186,8 +186,6 @@ bool AWS_detect_message_received_for_update(Pre_parse *var,char *mess);
 //for add device
 bool AWS_get_info_device(Info_device *inf_device,Pre_parse *pre_detect);
 bool MOSQ_getTemplateAddDevice(char **result,Info_device *inf_device);
-//dor add scene
-bool AWS_getInfoScene(Info_scene *inf_scene,Pre_parse *pre_detect);
 bool MOSQ_getTemplateAddScene(char **result,Info_scene *inf_scene);
 bool MOSQ_getTemplateDeleteScene(char **result,const char* sceneId);
 

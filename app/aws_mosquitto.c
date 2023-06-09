@@ -11,12 +11,12 @@ extern struct mosquitto * mosq;
 
 bool sendPacketToFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, JSON* packet) {
     char* payload = cJSON_PrintUnformatted(packet);
-    bool ret = sendToServiceFunc(mosq, serviceToSend, typeAction, payload);
+    bool ret = sendToServiceFunc(mosq, serviceToSend, typeAction, payload, true);
     free(payload);
     return ret;
 }
 
-bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, const char* payload) {
+bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, const char* payload, bool printDebug) {
     bool ret = false;
     char* layerService;
     char topic[100];
@@ -51,7 +51,9 @@ bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int ty
     char *message = json_serialize_to_string_pretty(root_value);
     int reponse = mosquitto_publish(mosq, NULL, topic, strlen(message), message, 0, false);
     if (MOSQ_ERR_SUCCESS == reponse) {
-        myLogInfo("Sent to service %s (topic %s), data: %s", serviceToSend, topic, message);
+        if (printDebug) {
+            myLogInfo("Sent to service %s (topic %s), data: %s", serviceToSend, topic, message);
+        }
         ret = true;
     } else {
         myLogInfo("Failed to publish to local topic: %s", topic);
@@ -162,26 +164,7 @@ bool getFormTranMOSQ(char **ResultTemplate,const char * layer_service,const char
 }
 
 
-void Aws_DeleteDevice(const char* deviceId, int pageIndex) {
-    ASSERT(deviceId);
-    char payload[200];
-    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_DEL_DEVICE, SENDER_HC_VIA_CLOUD, deviceId);
-    sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_KICKOUT, pageIndex, payload);
-}
 
-void Aws_SaveDeviceState(const char* deviceId, int state, int pageIndex) {
-    ASSERT(deviceId);
-    char payload[200];
-    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%d}}}}", TYPE_UPDATE_DEVICE, SENDER_HC_VIA_CLOUD, deviceId, state);
-    sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_STATE, pageIndex, payload);
-}
-
-void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex) {
-    ASSERT(deviceId);
-    char payload[200];
-    sprintf(payload,"{\"deviceId\":\"%s\", \"state\":2, \"dpId\":%d, \"dpValue\":%d}", deviceId, dpId, value);
-    sendToServicePageIndex(SERVICE_AWS, GW_RESP_DEVICE_STATUS, pageIndex, payload);
-}
 
 void Aws_updateGroupState(const char* groupAddr, int state)
 {
