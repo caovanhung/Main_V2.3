@@ -57,20 +57,6 @@ typedef struct
     const char *address2;
 }provison_inf;
 
-typedef struct  
-{
-    int type;
-    int loops;
-    int delay;
-    int sender;
-    char *senderid;
-    char *object;
-    int provider;
-    int pageIndex;
-    JSON_Object *JS_object;
-    JSON_Value *JS_value;
-}Pre_parse;
-
 struct state_element
 {
     char address_element[5];
@@ -165,7 +151,7 @@ bool ble_logTouch(const char *address_element, uint8_t dpId, int state);
  */
 bool GW_SetSceneActionForSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param);
 bool GW_SetSceneActionForLight(const char* address_device,const char* sceneID);
-bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID,const char* modeBlinkRgb );
+bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID, uint8_t blinkMode);
 bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue);
 bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID);
 bool ble_setTimeForSensorPIR(const char* address_device,const char* time);

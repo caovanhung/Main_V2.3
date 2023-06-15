@@ -5,6 +5,55 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdarg.h>
+#include "time_t.h"
+#include <mosquitto.h>
+#include "define.h"
+
+extern struct mosquitto * mosq;
+extern uint8_t SERVICE_ID;
+
+void logInfo(const char* formatedString, ...) {
+    char* currentTime = get_localtime_now();
+    va_list args;
+    va_start(args, formatedString);
+    int len = vsnprintf(NULL, 0, formatedString, args);
+    if (len > 0) {
+        char* message = (char*)malloc(len + 2);
+        vsprintf(message, formatedString, args);
+        char* fullLog = (char*)malloc(len + 50);    // Adding [INFO] and time
+        sprintf(fullLog, "[INFO] [%s] %s", currentTime, message);
+        printf(fullLog);
+        printf("\n\r");
+        // Publish to CFG service to write to log files
+        char topic[50];
+        sprintf(topic, "LOG_REPORT/%d", SERVICE_ID);
+        mosquitto_publish(mosq, NULL, topic, strlen(fullLog), fullLog, 0, false);
+        free(fullLog);
+        free(message);
+    }
+    va_end(args);
+}
+
+void logError(const char* formatedString, ...) {
+    char* currentTime = get_localtime_now();
+    va_list args;
+    va_start(args, formatedString);
+    int len = vsnprintf(NULL, 0, formatedString, args);
+    char* message = (char*)malloc(len);
+    vsprintf(message, formatedString, args);
+    char* fullLog = (char*)malloc(len + 50);    // Adding [INFO] and time
+    sprintf(fullLog, "[ERROR][%s] %s", currentTime, message);
+    printf(fullLog);
+    printf("\n\r");
+    // Publish to CFG service to write to log files
+    char topic[50];
+    sprintf(topic, "LOG_REPORT/%d", SERVICE_ID);
+    mosquitto_publish(mosq, NULL, topic, strlen(fullLog), fullLog, 0, false);
+    free(fullLog);
+    free(message);
+    va_end(args);
+}
 
 char* StringCopy(char* dest, const char* src) {
     if (dest != NULL && src != NULL) {

@@ -69,15 +69,14 @@ char* dequeue(struct Queue *q)
     {
         return NULL;
     }
-    struct Node *tmp = NULL;
-    //char *value = malloc(1024);
-    //value = q->head->value;
-    //strcpy(value,q->head->value);
-    tmp = q->head;
+    struct Node *node = q->head;
     q->head = q->head->next;
     q->size -= 1;
-    //free(tmp);
-    return tmp->value;
+    char *value = malloc(strlen(node->value) + 1);
+    strcpy(value, node->value);
+    free(node->value);
+    free(node);
+    return value;
 }
 
 void freeQueue(struct Queue *q)

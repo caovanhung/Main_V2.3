@@ -7,10 +7,10 @@
 #endif
 #define MQTT_LIB    "core-mqtt@" MQTT_LIBRARY_VERSION
 /////////////////////////////////MQTT LOCAL/////////////////////////////////////////
-#define MQTT_MOSQUITTO_CIENT_ID             	"WIFI"
+#define MQTT_MOSQUITTO_CIENT_ID                 "WIFI"
 
 #define CTR_DEVICE  "POST"
 #define CTR_SCENE   "PUT"
 
-#define MaxNumberRetry   (10U)
+#define MaxNumberRetry   (6U)
 #define MaxTimeGetToken_Second   (119U)

@@ -11,16 +11,6 @@
 
 #define ASSERT(...)  if (!(__VA_ARGS__)) { printf("ERROR ASSERT: %s:%d", __FILE__, __LINE__); return; }
 
-extern const char* SERVICE_NAME;
-extern char* g_dbgFileName;
-extern int g_dbgLineNumber;
-
-#define logInfo(...)    LogInfo((get_localtime_now()), (__VA_ARGS__))
-#define logError(...)   LogError((get_localtime_now()), (__VA_ARGS__))
-#define myLogInfo(...)    printf("[INFO] [%s] [%s:%d] [%s]", SERVICE_NAME, g_dbgFileName, g_dbgLineNumber, get_localtime_now()); printf(__VA_ARGS__); printf("\n\r");
-#define myLogError(...)   printf("[ERROR][%s] [%s:%d] [%s]", SERVICE_NAME, g_dbgFileName, g_dbgLineNumber, get_localtime_now()); printf(__VA_ARGS__); printf("\n\r");
-#define mqttLocalPublish(topic, message)  {int reponse = mosquitto_publish(mosq, NULL,topic, strlen(message), message, 0, false); if (MOSQ_ERR_SUCCESS == reponse) { logInfo("Published to local topic: %s, payload: %s", topic, message); } else { logError("Failed to publish to local topic: %s", topic); }}
-
 #define GATEWAY_NUM             2
 //UART
 #define UART_GATEWAY1           "/dev/ttyS3"
@@ -95,6 +85,7 @@ extern int g_dbgLineNumber;
 #define TYPE_SET_GROUP_TTL              (27U)
 #define TYPE_SET_DEVICE_TTL             (28U)
 #define TYPE_GET_ALL_DEVICES            (29U)
+#define TYPE_REALTIME_STATUS_FB         (31U)
 
 #define TYPE_GET_NUM_OF_PAGE            (45U)
 #define TYPE_SYNC_DB_DEVICES            (46U)
@@ -515,12 +506,18 @@ extern int g_dbgLineNumber;
 #define MOSQ_NameService_Support_Notifile               "Notifile"
 #define MOSQ_NameService_Support_Tool                   "Tool"
 
+#define SERVICES_NUMBER                   5
 #define SERVICE_AWS                  "AWS"
 #define SERVICE_CORE                 "CORE"
 #define SERVICE_BLE                  "BLE"
 #define SERVICE_TUYA                 "TUYA"
 #define SERVICE_HANET                "HANET"
 #define SERVICE_CFG                  "CFG"
+#define SERVICE_ID_AWS                0
+#define SERVICE_ID_CORE               1
+#define SERVICE_ID_BLE                2
+#define SERVICE_ID_TUYA               3
+#define SERVICE_ID_CFG                4
 
 #define MOSQ_NameService_Manager_ServieceManager        "ServieceManager"
 /////////////////////////////////DEFINE name of extend/////////////////////////////////////////

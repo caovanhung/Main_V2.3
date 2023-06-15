@@ -16,3 +16,4 @@ int get_min_today(struct tm tm);
 int get_sec_today(struct tm tm);
 int day_of_week(int date, int month, int year);
 char *get_localtime_now();
+char* GetCurrentDate();

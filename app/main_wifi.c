@@ -36,11 +36,9 @@
 #include <unistd.h>
 
 #include <mosquitto.h>
-#include <unistd.h>
 
 #include "define.h"
 #include "define_wifi.h"
-#include "logging_stack.h"
 #include "queue.h"
 #include "parson.h"
 #include "aws_mosquitto.h"
@@ -50,6 +48,8 @@
 #include "wifi_process.h"
 
 const char* SERVICE_NAME = SERVICE_TUYA;
+uint8_t     SERVICE_ID   = SERVICE_ID_TUYA;
+
 static char g_homeId[30] = {0};
 struct mosquitto * mosq;
 struct Queue *queue_received;
@@ -61,7 +61,7 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc)
 {
     if(rc)
     {
-        LogError((get_localtime_now()),("Error with result code: %d\n", rc));
+        logError("Error with result code: %d", rc);
         exit(-1);
     }
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_DEVICE_TUYA, 0);
@@ -94,16 +94,16 @@ void* RUN_MQTT_LOCAL(void* p)
     rc = mosquitto_connect(mosq, MQTT_MOSQUITTO_HOST, MQTT_MOSQUITTO_PORT, MQTT_MOSQUITTO_KEEP_ALIVE);
     if(rc != 0)
     {
-        LogInfo((get_localtime_now()),("Client could not connect to broker! Error Code: %d\n", rc));
+        logInfo("Client could not connect to broker! Error Code: %d", rc);
         mosquitto_destroy(mosq);
     }
-    LogInfo((get_localtime_now()),("We are now connected to the broker!"));
+    logInfo("We are now connected to the broker!");
     while(1)
     {
         rc = mosquitto_loop(mosq, -1, 1);
-        if(rc != 0)
+        if (rc != 0)
         {
-            LogError( (get_localtime_now()),( "rc %d.",rc ) );
+            logError("mosquitto_loop is error: %d.", rc);
             break;
         }
         usleep(1000);
@@ -126,7 +126,7 @@ int main( int argc,char ** argv )
     usleep(50000);
 
     if (pthread_mutex_init(&mutex_lock_t, NULL) != 0) {
-            LogError((get_localtime_now()),("mutex init has failed"));
+            logError("mutex init has failed");
             return 1;
     }
 
@@ -137,14 +137,14 @@ int main( int argc,char ** argv )
     {
         check_flag = get_access_token(access_token,access_token_refresh);
         if(!check_flag){
-            LogError((get_localtime_now()),("Not get access token!!!"));
+            logError("Not get access token!!!");
         }
         sleep(1);
     } while (!check_flag);
     GetAccessTokenTime = timeInMilliseconds();
-    LogInfo((get_localtime_now()),("GetAccessTokenTime = %lld",GetAccessTokenTime));
-    LogInfo((get_localtime_now()),("access_token = %s",access_token));
-    LogInfo((get_localtime_now()),("access_token_refresh = %s",access_token_refresh));
+    logInfo("GetAccessTokenTime = %lld", GetAccessTokenTime);
+    logInfo("access_token = %s", access_token);
+    logInfo("access_token_refresh = %s", access_token_refresh);
 
     char val_input[MAX_SIZE_ELEMENT_QUEUE] = {'\0'};
     char body[1000] = {'\0'};
@@ -161,7 +161,7 @@ int main( int argc,char ** argv )
             pthread_t t_thread;
             memset(val_input,'\0',MAX_SIZE_ELEMENT_QUEUE);
             strcpy(val_input,(char *)dequeue(queue_received));
-            LogInfo((get_localtime_now()),("val_input = %s",val_input));
+            logInfo("val_input = %s", val_input);
 
             JSON_Value *schema = NULL;
             JSON_Value *object = NULL;
@@ -185,14 +185,14 @@ int main( int argc,char ** argv )
                 {
                     check_flag = refresh_token(access_token_refresh,access_token);
                     if(!check_flag){
-                        LogError((get_localtime_now()),("Not get access token!!!"));
+                        logError("Not get access token!!!");
                     }
                     sleep(1);
                 } while (!check_flag);
                 GetAccessTokenTime = timeInMilliseconds();
-                LogInfo((get_localtime_now()),("GetAccessTokenTime = %lld",GetAccessTokenTime));
-                LogInfo((get_localtime_now()),("refresh_token = %s",access_token));
-                LogInfo((get_localtime_now()),("refresh_token = %s",access_token_refresh));
+                logInfo("GetAccessTokenTime = %lld", GetAccessTokenTime);
+                logInfo("refresh_token = %s", access_token);
+                logInfo("refresh_token = %s", access_token_refresh);
             }
 
             switch(type_action_t)
@@ -214,16 +214,47 @@ int main( int argc,char ** argv )
                         {
                             check_flag = send_commands(access_token,CTR_DEVICE,message, body);
                             retry++;
+                            if (retry == 3) {
+                                get_access_token(access_token,access_token_refresh);
+                            }
                         } while (!check_flag && retry < MaxNumberRetry);
                         if(retry >= MaxNumberRetry){
-                            LogInfo((get_localtime_now()),("TIME OUT"));
+                            logInfo("TIME OUT");
+                        }
+                    }
+                    break;
+                }
+                case TYPE_CTR_GROUP_NORMAL:
+                {
+                    memset(body,'\0',1000);
+                    memset(message,'\0',MAX_SIZE_ELEMENT_QUEUE);
+                    sprintf(body, "{\"functions\": [%s]}", code);
+                    if(!strlen(access_token)){
+                        get_access_token(access_token,access_token_refresh);
+                        break;
+                    }
+                    char* groupId = JSON_GetText(payload, "groupId");
+                    sprintf(message,"/v1.0/device-groups/%s/issued", groupId);
+                    check_flag = send_commands(access_token,CTR_DEVICE,message, body);
+                    if(!check_flag){
+                        retry = 0;
+                        do
+                        {
+                            check_flag = send_commands(access_token,CTR_DEVICE,message, body);
+                            retry++;
+                            if (retry == 3) {
+                                get_access_token(access_token,access_token_refresh);
+                            }
+                        } while (!check_flag && retry < MaxNumberRetry);
+                        if(retry >= MaxNumberRetry){
+                            logInfo("TIME OUT");
                         }
                     }
                     break;
                 }
                 case TYPE_CTR_SCENE:
                 {
-                    LogInfo((get_localtime_now()),("TYPE_CTR_SCENE_HC"));
+                    logInfo("TYPE_CTR_SCENE_HC");
                     int state = JSON_GetNumber(payload, "state");
                     if(!strlen(access_token)){
                         get_access_token(access_token,access_token_refresh);
@@ -245,16 +276,19 @@ int main( int argc,char ** argv )
                         {
                             check_flag = send_commands(access_token,CTR_SCENE,message, "\0");
                             retry++;
+                            if (retry == 3) {
+                                 get_access_token(access_token,access_token_refresh);
+                            }
                         } while (!check_flag && retry < MaxNumberRetry);
                     }
                     if(retry >= MaxNumberRetry){
-                        LogInfo((get_localtime_now()),("TIME OUT"));
+                        logInfo("TIME OUT");
                     }
                     break;
                 }
                 default:
                 {
-                    LogError((get_localtime_now()),("Error detect"));
+                    logError("Error detect");
                     break;
                 }
             }

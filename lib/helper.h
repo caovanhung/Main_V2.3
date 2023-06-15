@@ -9,6 +9,9 @@ typedef struct {
     size_t count;
 } list_t;
 
+void logInfo(const char* formatedString, ...);
+void logError(const char* formatedString, ...);
+
 #define StringLength(str)   (str == NULL? 0 : strlen(str))
 char* StringCopy(char* dest, const char* src);
 bool StringCompare(const char* str1, const char* str2);

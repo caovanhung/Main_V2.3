@@ -5,6 +5,7 @@
 #include "helper.h"
 #include "database.h"
 
+extern const char* SERVICE_NAME;
 char* g_dbgFileName;
 int g_dbgLineNumber;
 extern struct mosquitto * mosq;
@@ -52,11 +53,11 @@ bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int ty
     int reponse = mosquitto_publish(mosq, NULL, topic, strlen(message), message, 0, false);
     if (MOSQ_ERR_SUCCESS == reponse) {
         if (printDebug) {
-            myLogInfo("Sent to service %s (topic %s), data: %s", serviceToSend, topic, message);
+            logInfo("Sent to service %s (topic %s), data: %s", serviceToSend, topic, message);
         }
         ret = true;
     } else {
-        myLogInfo("Failed to publish to local topic: %s", topic);
+        logInfo("Failed to publish to local topic: %s", topic);
     }
     json_free_serialized_string(message);
     json_value_free(root_value);
@@ -99,70 +100,15 @@ bool sendToServicePageIndexFunc(struct mosquitto* mosq, const char* serviceToSen
     char *message = json_serialize_to_string_pretty(root_value);
     int reponse = mosquitto_publish(mosq, NULL, topic, strlen(message), message, 0, false);
     if (MOSQ_ERR_SUCCESS == reponse) {
-        myLogInfo("Sent to service %s (topic %s), data: %s", serviceToSend, topic, message);
+        logInfo("Sent to service %s (topic %s), data: %s", serviceToSend, topic, message);
         ret = true;
     } else {
-        myLogInfo("Failed to publish to local topic: %s", topic);
+        logInfo("Failed to publish to local topic: %s", topic);
     }
     json_free_serialized_string(message);
     json_value_free(root_value);
     return ret;
 }
-
-
-bool get_topic(char **result_topic,const char * layer_service,const char * service,int type_action,const char * extend)
-{
-    char *type_action_ = (char*)calloc(10,sizeof(char));
-    Int2String(type_action,type_action_);
-    if(layer_service != NULL && service != NULL && extend !=NULL)
-    {
-        *result_topic = malloc(1000);
-        memset(*result_topic ,'\0',1000);
-        strcpy(*result_topic,layer_service);
-        strcat(*result_topic,"/");
-        strcat(*result_topic,service);
-        strcat(*result_topic,"/");
-        strcat(*result_topic,type_action_);
-        strcat(*result_topic,"/");
-        strcat(*result_topic,extend);
-        free(type_action_);
-        return true;
-    }
-    else
-    {
-        free(type_action_);
-        return false;
-    }
-}
-
-
-bool getFormTranMOSQ(char **ResultTemplate,const char * layer_service,const char * service,int type_action,const char * extend,const char *Id,long long TimeCreat,const char* payload)
-{
-    JSON_Value *root_value = json_value_init_object();
-    JSON_Object *root_object = json_value_get_object(root_value);
-    char *serialized_string = NULL;
-
-    json_object_set_string(root_object, MOSQ_LayerService,layer_service);
-    json_object_set_string(root_object, MOSQ_NameService,service);
-    json_object_set_number(root_object, MOSQ_ActionType,type_action);
-    json_object_set_string(root_object, MOSQ_Extend,extend);
-
-    json_object_set_string(root_object, MOSQ_Id,Id);
-    json_object_set_number(root_object, MOSQ_TimeCreat,TimeCreat);
-    
-
-    json_object_set_string(root_object, MOSQ_Payload,payload);
-
-    serialized_string = json_serialize_to_string_pretty(root_value);
-    int size_t = strlen(serialized_string);
-    *ResultTemplate = malloc(size_t+1);
-    memset(*ResultTemplate,'\0',size_t+1);
-    strcpy(*ResultTemplate,serialized_string);
-    json_free_serialized_string(serialized_string);
-    json_value_free(root_value);
-    return true;
-}
-
 
 
 
@@ -203,9 +149,13 @@ void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const 
 }
 
 
-void sendNotiToUser(const char* message) {
+void sendNotiToUser(const char* message, bool isRealTime) {
     char* payload = malloc(strlen(message) + 200);
-    sprintf(payload, "{\"type\": %d, \"sender\":%d,\"%s\": \"%s\" }", TYPE_NOTIFI_REPONSE, SENDER_HC_VIA_CLOUD, KEY_MESSAGE, message);
+    if (isRealTime) {
+        sprintf(payload, "{\"type\": %d, \"sender\":%d,\"data\": %s }", TYPE_REALTIME_STATUS_FB, SENDER_HC_VIA_CLOUD, message);
+    } else {
+        sprintf(payload, "{\"type\": %d, \"sender\":%d,\"message\": \"%s\" }", TYPE_NOTIFI_REPONSE, SENDER_HC_VIA_CLOUD, message);
+    }
     sendToService(SERVICE_AWS, TYPE_NOTIFI_REPONSE, payload);
     free(payload);
 }

@@ -46,64 +46,6 @@ int Int2String(int i,char *str);
 bool isMatchString(const char *string_1,const char *string_2 );
 
 /*******************************************************************
-* name:             strremove
-* function:         removes all occurrences of a substring from a given string
-* in param:         str:  
-                    sub:
-* out param:        pointer after removes
-*******************************************************************/
-char *strremove(char *str, const char *sub);
-
-/*******************************************************************
-* name:             Min2Sec
-* function:         converts minutes and seconds to seconds
-* in param:         minutes: 
-                    seconds:
-* out param:        
-*******************************************************************/
-int Min2Sec(const char *minutes,const char *seconds);
-
-/*******************************************************************
-* name:             Hex2Dec
-* function:         converts a hexadecimal value to its decimal equivalent
-* in param:         
-                    
-* out param:        
-*******************************************************************/
-long long Hex2Dec(char *hex);
-
-/*******************************************************************
-* name:             generate_fields
-* function:         allocate memory for an array of strings, respectively
-* in param:         
-                    
-* out param:        
-*******************************************************************/
-char ** generate_fields(int rows, int length);
-
-/*******************************************************************
-* name:             free_fields
-* function:         free memory for an array of strings, respectively
-* in param:         
-                    
-* out param:        
-*******************************************************************/
-void free_fields(char ** options,int rows);
-
-
-void splitString(char str[], char delim, char **result, int *numParts);
-
-
-/*******************************************************************
-* name:             str_split
-* function:         splits a given string into multiple substrings based on the given delimiter
-* in param:         
-                    
-* out param:        
-*******************************************************************/
-char** str_split(char* a_str, const char a_delim,int *size);
-
-/*******************************************************************
 * name:             Int2Hex_2byte
 * function:         convert integers to 2-byte hexadecimal strings, respectively
 * in param:         
@@ -112,42 +54,5 @@ char** str_split(char* a_str, const char a_delim,int *size);
 *******************************************************************/
 int Int2Hex_2byte(int value,char *str);
 
-/*******************************************************************
-* name:             Int2Hex_1byte
-* function:         convert integers to 1-byte hexadecimal strings, respectively
-* in param:         
-                    
-* out param:        
-*******************************************************************/
-int Int2Hex_1byte(int value,char *str);
-
-/*******************************************************************
-* name:             free_value
-* function:         
-* in param:         
-                    
-* out param:        
-*******************************************************************/
-bool free_value(char *value);
-
-/*******************************************************************
-* name:             my_strcat
-* function:         concatenate two strings
-* in param:         
-                    
-* out param:        
-*******************************************************************/
-char * my_strcat(const char * str1, const char * str2);
-
-/*******************************************************************
-* name:             append_String2String
-* function:         appen a string to a string, using realloc
-* in param:         original: pointer of pointer to original string 
-                    to_append  :pointer want add to tring
-* out param:        1 if success or 0 if fail
-*******************************************************************/
-bool append_String2String(char** original, char* to_append);
-
-int findSubstring(char* str, char* substr);
 
 #endif

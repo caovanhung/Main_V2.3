@@ -313,6 +313,7 @@ bool send_commands(char *access_token,char*type_action, char *input, const char 
     char cloud_rep[response_size] = {'\0'};
     printf("[send_commands] message = %s\n", message);
     call_API(message, cloud_rep);
+    printf("[RESP] %s\n", cloud_rep);
     char *tmp = strstr(cloud_rep, "\"success\":");
     char result[10] = {'\0'};
     if (tmp != NULL){
@@ -327,6 +328,7 @@ bool send_commands(char *access_token,char*type_action, char *input, const char 
 
 bool get_access_token(char *access_token,char *refresh_token)
 {
+  printf("get_access_token\n");
   char *body = "";
   char *metho = "GET";
   char *path = "/v1.0/token";
@@ -390,6 +392,7 @@ bool get_access_token(char *access_token,char *refresh_token)
 
 bool refresh_token(char *refresh_token,char *access_token)
 {
+  printf("refresh_token\n");
   char *body = "";
   char *metho = "GET";
   char *path = "/v1.0/token";

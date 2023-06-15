@@ -13,7 +13,6 @@
     #define LIBRARY_LOG_LEVEL    LOG_INFO
 #endif
 
-#include "logging_stack.h"
 #include "core_mqtt.h"
 
 #define AWS_IOT_ENDPOINT            "a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com"

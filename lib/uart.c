@@ -2,6 +2,7 @@
 #include "define.h"
 #include "execinfo.h"
 #include <stdbool.h>
+#include "helper.h"
 
 FILE *fptr;
 int UART0_Open(int fd,char* port)
@@ -263,13 +264,13 @@ bool UART0_Send(int fd, char *send_buf,int data_len)
             sprintf(&tmp[i*3], "%02X ", send_buf[i]);
         }
 
-        myLogInfo("Sent to UART%d: %s", g_uartSendingIdx, tmp);
+        logInfo("Sent to UART%d: %s", g_uartSendingIdx, tmp);
         return true;
     }
     else
     {
         tcflush(fd,TCOFLUSH);
-        myLogError("Failed to sent data to UART. Sent length = %d", len);
+        logError("Failed to sent data to UART. Sent length = %d", len);
         return false;
     }
 }

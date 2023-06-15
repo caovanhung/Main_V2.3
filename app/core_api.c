@@ -146,6 +146,7 @@ void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex) {
 }
 
 void Aws_UpdateGroupValue(const char* groupAddr, uint8_t onoff) {
+    ASSERT(groupAddr);
     DeviceInfo deviceInfo;
     int foundDevices = Db_FindDevice(&deviceInfo, groupAddr);
     if (foundDevices == 1) {
@@ -153,6 +154,17 @@ void Aws_UpdateGroupValue(const char* groupAddr, uint8_t onoff) {
         char payload[200];
         sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"dictDPs\":{\"20\":%s}}}}}", TYPE_CTR_GROUP_NORMAL, SENDER_HC_VIA_CLOUD, groupAddr, onoff?"true":"false");
         sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
+    }
+}
+
+void Aws_EnableScene(const char* sceneId, bool state) {
+    ASSERT(sceneId);
+    JSON* sceneInfo = Db_FindScene(sceneId);
+    if (sceneInfo) {
+        int pageIndex = JSON_GetNumber(sceneInfo, "pageIndex");
+        char payload[200];
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%s}}}}", TYPE_UPDATE_SCENE, SENDER_HC_VIA_CLOUD, sceneId, state?"true":"false");
+        sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_SCENE, pageIndex, payload);
     }
 }
 
@@ -184,6 +196,14 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
         JSON_SetText(p, "pid", deviceInfo.pid);
         JSON* newDictDps = JSON_AddArray(p, "dictDPs");
         JSON_ForEach(o, dictDPs) {
+            if (cJSON_IsString(o) && StringContains(o->valuestring, "scene_")) {
+                list_t* tmp = String_Split(o->valuestring, "_");
+                if (tmp->count == 2) {
+                    uint8_t value = atoi(tmp->items[1]);
+                    o->valueint = value;
+                }
+                List_Delete(tmp);
+            }
             int dpId = atoi(o->string);
             DpInfo dpInfo;
             int dpFound = Db_FindDp(&dpInfo, deviceId, dpId);
@@ -214,11 +234,27 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
         }
         sendPacketTo(SERVICE_BLE, TYPE_CTR_DEVICE, p);
         JSON_Delete(p);
+    } else {
+        printf("Device %s is not found in the database\n", deviceId);
     }
 }
 
 
-void Ble_ControlGroup(const char* groupAddr, JSON* dictDPs) {
+void Ble_ControlGroupArray(const char* groupAddr, uint8_t* dpIds, double* dpValues, int dpCount, const char* causeId) {
+    ASSERT(groupAddr);
+    ASSERT(dpIds);
+    ASSERT(dpValues);
+    JSON* dictDPs = JSON_CreateObject();
+    for (int i = 0; i < dpCount; i++) {
+        char str[10];
+        sprintf(str, "%d", dpIds[i]);
+        JSON_SetNumber(dictDPs, str, dpValues[i]);
+    }
+    Ble_ControlGroupJSON(groupAddr, dictDPs, causeId);
+    JSON_Delete(dictDPs);
+}
+
+void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* causeId) {
     ASSERT(groupAddr);
     ASSERT(dictDPs);
     DeviceInfo deviceInfo;
@@ -230,7 +266,7 @@ void Ble_ControlGroup(const char* groupAddr, JSON* dictDPs) {
             Aws_UpdateGroupValue(groupAddr, onoffValue);
         }
 
-        // Update status of devices in this group to AWS
+        // Update status of devices in this group to AWS and local database
         char* devicesStr = Db_FindDevicesInGroup(groupAddr);
         JSON* groupDevices = parseGroupNormalDevices(devicesStr);
         JSON_ForEach(d, groupDevices) {
@@ -238,6 +274,7 @@ void Ble_ControlGroup(const char* groupAddr, JSON* dictDPs) {
                 if (cJSON_IsNumber(dp) || cJSON_IsBool(dp)) {
                     int dpId = atoi(dp->string);
                     Aws_SaveDpValue(JSON_GetText(d, "deviceId"), dpId, dp->valueint, JSON_GetNumber(d, "pageIndex"));
+                    Db_SaveDpValue(JSON_GetText(d, "deviceId"), dpId, dp->valueint);
                 }
             }
         }
@@ -247,6 +284,14 @@ void Ble_ControlGroup(const char* groupAddr, JSON* dictDPs) {
         JSON_SetText(p, "pid", deviceInfo.pid);
         JSON* newDictDps = JSON_AddArray(p, "dictDPs");
         JSON_ForEach(o, dictDPs) {
+            if (cJSON_IsString(o) && StringContains(o->valuestring, "scene_")) {
+                list_t* tmp = String_Split(o->valuestring, "_");
+                if (tmp->count == 2) {
+                    uint8_t value = atoi(tmp->items[1]);
+                    o->valueint = value;
+                }
+                List_Delete(tmp);
+            }
             int dpId = atoi(o->string);
             DpInfo dpInfo;
             int dpFound = Db_FindDp(&dpInfo, groupAddr, dpId);
@@ -257,6 +302,22 @@ void Ble_ControlGroup(const char* groupAddr, JSON* dictDPs) {
                 JSON_SetNumber(dp, "value", o->valueint);
                 JSON_SetText(dp, "valueString", o->valuestring);
                 cJSON_AddItemToArray(newDictDps, dp);
+
+                if (causeId) {
+                    JSON* history = JSON_CreateObject();
+                    JSON_SetText(history, "deviceId", groupAddr);
+                    JSON_SetNumber(history, "dpId", dpId);
+                    JSON_SetNumber(history, "dpValue", o->valueint);
+                    JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                    if (StringLength(causeId) > 10) {
+                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
+                    } else {
+                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
+                    }
+                    JSON_SetText(history, "causeId", causeId);
+                    Db_AddDeviceHistory(history);
+                    JSON_Delete(history);
+                }
             }
         }
 
@@ -298,5 +359,15 @@ void Wifi_ControlDevice(const char* deviceId, const char* code) {
     JSON_SetText(p, "deviceId", deviceId);
     JSON_SetText(p, "code", code);
     sendPacketTo(SERVICE_TUYA, TYPE_CTR_DEVICE, p);
+    JSON_Delete(p);
+}
+
+void Wifi_ControlGroup(const char* groupId, const char* code) {
+    ASSERT(groupId);
+    ASSERT(code);
+    JSON* p = JSON_CreateObject();
+    JSON_SetText(p, "groupId", groupId);
+    JSON_SetText(p, "code", code);
+    sendPacketTo(SERVICE_TUYA, TYPE_CTR_GROUP_NORMAL, p);
     JSON_Delete(p);
 }

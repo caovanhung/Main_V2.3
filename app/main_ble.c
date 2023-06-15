@@ -24,7 +24,6 @@
 #include <time.h>
 #include <stdbool.h>
 #include <sys/un.h>
-#include <pthread.h>
 
 /* Standard includes. */
 #include <assert.h>
@@ -41,7 +40,6 @@
 
 #include "ble_common.h"
 #include "define.h"
-#include "logging_stack.h"
 #include "ble_process.h"
 #include "queue.h"
 #include "core_process_t.h"
@@ -51,7 +49,8 @@
 #include "cJSON.h"
 
 const char* SERVICE_NAME = SERVICE_BLE;
-FILE *fptr;
+uint8_t SERVICE_ID = SERVICE_ID_BLE;
+
 extern int g_gatewayFds[GATEWAY_NUM];
 char rcv_uart_buff[MAXLINE];
 static bool g_mosqInitDone = false;
@@ -75,7 +74,7 @@ void Ble_ProcessPacket();
 void On_mqttConnect(struct mosquitto *mosq, void *obj, int rc)
 {
     if (rc) {
-        LogError((get_localtime_now()),("Error with result code: %d\n", rc));
+        logError("Error with result code: %d", rc);
         exit(-1);
     }
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_DEVICE_BLE, 0);
@@ -107,7 +106,7 @@ void Mosq_Init(const char* clientId) {
     mosquitto_message_callback_set(mosq, On_mqttMessage);
     rc = mosquitto_connect(mosq, MQTT_MOSQUITTO_HOST, MQTT_MOSQUITTO_PORT, MQTT_MOSQUITTO_KEEP_ALIVE);
     if (rc != 0) {
-        LogInfo((get_localtime_now()),("Client could not connect to broker! Error Code: %d\n", rc));
+        logInfo("Client could not connect to broker! Error Code: %d", rc);
         mosquitto_destroy(mosq);
         return;
     }
@@ -489,9 +488,7 @@ void checkResponseLoop() {
 int main( int argc,char ** argv )
 {
     int mqttSizeQueue = 0, lowPrioMqttSizeQueue = 0;
-    pthread_t thr[4];
     int err,xRun = 1;
-    int rc[4];
     g_checkRespList = JSON_CreateArray();
     g_mqttMsgQueue = newQueue(MAX_SIZE_NUMBER_QUEUE);
     g_lowPrioMqttMsgQueue = newQueue(MAX_SIZE_NUMBER_QUEUE);
@@ -545,8 +542,8 @@ int main( int argc,char ** argv )
         printf("\n\r");
         logInfo("Received message: %s", recvMsg);
 
-        int i = 0,j=0,count=0;
         JSON* recvPacket = JSON_Parse(recvMsg);
+        free(recvMsg);
         int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
         JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
         if (payload) {
@@ -585,13 +582,7 @@ int main( int argc,char ** argv )
                             char* valueString = JSON_GetText(o, "valueString");
                             GW_SetLightHSL(dpAddr, valueString);
                         } else if (dpId == 21) {
-                            char* valueString = JSON_GetText(o, "valueString");
-                            list_t* tmp = String_Split(valueString, "_");
-                            if (tmp->count == 2) {
-                                uint8_t blinkMode = atoi(tmp->items[1]);
-                                GW_SetRGBLightBlinkMode(dpAddr, blinkMode);
-                            }
-                            List_Delete(tmp);
+                            GW_SetRGBLightBlinkMode(dpAddr, dpValue);
                         } else if (dpId == 22) {
                             lightness = dpValue;
                         } else if (dpId == 23) {
@@ -645,8 +636,6 @@ int main( int argc,char ** argv )
                         int dpId = JSON_GetNumber(o, "id");
                         dpAddr = JSON_GetText(o, "addr");
                         int dpValue = JSON_GetNumber(o, "value");
-                        char valueStr[5];
-                        sprintf(valueStr, "%d", dpValue);
                         if (StringContains(HG_BLE_SWITCH, pid)) {
                             GW_HgSwitchOnOff_NoResp(dpAddr, dpValue);
                         } else if (StringContains(HG_BLE_CURTAIN, pid) || dpId == 20) {
@@ -655,13 +644,7 @@ int main( int argc,char ** argv )
                             char* valueString = JSON_GetText(o, "valueString");
                             GW_SetLightHSL(dpAddr, valueString);
                         } else if (dpId == 21) {
-                            char* valueString = JSON_GetText(o, "valueString");
-                            list_t* tmp = String_Split(valueString, "_");
-                            if (tmp->count == 2) {
-                                uint8_t blinkMode = atoi(tmp->items[1]);
-                                GW_SetRGBLightBlinkMode(dpAddr, blinkMode);
-                            }
-                            List_Delete(tmp);
+                            GW_SetRGBLightBlinkMode(dpAddr, dpValue);
                         } else if (dpId == 22) {
                             lightness = dpValue;
                         } else if (dpId == 23) {
@@ -770,9 +753,8 @@ int main( int argc,char ** argv )
                     char* devicePid = JSON_GetText(payload, "devicePid");
                     char* deviceKey = JSON_GetText(payload, "deviceKey");
                     int gatewayId = JSON_GetNumber(payload, "gatewayId");
+                    logInfo("[TYPE_ADD_DEVICE]: gatewayId=%d,deviceAddr=%s,devicePid=%s,deviceKey=%s", gatewayId, deviceAddr, devicePid, deviceKey);
                     set_inf_DV_for_GW(gatewayId, deviceAddr, devicePid, deviceKey);
-                    // set_inf_DV_for_GW(0, deviceAddr, devicePid, deviceKey);
-                    // set_inf_DV_for_GW(1, deviceAddr, devicePid, deviceKey);
                     if (JSON_HasKey(payload, "command")) {
                         GW_ControlIRCmd(JSON_GetText(payload, "command"));
                     }
@@ -865,7 +847,6 @@ int main( int argc,char ** argv )
         }
         cJSON_Delete(recvPacket);
         cJSON_Delete(payload);
-        free(recvMsg);
         usleep(100);
     }
     return 0;
@@ -900,7 +881,7 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
             int dpId = JSON_GetNumber(action, "dpId");
             int dpValue = JSON_GetNumber(action, "dpValue");
             if (pid != NULL) {
-                if (StringContains(HG_BLE_SWITCH, pid)) {
+                if (StringContains(HG_BLE_SWITCH, pid) || StringContains(HG_BLE_CURTAIN, pid)) {
                     /* For the switch, we will send only 1 command for 1 switch even if this switch has 1 or more elements.
                        So we need to merge all actions related to the elements of this switch and then will send 1 command
                        to this switch later */
@@ -919,11 +900,23 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                         JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
                     }
                 } else if (StringContains(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
-                    ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x00");
+                    ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, 0);
                     // Add this device to response list to check TIMEOUT later
                     addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
-                } else if (StringContains(RD_BLE_LIGHT_RGB, pid) && dpId == 20) {
-                    ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, "0x01");
+                } else if (StringContains(RD_BLE_LIGHT_RGB, pid) && (dpId == 20 || dpId == 21)) {
+                    if (dpId == 21) {
+                        char* dpValueString;
+                        JSON_ForEach(e, executorProperty) {
+                            dpValueString = e->valuestring;
+                        }
+                        list_t* tmp = String_Split(dpValueString, "_");
+                        if (tmp->count == 2) {
+                            uint8_t blinkMode = atoi(tmp->items[1]);
+                            ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, blinkMode);
+                        }
+                    } else {
+                        ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, 0);
+                    }
                     // Add this device to response list to check TIMEOUT later
                     addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                 } else if (StringContains(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {

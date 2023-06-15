@@ -3147,7 +3147,7 @@ double JSON_GetNumber(JSON* obj, const char* name) {
         } else if  (cJSON_IsNumber(c)) {
             return cJSON_GetNumberValue(c);
         }
-        printf("JSON Object %s of %s is not NUMBER or BOOLEAN or NOT exist", name, obj->string);
+        printf("JSON Object %s of %s is not NUMBER or BOOLEAN or NOT exist\n", name, obj->string);
     }
 
     return 0;
@@ -3178,7 +3178,7 @@ size_t JArr_Count(JSON* arr) {
 char* JArr_GetText(JSON* arr, int index) {
     JSON* item = cJSON_GetArrayItem(arr, index);
     if (!cJSON_IsString(item)) {
-        printf("Item at %d of %s is not STRING or NOT exist", index, arr->string);
+        printf("Item at %d of %s is not STRING or NOT exist\n", index, arr->string);
         return NULL;
     }
     return cJSON_GetStringValue(item);
@@ -3191,7 +3191,7 @@ double JArr_GetNumber(JSON* arr, int index) {
     } else if  (cJSON_IsNumber(c)) {
         return cJSON_GetNumberValue(c);
     }
-    printf("Item at %d of %s is not NUMBER or BOOLEAN or NOT exist", index, arr->string);
+    printf("Item at %d of %s is not NUMBER or BOOLEAN or NOT exist\n", index, arr->string);
     return 0;
 }
 

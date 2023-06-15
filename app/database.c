@@ -65,25 +65,22 @@ int Db_FindGatewayId(const char* gatewayAddr) {
 
 int Db_AddDevice(JSON* deviceInfo) {
     ASSERT(deviceInfo);
-    char* gwAddr = JSON_GetText(deviceInfo, KEY_ID_GATEWAY);
+    char* gwAddr = JSON_HasKey(deviceInfo, "gateWay")? JSON_GetText(deviceInfo, "gateWay") : "_";
     int gwIndex = Db_FindGatewayId(gwAddr);
-    if (gwIndex >= 0) {
-        char* id = JSON_GetText(deviceInfo, KEY_DEVICE_ID);
-        char* name = JSON_GetText(deviceInfo, KEY_NAME);
-        char* unicast = JSON_GetText(deviceInfo, KEY_UNICAST);
-        char* deviceKey = JSON_GetText(deviceInfo, KEY_DEVICE_KEY);
-        int provider = JSON_GetNumber(deviceInfo, KEY_PROVIDER);
-        char* pid = JSON_GetText(deviceInfo, KEY_PID);
-        int pageIndex = JSON_GetNumber(deviceInfo, "pageIndex");
-        char sqlCmd[500];
-        sprintf(sqlCmd, "INSERT INTO DEVICES_INF(deviceId, name,  Unicast, gwIndex, deviceKey, provider, pid,   state, pageIndex) \
-                                          VALUES('%s',     '%s',  '%s',    %d,      '%s',      '%d',     '%s',  '%d',    %d)",
-                                                 id,       name,  unicast, gwIndex, deviceKey, provider, pid,   3,     pageIndex);
-        Sql_Exec(sqlCmd);
-        return 1;
-    }
-    printf("[ERROR][Db_AddDevice] Cannot found gateway %s", gwAddr);
-    return 0;
+    char* id = JSON_GetText(deviceInfo, KEY_DEVICE_ID);
+    char* name = JSON_GetText(deviceInfo, KEY_NAME);
+    char* unicast = JSON_HasKey(deviceInfo, KEY_UNICAST)? JSON_GetText(deviceInfo, KEY_UNICAST) : NULL;
+    char* deviceKey = StringCompare(unicast, "0000") == false? JSON_GetText(deviceInfo, KEY_DEVICE_KEY) : NULL;
+    int provider = JSON_GetNumber(deviceInfo, KEY_PROVIDER);
+    char* pid = JSON_GetText(deviceInfo, KEY_PID);
+    int pageIndex = JSON_GetNumber(deviceInfo, "pageIndex");
+    char sqlCmd[500];
+    sprintf(sqlCmd, "INSERT INTO DEVICES_INF(deviceId, name,  Unicast, gwIndex, deviceKey, provider, pid,   state, pageIndex) \
+                                      VALUES('%s',     '%s',  '%s',    %d,      '%s',      '%d',     '%s',  '%d',    %d)",
+                                             id,       name,  unicast, gwIndex, deviceKey, provider, pid,   3,     pageIndex);
+    // printf("%s", sqlCmd);
+    Sql_Exec(sqlCmd);
+    return 1;
 }
 
 JSON* Db_GetAllDevices() {
@@ -363,19 +360,50 @@ int Db_LoadSceneToRam() {
         char* actions = sqlite3_column_text(row, 5);
         JSON* actionsArray = JSON_Parse(actions);
         int actionCount = 0;
+        if (StringCompare(g_sceneList[g_sceneCount].id, "1110")) {
+            int a = 1;
+        }
         JSON_ForEach(act, actionsArray) {
             SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
             action->dpCount = 0;
-            if (JSON_HasKey(act, "actionType")) {
-                action->actionType = JSON_GetNumber(act, "actionType");
-                action->delaySeconds = JSON_HasKey(act, "delaySeconds")? JSON_GetNumber(act, "delaySeconds") : 0;
+            if (JSON_HasKey(act, "actionExecutor")) {
                 StringCopy(action->entityId, JSON_GetText(act, "entityId"));
-
+                char* actionExecutor = JSON_GetText(act, "actionExecutor");
                 JSON* executorProperty = JSON_GetObject(act, "executorProperty");
+                if (StringCompare(actionExecutor, "dpIssue")) {
+                    action->actionType = EntityDevice;
+                } else if (StringCompare("ruleTrigger", actionExecutor)) {
+                    action->actionType = EntityScene;
+                    action->dpValues[0] = 2;
+                } else if (StringCompare("ruleEnable", actionExecutor)) {
+                    action->actionType = EntityScene;
+                    action->dpValues[0] = 1;
+                } else if (StringCompare("ruleDisable", actionExecutor)) {
+                    action->actionType = EntityScene;
+                    action->dpValues[0] = 0;
+                } else if (StringCompare(actionExecutor, "delay")) {
+                    action->actionType = EntityDelay;
+                    int minutes = atoi(JSON_GetText(executorProperty, "minutes"));
+                    action->delaySeconds = atoi(JSON_GetText(executorProperty, "seconds"));
+                    action->delaySeconds = minutes * 60 + action->delaySeconds;
+                } else if (StringCompare(actionExecutor, "deviceGroupDpIssue")) {
+                    action->actionType = EntityGroup;
+                }
+
                 JSON_ForEach(o, executorProperty) {
                     action->dpIds[action->dpCount] = atoi(o->string);
-                    // ction->dpValues[action->dpCount] = (double)o->valuedouble; //type value in executorProperty is bool
-                    action->dpValues[action->dpCount] = (double)o->valueint;
+                    if (cJSON_IsNumber(o) || cJSON_IsBool(o)) {
+                        action->dpValues[action->dpCount] = (double)o->valueint;
+                    } else if (cJSON_IsString(o)) {
+                        if (StringContains(o->valuestring, "scene_")) {
+                            list_t* tmp = String_Split(o->valuestring, "_");
+                            if (tmp->count == 2) {
+                                uint8_t value = atoi(tmp->items[1]);
+                                action->dpValues[action->dpCount] = value;
+                            }
+                            List_Delete(tmp);
+                        }
+                    }
                     action->dpCount++;
                 }
 
@@ -404,7 +432,7 @@ int Db_LoadSceneToRam() {
             cond->timeReached = 0;
             if (StringCompare(cond->entityId, "timer")) {
                 cond->conditionType = EntitySchedule;
-                cond->repeat = JSON_GetNumber(condition, "repeat"); //atoi(JSON_GetText(exprArray, "loops"));
+                cond->repeat = strtol(JSON_GetText(exprArray, "loops"), NULL, 2);
                 char* time = JSON_GetText(exprArray, "time");
                 list_t* timeItems = String_Split(time, ":");
                 if (timeItems->count == 2) {
@@ -447,7 +475,7 @@ int Db_LoadSceneToRam() {
         JSON_Delete(actionsArray);
         JSON_Delete(conditionsArray);
     }
-    myLogInfo("Loaded %d scenes from database", g_sceneCount);
+    printf("Loaded %d scenes from database\n", g_sceneCount);
     return 1;
 }
 
@@ -474,7 +502,7 @@ int Db_SaveSceneCondRepeat(const char* sceneId, int conditionIndex, uint8_t repe
         char* updateSql = malloc(StringLength(condStr) + 500);
         sprintf(updateSql, "UPDATE scene_inf SET conditions='%s' WHERE sceneId='%s'", condStr, sceneId);
         Sql_Exec(updateSql);
-        Db_LoadSceneToRam();
+        // Db_LoadSceneToRam();
         JSON_Delete(conditionsArray);
         free(condStr);
         free(updateSql);
@@ -487,6 +515,7 @@ int Db_AddScene(JSON* sceneInfo) {
     char* sceneId = JSON_GetText(sceneInfo, "id");
     char* name = JSON_GetText(sceneInfo, "name");
     int state = JSON_GetNumber(sceneInfo, "state");
+    int pageIndex = JSON_GetNumber(sceneInfo, "pageIndex");
     int isLocal = JSON_GetNumber(sceneInfo, "isLocal");
     char* sceneType = JSON_GetText(sceneInfo, "sceneType");
     JSON* actionsObj = JSON_GetObject(sceneInfo, "actions");
@@ -500,9 +529,9 @@ int Db_AddScene(JSON* sceneInfo) {
         preconditions = "";
     }
     char* sqlCmd = malloc(StringLength(actions) + StringLength(conditions) + 500);
-    sprintf(sqlCmd, "INSERT INTO SCENE_INF(sceneId, name, state, isLocal, sceneType, actions, conditions, preconditions)  \
-                                    VALUES('%s',    '%s', '%d',  '%d',    '%s',      '%s',    '%s',       '%s')",
-                                           sceneId, name, state, isLocal, sceneType, actions, conditions, preconditions);
+    sprintf(sqlCmd, "INSERT INTO SCENE_INF(sceneId, name, state, isLocal, sceneType, actions, conditions, pageIndex, preconditions)  \
+                                    VALUES('%s',    '%s', '%d',  '%d',    '%s',      '%s',    '%s',       %d,        '%s')",
+                                           sceneId, name, state, isLocal, sceneType, actions, conditions, pageIndex, preconditions);
     Sql_Exec(sqlCmd);
     Db_LoadSceneToRam();
     free(sqlCmd);
@@ -528,6 +557,7 @@ JSON* Db_FindScene(const char* sceneId) {
         JSON* conditionsArray = JSON_Parse(sqlite3_column_text(row, 6));
         JSON_SetObject(sceneInfo, "actions", actionsArray);
         JSON_SetObject(sceneInfo, "conditions", conditionsArray);
+        JSON_SetNumber(sceneInfo, "pageIndex", sqlite3_column_int(row, 9));
         rowCount = 1;
     }
     if (rowCount == 1) {
@@ -557,7 +587,7 @@ int Db_EnableScene(const char* sceneId, int enableOrDisable) {
     char sqlCmd[100];
     sprintf(sqlCmd, "UPDATE scene_inf SET state=%d WHERE sceneId = '%s'", enableOrDisable, sceneId);
     Sql_Exec(sqlCmd);
-    Db_LoadSceneToRam();
+    // Db_LoadSceneToRam();
     return 1;
 }
 

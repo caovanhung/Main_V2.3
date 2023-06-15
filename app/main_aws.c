@@ -63,6 +63,8 @@
 /*-----------------------------------------------------------*/
 
 const char* SERVICE_NAME = SERVICE_AWS;
+uint8_t SERVICE_ID = SERVICE_ID_AWS;
+
 FILE *fptr;
 int rc;
 struct mosquitto * mosq;
@@ -128,6 +130,7 @@ uint32_t generateRandomNumber()
 void sendPacketToCloud(const char* topic, JSON* packet) {
     char* message = cJSON_PrintUnformatted(packet);
     mqttCloudPublish(topic, message);
+    printf("message: 0x%x. %s\n", message, message);
     free(message);
 }
 
@@ -422,10 +425,11 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
                 if (type != 24) {
                     printf("\n");
                     logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
-                }
-                int size_queue = get_sizeQueue(queue_received_aws);
-                if (size_queue < QUEUE_SIZE) {
-                    enqueue(queue_received_aws, aws_buff);
+
+                    int size_queue = get_sizeQueue(queue_received_aws);
+                    if (size_queue < QUEUE_SIZE) {
+                        enqueue(queue_received_aws, aws_buff);
+                    }
                 }
             }
         }
@@ -851,7 +855,7 @@ void Aws_ProcessLoop() {
 
 void Mosq_Init() {
     mosquitto_lib_init();
-    mosq = mosquitto_new(MQTT_MOSQUITTO_CIENT_ID, true, NULL);
+    mosq = mosquitto_new("HG_AWS", true, NULL);
     rc = mosquitto_username_pw_set(mosq, "MqttLocalHomegy", "Homegysmart");
     if(rc != 0)
     {
@@ -888,8 +892,7 @@ void Mosq_ProcessLoop() {
 void Mosq_ProcessMessage() {
     int size_queue = get_sizeQueue(queue_mos_sub);
     if (size_queue > 0) {
-        char *val_input = (char*)malloc(10000);
-        StringCopy(val_input,(char *)dequeue(queue_mos_sub));
+        char* val_input = (char*)dequeue(queue_mos_sub);
         logInfo("Received msg from MQTT local: %s", val_input);
 
         JSON* recvPacket = JSON_Parse(val_input);
@@ -898,7 +901,8 @@ void Mosq_ProcessMessage() {
             pageIndex = JSON_GetNumber(recvPacket, "pageIndex");
         }
         int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
-        JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
+        char* payloadString = JSON_GetText(recvPacket, MOSQ_Payload);
+        JSON* payload = JSON_Parse(payloadString);
         switch (reqType) {
             case GW_RESP_DEVICE_STATUS: {
                 if (pageIndex >= 0) {
@@ -1041,7 +1045,6 @@ void GetIpAddressLoop() {
 }
 
 int main( int argc,char ** argv ) {
-    pthread_t thr[3];
     int xRun = 1;
 
     queue_received_aws = newQueue(QUEUE_SIZE);
@@ -1064,46 +1067,64 @@ int main( int argc,char ** argv ) {
 
         size_queue = get_sizeQueue(queue_received_aws);
         if (size_queue > 0) {
-            int reponse = 0;
-            long long TimeCreat = 0;
-
-            Pre_parse *pre_detect = (Pre_parse *)malloc(sizeof(Pre_parse));
-            Info_device *inf_device = (Info_device *)malloc(sizeof(Info_device));
-            Info_scene *inf_scene = (Info_scene *)malloc(sizeof(Info_scene));
-            InfoProvisonGateway InfoProvisonGateway_t;
-            Info_group *info_group_t = (Info_group *)malloc(sizeof(Info_group));
-
             char* recvMsg = (char *)dequeue(queue_received_aws);
             JSON* recvPacket = JSON_Parse(recvMsg);
-
-            char *val_input = (char*)malloc(strlen(recvMsg) + 1);
-            StringCopy(val_input, recvMsg);
+            free(recvMsg);
             if (recvPacket) {
                 JSON* state = JSON_GetObject(recvPacket, "state");
                 JSON* reported = JSON_GetObject(state, "reported");
                 int reqType = JSON_GetNumber(reported, "type");
                 int sender = JSON_GetNumber(reported, "sender");
+                if (sender == 0) {
+                    sender = JSON_GetNumber(recvPacket, "sender");
+                }
+                if (reqType == 0) {
+                    reqType = JSON_GetNumber(recvPacket, "type");
+                }
                 if (sender != SENDER_APP_VIA_LOCAL && sender != SENDER_APP_VIA_CLOUD) {
                     continue;
                 }
                 char* senderId;
+                int provider = -1;
                 if (JSON_HasKey(reported, "senderId")) {
                     senderId = JSON_GetText(reported, "senderId");
                 }
+                if (JSON_HasKey(reported, "provider")) {
+                    provider = JSON_GetNumber(reported, "provider");
+                }
                 switch(reqType) {
+                    case TYPE_ADD_GW: {
+                        JSON* gw = JSON_GetObject(reported, "gateWay");
+                        JSON_ForEach(o, gw) {
+                            if (cJSON_IsObject(o)) {
+                                JSON_SetText(o, "address1", JSON_GetText(o, "gateway1"));
+                                JSON_SetText(o, "address2", JSON_GetText(o, "gateway2"));
+                                sendPacketTo(SERVICE_CORE, reqType, o);
+                            }
+                        }
+                        break;
+                    }
+                    case TYPE_ADD_DEVICE:
                     case TYPE_CTR_DEVICE:
-                    case TYPE_CTR_GROUP_NORMAL: {
-                        int provider = JSON_GetNumber(reported, "provider");
+                    case TYPE_DEL_DEVICE:
+                    case TYPE_LOCK_KIDS:
+                    case TYPE_LOCK_AGENCY:
+                    case TYPE_DIM_LED_SWITCH: {
+                        int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
                         JSON_ForEach(o, reported) {
                             if (cJSON_IsObject(o)) {
-                                if (reqType == TYPE_CTR_DEVICE) {
-                                    JSON_SetText(o, "deviceID", o->string);
-                                } else if (reqType == TYPE_CTR_GROUP_NORMAL) {
-                                    JSON_SetText(o, "groupAdress", o->string);
-                                }
+                                JSON_SetText(o, "deviceId", o->string);
                                 JSON_SetText(o, "senderId", senderId);
                                 JSON_SetNumber(o, "provider", provider);
+                                JSON_SetNumber(o, "pageIndex", pageIndex);
                                 sendPacketTo(SERVICE_CORE, reqType, o);
+                            } else if (cJSON_IsNull(o)) {
+                                JSON* p = JSON_CreateObject();
+                                JSON_SetText(p, "deviceId", o->string);
+                                JSON_SetText(o, "senderId", senderId);
+                                JSON_SetNumber(o, "provider", provider);
+                                sendPacketTo(SERVICE_CORE, reqType, p);
+                                JSON_Delete(p);
                             }
                         }
                         break;
@@ -1116,179 +1137,54 @@ int main( int argc,char ** argv ) {
                         break;
                     }
                     case TYPE_ADD_SCENE:
-                    case TYPE_UPDATE_SCENE: {
+                    case TYPE_UPDATE_SCENE:
+                    case TYPE_DEL_SCENE: {
+                        int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
                         JSON_ForEach(o, reported) {
                             if (cJSON_IsObject(o)) {
                                 JSON_SetText(o, "Id", o->string);
                                 char* scenes = JSON_GetText(o, "scenes");
                                 scenes[1] = 0;
                                 JSON_SetText(o, "sceneType", scenes);
-                                sendPacketTo(SERVICE_CORE, reqType, o);
-                            }
-                        }
-                        break;
-                    }
-                    case TYPE_ADD_GROUP_NORMAL:
-                    case TYPE_DEL_GROUP_NORMAL: {
-                        JSON_ForEach(o, reported) {
-                            if (cJSON_IsObject(o)) {
-                                JSON_SetText(o, "groupAdress", o->string);
+                                JSON_SetNumber(o, "pageIndex", pageIndex);
                                 sendPacketTo(SERVICE_CORE, reqType, o);
                             } else if (cJSON_IsNull(o)) {
                                 JSON* p = JSON_CreateObject();
-                                JSON_SetText(p, "groupAdress", o->string);
+                                JSON_SetText(p, "Id", o->string);
                                 sendPacketTo(SERVICE_CORE, reqType, p);
                                 JSON_Delete(p);
                             }
                         }
                         break;
                     }
-                }
-            }
-
-            check_flag = AWS_pre_detect_message_received(pre_detect,val_input);
-            if (check_flag && (pre_detect->sender == SENDER_APP_VIA_LOCAL || pre_detect->sender == SENDER_APP_VIA_CLOUD ))
-            {
-                JSON* recvPacket = JSON_Parse(recvMsg);
-                if (recvPacket == NULL) {
-                    continue;
-                }
-                JSON* state = JSON_GetObject(recvPacket, "state");
-                JSON* reported = JSON_GetObject(state, "reported");
-                char *topic;
-                char *payload;
-                char *message;
-                switch(pre_detect->type)
-                {
-                    case TYPE_DIM_LED_SWITCH:
-                    {
-                        AWS_getInfoDimLedDevice(inf_device, pre_detect);
-                        MOSQ_getTemplateDimLedDevice(&payload, inf_device);
-                        sendToService(SERVICE_CORE, pre_detect->type, payload);
-                        break;
-                    }
-                    case TYPE_LOCK_KIDS:
-                    {
-                        AWS_getInfoLockDevice(inf_device, pre_detect);
-                        MOSQ_getTemplateLockDevice(&payload, inf_device);
-                        sendToService(SERVICE_CORE, pre_detect->type, payload);
-                        break;
-                    }
-                    case TYPE_LOCK_AGENCY:
-                    {
-                        AWS_getInfoLockDevice(inf_device, pre_detect);
-                        MOSQ_getTemplateLockDevice(&payload, inf_device);
-                        sendToService(SERVICE_CORE, pre_detect->type, payload);
-                        break;
-                    }
-                    case TYPE_ADD_DEVICE:
-                    {
-                        TimeCreat = timeInMilliseconds();
-                        check_flag =  AWS_get_info_device(inf_device, pre_detect);
-                        if (check_flag) {
-                            // Send device info to Core service
-                            MOSQ_getTemplateAddDevice(&payload, inf_device);
-                            sendToService(SERVICE_CORE, pre_detect->type, payload);
-                        } else {
-                            logError("Invalid message");
+                    case TYPE_ADD_GROUP_NORMAL:
+                    case TYPE_DEL_GROUP_NORMAL:
+                    case TYPE_CTR_GROUP_NORMAL:
+                    case TYPE_ADD_GROUP_LINK:
+                    case TYPE_DEL_GROUP_LINK:
+                    case TYPE_UPDATE_GROUP_LINK: {
+                        JSON_ForEach(o, reported) {
+                            if (cJSON_IsObject(o)) {
+                                JSON_SetText(o, "groupAdress", o->string);
+                                JSON_SetText(o, "senderId", senderId);
+                                JSON_SetNumber(o, "provider", provider);
+                                sendPacketTo(SERVICE_CORE, reqType, o);
+                            } else if (cJSON_IsNull(o)) {
+                                JSON* p = JSON_CreateObject();
+                                JSON_SetText(p, "groupAdress", o->string);
+                                JSON_SetText(o, "senderId", senderId);
+                                JSON_SetNumber(o, "provider", provider);
+                                sendPacketTo(SERVICE_CORE, reqType, p);
+                                JSON_Delete(p);
+                            }
                         }
                         break;
                     }
-                    case TYPE_DEL_DEVICE:
-                    {
-                        AWS_getInfoDeleteDevice(inf_device, pre_detect);
-                        MOSQ_getTemplateDeleteDevice(&payload, inf_device);
-                        sendToService(SERVICE_CORE, pre_detect->type, payload);
-                        break;
-                    }
-                    case TYPE_DEL_SCENE:
-                    {
-                        TimeCreat = timeInMilliseconds();
-
-                        MOSQ_getTemplateDeleteScene(&payload,pre_detect->object);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_DEL_SCENE,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_DEL_SCENE,MOSQ_ActResponse);
-                        mqttLocalPublish(topic, message);
-                        break;
-                    }
-                    case TYPE_ADD_GROUP_LINK:
-                    {
-                        AWS_getInfoAddGroupNormal(info_group_t,pre_detect);
-                        MOSQ_getTemplateAddGroupNormal(&payload,info_group_t);
-                        get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_ADD_GROUP_LINK,MOSQ_ActResponse);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_ADD_GROUP_LINK,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        mqttLocalPublish(topic, message);
-                        break;
-                    }
-                    case TYPE_DEL_GROUP_LINK:
-                    {
-                        TimeCreat = timeInMilliseconds();
-                        AWS_getInfoDeleteGroupNormal(info_group_t,pre_detect);
-                        MOSQ_getTemplateDeleteGroupNormal(&payload,info_group_t);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_DEL_GROUP_LINK,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_DEL_GROUP_LINK,MOSQ_ActResponse);
-                        mqttLocalPublish(topic, message);
-                        break;
-                    }
-                    case TYPE_UPDATE_GROUP_LINK:
-                    {
-                        TimeCreat = timeInMilliseconds();
-                        AWS_getInfoAddGroupNormal(info_group_t,pre_detect);
-                        MOSQ_getTemplateAddGroupNormal(&payload,info_group_t);
-                        get_topic(&topic,MOSQ_LayerService_Core,SERVICE_CORE,TYPE_UPDATE_GROUP_LINK,MOSQ_ActResponse);
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_UPDATE_GROUP_LINK,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        mqttLocalPublish(topic, message);
-                        break;
-                    }
-                    case TYPE_ADD_GW:
-                    {
-                        AWS_getInfoGateway(&InfoProvisonGateway_t, pre_detect);
-                        MOSQ_getTemplateAddGateway(&payload, &InfoProvisonGateway_t);
-                        sendToService(SERVICE_CORE, pre_detect->type, payload);
-                        break;
-                    }
-                    case TYPE_UPDATE_SERVICE:
-                    {
-                        logInfo("TYPE_UPDATE_SERVICE ");
-                        MOSQ_getTemplateUpdateService(&payload,pre_detect);
-                        TimeCreat = timeInMilliseconds();
-                        getFormTranMOSQ(&message,MOSQ_LayerService_App,SERVICE_AWS,TYPE_UPDATE_SERVICE,MOSQ_ActResponse,pre_detect->object,TimeCreat,payload);
-                        get_topic(&topic,MOSQ_LayerService_Manager,MOSQ_NameService_Manager_ServieceManager,TYPE_UPDATE_SERVICE,MOSQ_ActResponse);
-                        mqttLocalPublish(topic, message);
-                        break;
-                    }
-                }
-                free(val_input);
-                free(inf_device);
-                free(pre_detect);
-                free(inf_scene);
-                free(info_group_t);
-                JSON_Delete(recvPacket);
-            }
-            else
-            {
-                AWS_detect_message_received_for_update(pre_detect,val_input);
-                if (pre_detect->sender != SENDER_APP_VIA_CLOUD) {
-                    continue;
-                }
-                char *topic;
-                char *message;
-                switch (pre_detect->type)
-                {
                     case TYPE_GET_DEVICE_HISTORY:
-                    {
-                        JSON* packet = JSON_Parse(val_input);
-                        sendPacketTo(SERVICE_CORE, pre_detect->type, packet);
-                        JSON_Delete(packet);
+                        sendPacketTo(SERVICE_CORE, reqType, recvPacket);
                         break;
-                    }
-                    default:
-                    {
-                        break;
-                    }
                 }
             }
-            free(recvMsg);
         }
         usleep(100);
     }

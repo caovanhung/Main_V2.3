@@ -119,7 +119,7 @@ extern Scene* g_sceneList;
 extern int g_sceneCount;
 
 #define Sql_Query(sqlCmd, row)    int rc = 0; sqlite3_stmt *row; rc = sqlite3_prepare_v2(db, sqlCmd, -1, &row, NULL); while (sqlite3_step(row) == SQLITE_ROW)
-#define Sql_Exec(sqlCmd)    { char *err_msg; if (sqlite3_exec(db, sqlCmd, 0, 0, &err_msg) != SQLITE_OK) { myLogError("SQL Error: %s, %s", sqlCmd, err_msg); sqlite3_free(err_msg); return 0; }}
+#define Sql_Exec(sqlCmd)    { char *err_msg; if (sqlite3_exec(db, sqlCmd, 0, 0, &err_msg) != SQLITE_OK) { logError("SQL Error: %s, %s", sqlCmd, err_msg); sqlite3_free(err_msg); return 0; }}
 
 int Db_AddGateway(JSON* gatewayInfo);
 int Db_FindGatewayId(const char* gatewayAddr);

@@ -1,6 +1,5 @@
 #include <math.h>
 #include "ble_process.h"
-#include "logging_stack.h"
 #include "time_t.h"
 #include "uart.h"
 #include "aws_mosquitto.h"
@@ -36,7 +35,7 @@ int g_uartSendingFramesIdx = 0;
 int g_uartSendingIdx = 0;
 
 void BLE_SetDeviceResp(int respType, uint16_t deviceAddr, int status) {
-    myLogInfo("[BLE_SetDeviceResp] respType=%d, deviceAddr=%04X, status=%d", respType, deviceAddr, status);
+    logInfo("[BLE_SetDeviceResp] respType=%d, deviceAddr=%04X, status=%d", respType, deviceAddr, status);
     for (int i = 0; i < UART_DEVICE_RESP_SIZE; i++) {
         if ((g_uartDeviceResps[i].respType == 0xff || g_uartDeviceResps[i].respType == respType)
             && g_uartDeviceResps[i].deviceAddr == deviceAddr) {
@@ -118,7 +117,7 @@ void BLE_SendToGateway(int gwIndex) {
         UartSendingFrame* frame = findFrameToSend(gwIndex);
         long long int currentTime = timeInMilliseconds();
         uint8_t anotherGwIndex = gwIndex == 0? 1 : 0;
-        if (frame != NULL && currentTime - sentTime[anotherGwIndex] > 10) {
+        if (frame != NULL && currentTime - sentTime[anotherGwIndex] > 200) {
             // printf("currentTime: %ld, sentTime: %ld\n", currentTime, sentTime[anotherGwIndex]);
             sentFrame[gwIndex].timeout = frame->timeout;
             sentFrame[gwIndex].retryCount = frame->retryCount;
@@ -1182,18 +1181,16 @@ bool GW_SetSceneActionForLight(const char* address_device,const char* sceneID)
     return true;
 }
 
-bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID,const char* modeBlinkRgb )
+bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID, uint8_t blinkMode)
 {
-    ASSERT(address_device); ASSERT(sceneID); ASSERT(modeBlinkRgb);
+    ASSERT(address_device); ASSERT(sceneID);
     uint8_t  SceneLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0x00,0x00,   0x82,0x46,  0x00,0x00,     0x00,         0x00,0x00};
     long int dpAddrHex = strtol(address_device, NULL, 16);
     uint8_t hex_address_device[5];
     uint8_t hex_sceneID[5];
-    uint8_t hex_modeBlinkRgb[3];
 
     String2HexArr((char*)address_device,hex_address_device);
     String2HexArr((char*)sceneID,hex_sceneID);
-    String2HexArr((char*)modeBlinkRgb,hex_modeBlinkRgb);
 
     SceneLocalToDevice[8] = hex_address_device[0];
     SceneLocalToDevice[9] = hex_address_device[1];
@@ -1201,7 +1198,7 @@ bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const ch
     SceneLocalToDevice[12] = hex_sceneID[0];
     SceneLocalToDevice[13] = hex_sceneID[1];
 
-    SceneLocalToDevice[14] = hex_modeBlinkRgb[0];
+    SceneLocalToDevice[14] = blinkMode;
 
     sendFrameToAnyGw(dpAddrHex, SceneLocalToDevice,17);
     addTimeoutToSendingFrame(500);

@@ -19,9 +19,7 @@
 #include <pthread.h>
 #include <assert.h>
 #include <mosquitto.h>
-#include "database_common.h"
 #include "define.h"
-#include "logging_stack.h"
 #include "time_t.h"
 #include "queue.h"
 #include "parson.h"
@@ -32,6 +30,9 @@
 #include "cJSON.h"
 #include "gpio.h"
 
+#define LOG_QUEUE_SIZE          1000
+
+#define TYPE_HC_FEEDBACK        1
 #define TYPE_CONFIG_WIFI        99
 #define TYPE_CONFIG_WIFI_GW     100
 
@@ -48,6 +49,7 @@ typedef enum {
 } running_mode_t;
 
 const char* SERVICE_NAME = SERVICE_CFG;
+uint8_t     SERVICE_ID   = SERVICE_ID_CFG;
 
 struct mosquitto * mosq;
 static bool g_mosqIsConnected = false;
@@ -64,24 +66,36 @@ static char g_accountId[100] = {0};
 static bool g_wifiConnectDone = false;
 static bool g_wifiIsConnected = false;
 
+static struct Queue* g_logQueues[SERVICES_NUMBER];
+static char* g_serviceName[SERVICES_NUMBER] = {"aws", "core", "ble", "tuya", "cfg"};
+
 bool CheckWifiConnection(const char* ssid);
 
 void on_connect(struct mosquitto *mosq, void *obj, int rc) {
     if(rc) {
-        LogError((get_localtime_now()),("Error with result code: %d\n", rc));
+        logError("Error with result code: %d", rc);
         exit(-1);
     }
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, 0);
     // mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_CONTROL_LOCAL, 0);
     mosquitto_subscribe(mosq, NULL, "CFG/#", 0);
+    mosquitto_subscribe(mosq, NULL, "LOG_REPORT/#", 0);
 }
 
 void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg)
 {
-    logInfo("Received from topic: %s", msg->topic);
-    logInfo("Payload: %s", msg->payload);
+    if (StringContains(msg->topic, "LOG_REPORT/")) {
+        int fromServiceId = atoi(&msg->topic[11]);
+        if (fromServiceId >= 0 && fromServiceId < SERVICES_NUMBER) {
+            enqueue(g_logQueues[fromServiceId], (char*)msg->payload);
+        }
+        return;
+    }
+
     JSON* recvMsg = JSON_Parse(msg->payload);
     if (StringCompare(msg->topic, "MANAGER_SERVICES/Setting/Wifi")) {
+        logInfo("Received from topic: %s", msg->topic);
+        logInfo("Payload: %s", msg->payload);
         int type = JSON_GetNumber(recvMsg, "type");
         if (type == TYPE_CONFIG_WIFI || type == TYPE_CONFIG_WIFI_GW) {
             JSON* wifiInfo = JSON_GetObject(recvMsg, "wifi_info");
@@ -137,14 +151,14 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
 void Mosq_Init() {
     int rc = 0;
     mosquitto_lib_init();
-    mosq = mosquitto_new(MQTT_MOSQUITTO_CIENT_ID, true, NULL);
+    mosq = mosquitto_new("HG_CFG", true, NULL);
     rc = mosquitto_username_pw_set(mosq, "MqttLocalHomegy", "Homegysmart");
     mosquitto_connect_callback_set(mosq, on_connect);
     mosquitto_message_callback_set(mosq, on_message);
     rc = mosquitto_connect(mosq, MQTT_MOSQUITTO_HOST, MQTT_MOSQUITTO_PORT, MQTT_MOSQUITTO_KEEP_ALIVE);
     if(rc != 0)
     {
-        LogInfo((get_localtime_now()),("Client could not connect to broker! Error Code: %d\n", rc));
+        logInfo("Client could not connect to broker! Error Code: %d", rc);
         mosquitto_destroy(mosq);
         return;
     }
@@ -303,7 +317,9 @@ void MainLoop() {
                 } else {
                     LED_OFF;
                 }
-                system("pkill -15 create_ap");
+                if (!g_needConfigGw) {
+                    system("pkill -15 create_ap");
+                }
                 pclose(g_createApFile);
                 logInfo("Done configuring");
                 state = 0;
@@ -313,7 +329,47 @@ void MainLoop() {
     }
 }
 
+void WriteLogLoop() {
+    static long long int oldTick = 0;
+    if (timeInMilliseconds() - oldTick > 5000) {
+        oldTick = timeInMilliseconds();
+
+        for (int i = 0; i < SERVICES_NUMBER; i++) {
+            int queueSize = get_sizeQueue(g_logQueues[i]);
+            if (queueSize > 0) {
+                char* msg = NULL;
+                for (int m = 0; m < queueSize; m++) {
+                    int msgLength = StringLength(msg);
+                    char* logItem = (char*)dequeue(g_logQueues[i]);
+                    msg = realloc(msg, msgLength + StringLength(logItem) + queueSize + 10);
+                    StringCopy(&msg[msgLength], logItem);
+                    msgLength = StringLength(msg);
+                    msg[msgLength] = '\n';
+                    msg[msgLength + 1] = 0;
+                }
+
+                FILE *fp;
+                char* today = GetCurrentDate();
+                char filename[100];
+                sprintf(filename, "logs/%s/log_%s_%s.txt", g_serviceName[i], g_serviceName[i], today);
+                if (access(filename, F_OK) != 0) {
+                    // Create new file
+                    fp  = fopen (filename, "w");
+                } else {
+                    fp  = fopen (filename, "a");
+                }
+                fprintf(fp, "%s", msg);
+                fclose(fp);
+                free(msg);
+            }
+        }
+    }
+}
+
 int main(int argc, char ** argv) {
+    for (int i = 0; i < SERVICES_NUMBER; i++) {
+        g_logQueues[i] = newQueue(LOG_QUEUE_SIZE);
+    }
     pinMode(USER_LED, OUTPUT);
     pinMode(USER_BUTTON, INPUT);
     LED_ON;
@@ -321,18 +377,12 @@ int main(int argc, char ** argv) {
     sleep(1);
     LED_OFF;
 
-    long long a = 0;
-
     while (1) {
         Mosq_ProcessLoop();
         MainLoop();
         ConnectWifiLoop();
         LedProcessLoop();
-        // if (timeInMilliseconds() - a > 3000) {
-        //     a = timeInMilliseconds();
-        //     char* message = "{\"type\":102}";
-        //     mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
-        // }
+        WriteLogLoop();
         usleep(1000);
     }
     return 0;
