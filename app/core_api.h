@@ -23,15 +23,16 @@ int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr)
 void Aws_DeleteDevice(const char* deviceId, int pageIndex);
 void Aws_SaveDeviceState(const char* deviceId, int state, int pageIndex);
 void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex);
-void Aws_UpdateGroupValue(const char* groupAddr, uint8_t onoff);
+void Aws_UpdateGroupValue(const char* groupAddr, int dpId, int dpValue);
 void Aws_EnableScene(const char* sceneId, bool state);
 /***************************************************************************************/
 
 /********************* APIS TO COMMUNICATE WITH BLE SERVICE ****************************/
+void Ble_ControlDeviceStringDp(const char* deviceId, uint8_t dpId, char* dpValue, const char* causeId);
 void Ble_ControlDeviceArray(const char* deviceId, uint8_t* dpIds, double* dpValues, int dpCount, const char* causeId);
 void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* causeId);
-void Ble_ControlStringDp(const char* deviceId, int dpId, const char* dpValue);
 void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* causeId);
+void Ble_ControlGroupStringDp(const char* groupAddr, uint8_t dpId, char* dpValue, const char* causeId);
 void Ble_ControlGroupArray(const char* groupAddr, uint8_t* dpIds, double* dpValues, int dpCount, const char* causeId);
 void Ble_SetTTL(int gwIndex, const char* deviceAddr, uint8_t ttl);
 void Ble_AddExtraDpsToIrDevices(const char* deviceId, JSON* dictDPs);

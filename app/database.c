@@ -36,18 +36,19 @@ int Db_AddGateway(JSON* gatewayInfo) {
     ASSERT(gatewayInfo);
     creat_table_database(&db);
     char sqlCmd[500];
-    char* address1 = JSON_GetText(gatewayInfo, "address1");
-    char* address2 = JSON_GetText(gatewayInfo, "address2");
+    char* address1 = JSON_GetText(gatewayInfo, "gateway1");
+    char* address2 = JSON_GetText(gatewayInfo, "gateway2");
     char* appkey = JSON_GetText(gatewayInfo, KEY_APP_KEY);
     char* ivIndex = JSON_GetText(gatewayInfo, KEY_IV_INDEX);
     char* netkeyIndex = JSON_GetText(gatewayInfo, KEY_NETKEY_INDEX);
     char* netkey = JSON_GetText(gatewayInfo, KEY_NETKEY);
     char* appkeyIndex = JSON_GetText(gatewayInfo, KEY_APP_KEY_INDEX);
-    char* deviceKey = JSON_GetText(gatewayInfo, KEY_DEVICE_KEY);
-    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(0,'%s','%s','%s','%s','%s','%s','%s')", address1, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey);
+    char* deviceKey1 = JSON_GetText(gatewayInfo, "deviceKey1");
+    char* deviceKey2 = JSON_GetText(gatewayInfo, "deviceKey2");
+    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(0,'%s','%s','%s','%s','%s','%s','%s')", address1, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey1);
     Sql_Exec(sqlCmd);
 
-    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(1,'%s','%s','%s','%s','%s','%s','%s')", address2, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey);
+    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(1,'%s','%s','%s','%s','%s','%s','%s')", address2, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey2);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -126,6 +127,7 @@ int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand) {
             deviceInfo->state = sqlite3_column_int(sqlResponse, 1);
             deviceInfo->provider = sqlite3_column_int(sqlResponse, 7);
             StringCopy(deviceInfo->id, sqlite3_column_text(sqlResponse, 0));
+            StringCopy(deviceInfo->name, sqlite3_column_text(sqlResponse, 2));
             StringCopy(deviceInfo->addr, sqlite3_column_text(sqlResponse, 4));
             deviceInfo->gwIndex = sqlite3_column_int(sqlResponse, 5);
             StringCopy(deviceInfo->pid, sqlite3_column_text(sqlResponse, 8));
@@ -307,6 +309,29 @@ int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr) {
     return rowCount;
 }
 
+int Db_FindDpByAddrAndDpId(DpInfo* dpInfo, const char* dpAddr, int dpId) {
+    ASSERT(dpInfo); ASSERT(dpAddr);
+    int rowCount = 0;
+    char sqlCommand[300];
+    sprintf(sqlCommand, "SELECT deviceId, dpId, address, dpValue, pageIndex FROM devices WHERE address='%s' AND dpId=%d;", dpAddr, dpId);
+    Sql_Query(sqlCommand, row) {
+        dpInfo->id = atoi(sqlite3_column_text(row, 1));
+        char* value = sqlite3_column_text(row, 3);
+        if (StringCompare(value, "true")) {
+            dpInfo->value = 1;
+        } else if (StringCompare(value, "false")) {
+            dpInfo->value = 0;
+        } else {
+            dpInfo->value = strtod(value, NULL);
+        }
+        StringCopy(dpInfo->deviceId, sqlite3_column_text(row, 0));
+        StringCopy(dpInfo->addr, sqlite3_column_text(row, 2));
+        dpInfo->pageIndex = sqlite3_column_int(row, 4);
+        rowCount = 1;
+    }
+    return rowCount;
+}
+
 int Db_SaveDpValue(const char* deviceId, int dpId, double value) {
     ASSERT(deviceId);
     char sqlCmd[200];
@@ -334,6 +359,7 @@ int Db_LoadSceneToRam() {
         g_sceneList[g_sceneCount].isEnable = sqlite3_column_int(row, 2);
         g_sceneList[g_sceneCount].runningActionIndex = -1;
         StringCopy(g_sceneList[g_sceneCount].id, sqlite3_column_text(row, 0));
+        StringCopy(g_sceneList[g_sceneCount].name, sqlite3_column_text(row, 3));
         g_sceneList[g_sceneCount].type = atoi(sqlite3_column_text(row, 4));
 
         // Load preconditions
@@ -360,9 +386,6 @@ int Db_LoadSceneToRam() {
         char* actions = sqlite3_column_text(row, 5);
         JSON* actionsArray = JSON_Parse(actions);
         int actionCount = 0;
-        if (StringCompare(g_sceneList[g_sceneCount].id, "1110")) {
-            int a = 1;
-        }
         JSON_ForEach(act, actionsArray) {
             SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
             action->dpCount = 0;
@@ -395,13 +418,20 @@ int Db_LoadSceneToRam() {
                     if (cJSON_IsNumber(o) || cJSON_IsBool(o)) {
                         action->dpValues[action->dpCount] = (double)o->valueint;
                     } else if (cJSON_IsString(o)) {
-                        if (StringContains(o->valuestring, "scene_")) {
-                            list_t* tmp = String_Split(o->valuestring, "_");
-                            if (tmp->count == 2) {
-                                uint8_t value = atoi(tmp->items[1]);
-                                action->dpValues[action->dpCount] = value;
+                        if (action->dpIds[action->dpCount] == 21) {
+                            if (StringContains(o->valuestring, "scene_")) {
+                                list_t* tmp = String_Split(o->valuestring, "_");
+                                if (tmp->count == 2) {
+                                    uint8_t value = atoi(tmp->items[1]);
+                                    action->dpValues[action->dpCount] = value;
+                                }
+                                List_Delete(tmp);
+                            } else {
+                                action->dpValues[action->dpCount] = -1;
                             }
-                            List_Delete(tmp);
+                        } else {
+                            action->valueType = ValueTypeString;
+                            StringCopy(action->valueString, o->valuestring);
                         }
                     }
                     action->dpCount++;
@@ -436,7 +466,31 @@ int Db_LoadSceneToRam() {
                 char* time = JSON_GetText(exprArray, "time");
                 list_t* timeItems = String_Split(time, ":");
                 if (timeItems->count == 2) {
-                    cond->schMinutes = atoi(timeItems->items[0]) * 60 + atoi(timeItems->items[1]);
+                    int hour = atoi(timeItems->items[0]);
+                    int minute = atoi(timeItems->items[1]);
+                    cond->schMinutes = hour * 60 + minute;
+                    // If repeat is 0, scheMinutes will be epoch time so that scene will be executed only 1 time
+                    if (cond->repeat == 0) {
+                        char* dateStr = JSON_GetText(exprArray, "date");
+                        if (dateStr) {
+                            int date = atoi(&dateStr[6]);
+                            dateStr[6] = 0;
+                            int month = atoi(&dateStr[4]);
+                            dateStr[4] = 0;
+                            int year = atoi(dateStr);
+                            // Convert date time to epoch time
+                            struct tm t;
+                            t.tm_year = year - 1900;  // Year - 1900
+                            t.tm_mon = month - 1;     // Month, where 0 = jan
+                            t.tm_mday = date;         // Day of the month
+                            t.tm_hour = hour;
+                            t.tm_min = minute;
+                            t.tm_sec = 0;
+                            t.tm_isdst = -1;
+                            cond->schMinutes = mktime(&t);
+                            printInfo("schMinutes of scene %s is %u", g_sceneList[g_sceneCount].id, cond->schMinutes);
+                        }
+                    }
                 }
                 List_Delete(timeItems);
             } else {
@@ -479,7 +533,9 @@ int Db_LoadSceneToRam() {
     return 1;
 }
 
-int Db_SaveSceneCondRepeat(const char* sceneId, int conditionIndex, uint8_t repeat) {
+int Db_SaveSceneCondDate(const char* sceneId, int conditionIndex, const char* date) {
+    ASSERT(sceneId);
+    ASSERT(date);
     char sqlCmd[200];
     char* conditions = NULL;
     sprintf(sqlCmd, "SELECT conditions FROM scene_inf WHERE sceneId='%s'", sceneId);
@@ -493,7 +549,10 @@ int Db_SaveSceneCondRepeat(const char* sceneId, int conditionIndex, uint8_t repe
         int i = 0;
         JSON_ForEach(condition, conditionsArray) {
             if (i == conditionIndex) {
-                JSON_SetNumber(condition, "repeat", repeat);
+                JSON* expr = JSON_GetObject(condition, "expr");
+                if (expr) {
+                    JSON_SetText(expr, "date", date);
+                }
                 break;
             }
             i++;

@@ -11,6 +11,7 @@ typedef struct {
 
 void logInfo(const char* formatedString, ...);
 void logError(const char* formatedString, ...);
+void printInfo(const char* formatedString, ...);
 
 #define StringLength(str)   (str == NULL? 0 : strlen(str))
 char* StringCopy(char* dest, const char* src);

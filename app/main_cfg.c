@@ -65,6 +65,7 @@ static bool g_needConfigGw = false;
 static char g_accountId[100] = {0};
 static bool g_wifiConnectDone = false;
 static bool g_wifiIsConnected = false;
+static JSON* g_gatewayInfo;
 
 static struct Queue* g_logQueues[SERVICES_NUMBER];
 static char* g_serviceName[SERVICES_NUMBER] = {"aws", "core", "ble", "tuya", "cfg"};
@@ -110,7 +111,6 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
             logInfo("SSID: %s, PASS: %s", ssid, pass);
             g_homeId[0] = 0;
             g_accountId[0] = 0;
-            g_needConfigGw = type == TYPE_CONFIG_WIFI_GW? true : false;
 
             if (JSON_HasKey(recvMsg, "home_info")) {
                 JSON* homeInfo = JSON_GetObject(recvMsg, "home_info");
@@ -123,6 +123,13 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
                     StringCopy(g_accountId, accountId);
                 }
                 logInfo("HomeId: %s, AccountId: %s", g_homeId, g_accountId);
+            }
+            if (type == TYPE_CONFIG_WIFI_GW && JSON_HasKey(recvMsg, "gateWay")) {
+                g_gatewayInfo = JSON_Clone(JSON_GetObject(recvMsg, "gateWay"));
+                g_needConfigGw = true;
+            } else {
+                g_gatewayInfo = NULL;
+                g_needConfigGw = false;
             }
         }
     } else {
@@ -297,7 +304,7 @@ void MainLoop() {
             }
             break;
         case 2:
-            // Wait for button press
+            // Wait for button press or finished configuration
             if (pinRead(USER_BUTTON) == 0 || g_wifiConnectDone) {
                 count = 0;
                 if (g_wifiIsConnected) {
@@ -312,6 +319,22 @@ void MainLoop() {
                         if (g_needConfigGw) {
                             char* message = "{\"type\":102}";
                             mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
+                            // Send message to AWS service to configure gateway
+                            JSON* p = JSON_CreateObject();
+                            JSON* state = JSON_CreateObject();
+                            JSON* reported = JSON_CreateObject();
+                            JSON_SetObject(state, "reported", reported);
+                            JSON_SetObject(p, "state", state);
+                            JSON_SetNumber(reported, "type", TYPE_ADD_GW);
+                            JSON_SetNumber(reported, "sender", SENDER_APP_VIA_LOCAL);
+                            JSON* tmp = JSON_CreateObject();
+                            JSON_SetObject(tmp, "0A00", g_gatewayInfo);
+                            JSON_SetObject(reported, "gateWay", tmp);
+                            char* payload = cJSON_PrintUnformatted(p);
+                            mosquitto_publish(mosq, NULL, MOSQ_TOPIC_CONTROL_LOCAL, strlen(payload), payload, 0, false);
+                            logInfo("Sent to service AWS: (%s): (%s)", MOSQ_TOPIC_CONTROL_LOCAL, payload);
+                            JSON_Delete(p);
+                            free(payload);
                         }
                     }
                 } else {

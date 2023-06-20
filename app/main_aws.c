@@ -12,7 +12,7 @@
 #include <sys/un.h>
 
 
-#include <stdio.h> /* printf, sprintf */
+#include <stdio.h> /* printInfo, sprintf */
 #include <stdlib.h> /* exit, atoi, malloc, free */
 #include <unistd.h> /* read, write, close */
 #include <string.h> /* memcpy, memset */
@@ -74,6 +74,7 @@ TransportInterface_t transport;
 NetworkContext_t networkContext;
 OpensslParams_t opensslParams;
 const char g_ipAddress[50];
+const char g_wifiName[100];
 
 static bool g_awsIsConnected = false;
 static bool g_mosqIsConnected = false;
@@ -130,7 +131,6 @@ uint32_t generateRandomNumber()
 void sendPacketToCloud(const char* topic, JSON* packet) {
     char* message = cJSON_PrintUnformatted(packet);
     mqttCloudPublish(topic, message);
-    printf("message: 0x%x. %s\n", message, message);
     free(message);
 }
 
@@ -410,7 +410,7 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
             if (reported) {
                 int sender = JSON_GetNumber(reported, "sender");
                 if (JSON_HasKey(reported, "type") && (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_VIA_CLOUD)) {
-                    printf("\n");
+                    printInfo("\n");
                     logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
                     int size_queue = get_sizeQueue(queue_received_aws);
                     if (size_queue < QUEUE_SIZE) {
@@ -423,7 +423,7 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
             int type = JSON_GetNumber(recvPacket, "type");
             if (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_VIA_CLOUD) {
                 if (type != 24) {
-                    printf("\n");
+                    printInfo("\n");
                     logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
 
                     int size_queue = get_sizeQueue(queue_received_aws);
@@ -436,6 +436,26 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
     }
     JSON_Delete(recvPacket);
     free(topic);
+}
+
+void Mosq_ReceivedHandler(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
+    if (StringCompare(msg->topic, MOSQ_TOPIC_CONTROL_LOCAL)) {
+        char* payload = calloc((int)msg->payloadlen + 1, sizeof(char));
+        strncpy(payload, msg->payload, msg->payloadlen);
+        payload[(int)msg->payloadlen] = '\0';
+        printInfo("\n");
+        logInfo("Received msg from local control. topic: %s, payload: %s", msg->topic, payload);
+        int size_queue = get_sizeQueue(queue_received_aws);
+        if(size_queue < QUEUE_SIZE) {
+            enqueue(queue_received_aws, payload);
+        }
+        free(payload);
+    } else {
+        int size_queue = get_sizeQueue(queue_mos_sub);
+        if (size_queue < QUEUE_SIZE) {
+            enqueue(queue_mos_sub, (char *) msg->payload);
+        }
+    }
 }
 
 /*-----------------------------------------------------------*/
@@ -583,7 +603,7 @@ void eventCallback( MQTTContext_t * pMqttContext,MQTTPacketInfo_t * pPacketInfo,
 
             /* Any other packet type is invalid. */
             default:
-                printf("Unknown packet type received:(%02x).\n\n",pPacketInfo->type);
+                printInfo("Unknown packet type received:(%02x).\n\n",pPacketInfo->type);
                 LogError((get_localtime_now()), ( "Unknown packet type received:(%02x).\n\n",
                             pPacketInfo->type ) );
         }
@@ -777,29 +797,11 @@ int initializeMqtt( MQTTContext_t * pMqttContext,NetworkContext_t * pNetworkCont
 
 void on_connect(struct mosquitto *mosq, void *obj, int rc) {
     if(rc) {
-        printf("Error with result code: %d\n", rc);
+        printInfo("Error with result code: %d\n", rc);
         exit(-1);
     }
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_AWS, 0);
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_CONTROL_LOCAL, 0);
-}
-
-void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
-    if (StringCompare(msg->topic, MOSQ_TOPIC_CONTROL_LOCAL)) {
-        char* payload = calloc((int)msg->payloadlen + 1, sizeof(char));
-        strncpy(payload, msg->payload, msg->payloadlen);
-        payload[(int)msg->payloadlen] = '\0';
-        int size_queue = get_sizeQueue(queue_received_aws);
-        if(size_queue < QUEUE_SIZE) {
-            enqueue(queue_received_aws, payload);
-        }
-        free(payload);
-    } else {
-        int size_queue = get_sizeQueue(queue_mos_sub);
-        if (size_queue < QUEUE_SIZE) {
-            enqueue(queue_mos_sub, (char *) msg->payload);
-        }
-    }
 }
 
 
@@ -863,7 +865,7 @@ void Mosq_Init() {
         return;
     }
     mosquitto_connect_callback_set(mosq, on_connect);
-    mosquitto_message_callback_set(mosq, on_message);
+    mosquitto_message_callback_set(mosq, Mosq_ReceivedHandler);
     rc = mosquitto_connect(mosq, MQTT_MOSQUITTO_HOST, MQTT_MOSQUITTO_PORT, MQTT_MOSQUITTO_KEEP_ALIVE);
     if(rc != 0)
     {
@@ -1034,7 +1036,26 @@ void GetIpAddressLoop() {
                 logInfo("New IP Address: %s", g_ipAddress);
                 // Update new IP address to AWS
                 char msg[200];
-                sprintf(msg, "{\"state\":{\"reported\":{\"localIP\":\"%s\", \"sender\":11}}}", g_ipAddress);
+                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"0A00\":{\"ipLocal\":\"%s\"}}, \"sender\":11}}}", g_ipAddress);
+                char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
+                mqttCloudPublish(topic, msg);
+                free(topic);
+            }
+        }
+        fclose(fp);
+
+        // Check connected wifi name
+        char wifiName[100];
+        fp = popen("iw wlan0 info | grep -Po '(?<=ssid ).*'", "r");
+        while (fgets(wifiName, sizeof(wifiName), fp) != NULL);
+        if (wifiName && StringLength(wifiName) > 1) {
+            wifiName[StringLength(wifiName) - 1] = 0;
+            if (StringCompare(wifiName, g_wifiName) == false) {
+                StringCopy(g_wifiName, wifiName);
+                logInfo("New connected wifi name: %s", g_wifiName);
+                // Update new wifi name to AWS
+                char msg[200];
+                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"0A00\":{\"nameWifi\":\"%s\"}}, \"sender\":11}}}", g_wifiName);
                 char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
                 mqttCloudPublish(topic, msg);
                 free(topic);

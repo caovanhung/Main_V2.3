@@ -65,32 +65,6 @@ struct state_element
     char causeId[10];
 };
 
-typedef struct  
-{
-    char *address;
-    char *state;
-}InfoControlDeviceBLE;
-
-typedef struct  
-{
-    char *address;
-    int lightness;
-    int colorTemperature;
-}InfoControlCLT_BLE;
-
-typedef struct  
-{
-    char *address;
-    char *valueHSL;
-}InfoControlHSL_BLE;
-
-typedef struct  
-{
-    char *address;
-    char *modeBlinkRgb;
-}InfoControlBlinkRGB_BLE;
-
-
 typedef struct
 {
     char type_reponse;
@@ -108,113 +82,41 @@ void BLE_SendUartFrameLoop();
 bool GW_GetDeviceOnOffState(const char* dpAddr);
 bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue);
 bool GW_HgSwitchOnOff_NoResp(const char* dpAddr, uint8_t dpValue);
-bool GW_CtrlLightOnOff(const char *deviceAddr, uint8_t onoff);
-
-/*
- * Control lightness and color temperature
- * Models: HG_BLE_LIGHT_WHITE (22,23), RD_BLE_LIGHT_WHITE (22,23), RD_BLE_LIGHT_WHITE_TEST (22,23),
- *         RD_BLE_LIGHT_RGB (22,23),
- *         LIGHT_GROUP (22,23)
- */
-bool ble_controlCTL(const char *address_element, int lightness, int colorTemperature);
-
-/*
- * Control HSL color of RGB light
- * Models: RD_BLE_LIGHT_RGB (24), LIGHT_GROUP (24)
- */
-bool GW_SetLightHSL(const char *address_element, const char *HSL);
-bool GW_SetRGBLightBlinkMode(const char *dpAddr, uint8_t blinkMode);
-
-/*
- * Dim LED of switch
- */
 bool ble_dimLedSwitch_HOMEGY(const char *address_device, int lightness);
 
-/*
- * Add/Delete a CCT light to/from a group
- */
+bool GW_CtrlLightOnOff(const char *deviceAddr, uint8_t onoff);
+bool GW_SetLightness(const char *deviceAddr, int lightness);
+bool GW_SetLightColor(const char *deviceAddr, int color);
+bool GW_SetLightnessTemperature(const char *address_element, int lightness, int colorTemperature);
+bool GW_SetLightHSL(const char *address_element, const char *HSL);
+bool GW_SetRGBLightBlinkMode(const char *dpAddr, int blinkMode);
+
 bool GW_AddGroupLight(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
 bool GW_AddGroupSwitch(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
 bool GW_DeleteGroup(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
-/*
- * Lock agency
- */
 bool ble_logDeivce(const char *address_element, int state);
-
-/*
- * Lock kids
- */
 bool ble_logTouch(const char *address_element, uint8_t dpId, int state);
-
-/*
- * Add/delete local scene
- */
 bool GW_SetSceneActionForSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param);
 bool GW_SetSceneActionForLight(const char* address_device,const char* sceneID);
 bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID, uint8_t blinkMode);
 bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue);
 bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID);
 bool ble_setTimeForSensorPIR(const char* address_device,const char* time);
-
-/*
- * Run a local scene
- */
 bool ble_callSceneLocalToHC(const char* address_device, const char* sceneID);
-
-
 void BLE_PrintFrame(char* str, ble_rsp_frame_t* frame);
-
-/*******************************************************************
-* name:
-* function:
-* in param:
-*               
-*               
-*              
-*               
-*               
-* out param:    return 0 if success, or 1 if fail
-*******************************************************************/
 bool ble_getInfoProvison(provison_inf *PRV, JSON* packet);
-
-
-
-/*******************************************************************
-* name:         provison_GW
-* function:     provision for GateWay
-* in param:     fd: the file descriptor of the UART
-                PRV: the struct data for provision
-* out param:    NO
-*******************************************************************/
 bool GW_ConfigGateway(int gwIndex, provison_inf *PRV);
-int get_count_element_of_DV(const char* pid_);
+int  get_count_element_of_DV(const char* pid_);
 void get_string_add_DV_write_GW(char **result,const char* address_device,const char* element_count,const char* deviceID);
-int set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,const char* deviceKey);
+int  set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,const char* deviceKey);
+int  GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* originPackage, size_t size);
 
-void ble_getStringControlOnOff_SW(char **result,const char* strAddress,const char* strState);
-
-void ble_getStringControlOnOff(char **result,const char* strAddress,const char* strState);
-
-/*
- * Split a long BLE frame that received from UART into multiple single packages
- * @param:
- *      originPackage: the package that received from BLE IC via UART
- *      size: size of originPackage
- *      resultFrames: array of ble_rsp_frame_t to store the splited single frame
- * @return: the number of single frame in the original package
- */
-int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* originPackage, size_t size);
-
-int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame);
-
-void getStringResetDeviveSofware(char **result,const char* addressDevice);
+int  check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame);
 bool GW_DeleteDevice(const char* deviceAddr);
 
-char *get_dpid(const char *code);
-
-bool  GW_CtrlGroupLightOnOff(const char *groupAddr, uint8_t onoff);
+bool GW_CtrlGroupLightOnOff(const char *groupAddr, uint8_t onoff);
 bool GW_CtrlGroupLightCT(const char *dpAddr, int lightness, int colorTemperature);
-bool  GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl);
+bool GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl);
 
 /*
  * Control IR

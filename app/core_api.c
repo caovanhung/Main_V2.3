@@ -50,6 +50,7 @@ JSON* parseGroupLinkDevices(const char* devices) {
                         arrayItem = JSON_CreateObject();
                         JSON_SetText(arrayItem, "deviceId", splitList->items[i]);
                         JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
+                        JSON_SetNumber(arrayItem, "gwIndex", deviceInfo.gwIndex);
                     }
                 } else if (arrayItem != NULL) {
                     int dpId = atoi(splitList->items[i]);
@@ -145,14 +146,14 @@ void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex) {
     sendToServicePageIndex(SERVICE_AWS, GW_RESP_DEVICE_STATUS, pageIndex, payload);
 }
 
-void Aws_UpdateGroupValue(const char* groupAddr, uint8_t onoff) {
+void Aws_UpdateGroupValue(const char* groupAddr, int dpId, int dpValue) {
     ASSERT(groupAddr);
     DeviceInfo deviceInfo;
     int foundDevices = Db_FindDevice(&deviceInfo, groupAddr);
     if (foundDevices == 1) {
         int pageIndex = deviceInfo.pageIndex;
         char payload[200];
-        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"dictDPs\":{\"20\":%s}}}}}", TYPE_CTR_GROUP_NORMAL, SENDER_HC_VIA_CLOUD, groupAddr, onoff?"true":"false");
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"dictDPs\":{\"%d\":%d}}}}}", TYPE_CTR_GROUP_NORMAL, SENDER_HC_VIA_CLOUD, groupAddr, dpId, dpValue);
         sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
     }
 }
@@ -183,6 +184,17 @@ void Ble_ControlDeviceArray(const char* deviceId, uint8_t* dpIds, double* dpValu
     JSON_Delete(dictDPs);
 }
 
+void Ble_ControlDeviceStringDp(const char* deviceId, uint8_t dpId, char* dpValue, const char* causeId) {
+    ASSERT(deviceId);
+    ASSERT(dpValue);
+    JSON* dictDPs = JSON_CreateObject();
+    char str[10];
+    sprintf(str, "%d", dpId);
+    JSON_SetText(dictDPs, str, dpValue);
+    Ble_ControlDeviceJSON(deviceId, dictDPs, causeId);
+    JSON_Delete(dictDPs);
+}
+
 void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* causeId) {
     ASSERT(deviceId);
     ASSERT(dictDPs);
@@ -196,6 +208,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
         JSON_SetText(p, "pid", deviceInfo.pid);
         JSON* newDictDps = JSON_AddArray(p, "dictDPs");
         JSON_ForEach(o, dictDPs) {
+            int dpId = atoi(o->string);
             if (cJSON_IsString(o) && StringContains(o->valuestring, "scene_")) {
                 list_t* tmp = String_Split(o->valuestring, "_");
                 if (tmp->count == 2) {
@@ -204,7 +217,6 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
                 }
                 List_Delete(tmp);
             }
-            int dpId = atoi(o->string);
             DpInfo dpInfo;
             int dpFound = Db_FindDp(&dpInfo, deviceId, dpId);
             if (dpFound) {
@@ -254,6 +266,18 @@ void Ble_ControlGroupArray(const char* groupAddr, uint8_t* dpIds, double* dpValu
     JSON_Delete(dictDPs);
 }
 
+// Control a group with string dp value
+void Ble_ControlGroupStringDp(const char* groupAddr, uint8_t dpId, char* dpValue, const char* causeId) {
+    ASSERT(groupAddr);
+    ASSERT(dpValue);
+    JSON* dictDPs = JSON_CreateObject();
+    char str[10];
+    sprintf(str, "%d", dpId);
+    JSON_SetText(dictDPs, str, dpValue);
+    Ble_ControlGroupJSON(groupAddr, dictDPs, causeId);
+    JSON_Delete(dictDPs);
+}
+
 void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* causeId) {
     ASSERT(groupAddr);
     ASSERT(dictDPs);
@@ -261,9 +285,10 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
     int foundDevices = Db_FindDevice(&deviceInfo, groupAddr);
     if (foundDevices == 1) {
         // Update status of this group to AWS
-        if (JSON_HasKey(dictDPs, "20")) {
-            uint8_t onoffValue = JSON_GetNumber(dictDPs, "20");
-            Aws_UpdateGroupValue(groupAddr, onoffValue);
+        JSON_ForEach(dp, dictDPs) {
+            int dpId = atoi(dp->string);
+            int dpValue = dp->valueint;
+            Aws_UpdateGroupValue(groupAddr, dpId, dpValue);
         }
 
         // Update status of devices in this group to AWS and local database
@@ -284,6 +309,7 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
         JSON_SetText(p, "pid", deviceInfo.pid);
         JSON* newDictDps = JSON_AddArray(p, "dictDPs");
         JSON_ForEach(o, dictDPs) {
+            int dpId = atoi(o->string);
             if (cJSON_IsString(o) && StringContains(o->valuestring, "scene_")) {
                 list_t* tmp = String_Split(o->valuestring, "_");
                 if (tmp->count == 2) {
@@ -292,7 +318,6 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
                 }
                 List_Delete(tmp);
             }
-            int dpId = atoi(o->string);
             DpInfo dpInfo;
             int dpFound = Db_FindDp(&dpInfo, groupAddr, dpId);
             if (dpFound) {

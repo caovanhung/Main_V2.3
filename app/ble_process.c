@@ -229,10 +229,10 @@ bool ble_getInfoProvison(provison_inf *PRV, JSON* packet)
     PRV->netkeyIndex = JSON_GetText(packet, KEY_NETKEY_INDEX);
     PRV->netkey = JSON_GetText(packet, KEY_NETKEY);
     PRV->appkeyIndex = JSON_GetText(packet, KEY_APP_KEY_INDEX);
-    PRV->deviceKey1 = JSON_GetText(packet, KEY_DEVICE_KEY);
-    PRV->deviceKey2 = JSON_GetText(packet, KEY_DEVICE_KEY);
-    PRV->address1 = JSON_GetText(packet, "address1");
-    PRV->address2 = JSON_GetText(packet, "address2");
+    PRV->deviceKey1 = JSON_GetText(packet, "deviceKey1");
+    PRV->deviceKey2 = JSON_GetText(packet, "deviceKey2");
+    PRV->address1 = JSON_GetText(packet, "gateway1");
+    PRV->address2 = JSON_GetText(packet, "gateway2");
     return true;
 }
 
@@ -297,13 +297,11 @@ bool GW_ConfigGateway(int gwIndex, provison_inf *PRV)
     netkeyIndex = (char *)PRV->netkeyIndex;
     netkey = (char *)PRV->netkey;
     appkeyIndex = (char *)PRV->appkeyIndex;
-    deviceKey = (char *)PRV->deviceKey1;
-    // deviceKey[0] = gwIndex + 1 + '0';
     if (gwIndex == 0) {
-        // deviceKey = (char *)PRV->deviceKey1;
+        deviceKey = (char *)PRV->deviceKey1;
         address_t = (char *)PRV->address1;
     } else {
-        // deviceKey = (char *)PRV->deviceKey2;
+        deviceKey = (char *)PRV->deviceKey2;
         address_t = (char *)PRV->address2;
     }
 
@@ -713,32 +711,6 @@ int set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,co
     return 0;
 }
 
-void ble_getStringControlOnOff_SW(char **result,const char* strAddress,const char* strState)
-{
-    *result  = (char*) malloc(27 * sizeof(char));
-    const char *tmp_0 = "e8ff000000000000";
-    char *tmp_1 = (char *)strAddress;
-    const char *tmp_2 = "8203";
-    char* tmp_3;
-
-    if(isMatchString((char *)strState,"0"))
-    {
-        tmp_3 = "00";
-    }
-    else if(isMatchString((char *)strState,"1"))
-    {
-        tmp_3 = "01";
-    }
-    else if(isMatchString((char *)strState,"2"))
-    {
-        tmp_3 = "02";
-    }
-    strcpy(*result, tmp_0);
-    strcat(*result, tmp_1);
-    strcat(*result, tmp_2);
-    strcat(*result, tmp_3);
-}
-
 bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue)
 {
     ASSERT(dpAddr);
@@ -769,43 +741,6 @@ bool GW_HgSwitchOnOff_NoResp(const char* dpAddr, uint8_t dpValue)
     return ret;
 }
 
-
-void ble_getStringControlOnOff(char **result,const char* strAddress,const char* strState)
-{
-    *result  = (char*) malloc(27 * sizeof(char));
-    const char *tmp_0 = "e8ff000000000000";
-    char *tmp_1 = (char *)strAddress;
-    const char *tmp_2 = "8202";
-    char* tmp_3;
-
-    if(isMatchString((char *)strState,"0"))
-    {
-        tmp_3 = "00";
-    }
-    else if(isMatchString((char *)strState,"1"))
-    {
-        tmp_3 = "01";
-    }
-    else if(isMatchString((char *)strState,"2"))
-    {
-        tmp_3 = "02";
-    }
-    strcpy(*result, tmp_0);
-    strcat(*result, tmp_1);
-    strcat(*result, tmp_2);
-    strcat(*result, tmp_3);
-}
-
-bool GW_CtrlLightOnOff(const char *deviceAddr, uint8_t onoff) {
-    ASSERT(deviceAddr);
-    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x02,0x00,  0xff,0xff,  0x82,0x02  ,0x00};
-    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
-    data[8] = (uint8_t)(dpAddrHex >> 8);
-    data[9] = (uint8_t)(dpAddrHex);
-    data[12] = onoff;
-    sendFrameToAnyGw(dpAddrHex, data, 13);
-    return true;
-}
 
 bool ble_dimLedSwitch_HOMEGY(const char *address_device,int lightness)
 {
@@ -917,7 +852,49 @@ bool GW_DeleteGroup(int gwIndex, const char *groupAddr, const char *deviceAddr, 
     return true;
 }
 
-bool ble_controlCTL(const char *dpAddr, int lightness, int colorTemperature)
+/************ Commands to controll light *******************/
+bool GW_CtrlLightOnOff(const char *deviceAddr, uint8_t onoff) {
+    ASSERT(deviceAddr);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00, 0x02, 0x00,  0xff,0xff,  0x82,0x02, 0x00};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[12] = onoff;
+    sendFrameToAnyGw(dpAddrHex, data, 13);
+    addPriorityToSendingFrame(0);
+    return true;
+}
+
+bool GW_SetLightness(const char *deviceAddr, int lightness) {
+    ASSERT(deviceAddr);
+    lightness = lightness * 0xFFFF / 1000;   // value of lightness is in range 0 - 1000, so we need to convert to range 0 - 0xFFFF
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00, 0x02, 0x00,  0xff,0xff,  0x82,0x4c, 0x00,0x00};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[12] = (uint8_t)lightness;
+    data[13] = (uint8_t)(lightness >> 8);
+    sendFrameToAnyGw(dpAddrHex, data, 14);
+    addPriorityToSendingFrame(0);
+    return true;
+}
+
+bool GW_SetLightColor(const char *deviceAddr, int color) {
+    ASSERT(deviceAddr);
+    color = 800 + (20000 - 800) * color / 1000;
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00, 0x02, 0x00,  0xff,0xff,  0x82,0x64, 0x00,0x00};
+    long int dpAddrHex = strtol(deviceAddr, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[12] = (uint8_t)color;
+    data[13] = (uint8_t)(color >> 8);
+    sendFrameToAnyGw(dpAddrHex, data, 14);
+    addPriorityToSendingFrame(0);
+    return true;
+}
+
+
+bool GW_SetLightnessTemperature(const char *dpAddr, int lightness, int colorTemperature)
 {
     ASSERT(dpAddr);
 
@@ -982,18 +959,20 @@ bool GW_SetLightHSL(const char *dpAddr, const char *HSL)
 }
 
 
-bool GW_SetRGBLightBlinkMode(const char *dpAddr, uint8_t blinkMode) {
+bool GW_SetRGBLightBlinkMode(const char *dpAddr, int blinkMode) {
     ASSERT(dpAddr);
+    if (blinkMode >= 0) {
+        uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0x82,0x50,0x19,0x09,  0x00};
 
-    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0x82,0x50,0x19,0x09,  0x00};
+        long int dpAddrHex = strtol(dpAddr, NULL, 16);
+        data[8] = (uint8_t)(dpAddrHex >> 8);
+        data[9] = (uint8_t)(dpAddrHex);
+        data[14] = (uint8_t)blinkMode;
 
-    long int dpAddrHex = strtol(dpAddr, NULL, 16);
-    data[8] = (uint8_t)(dpAddrHex >> 8);
-    data[9] = (uint8_t)(dpAddrHex);
-    data[14] = blinkMode;
-
-    bool ret = sendFrameToAnyGw(dpAddrHex, data, 15);
-    return ret;
+        bool ret = sendFrameToAnyGw(dpAddrHex, data, 15);
+        return ret;
+    }
+    return true;
 }
 
 int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* originPackage, size_t size) {
@@ -1069,6 +1048,9 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
             temp->dpValue = frame->param[0];
         }
         return GW_RESP_DEVICE_STATUS;
+    } else if ((frame->opcode == 0x824e || frame->opcode == 0x8266) && frame->paramSize >= 4) {
+        // Response of lightness and temperature of light
+        return GW_RESPONSE_LIGHT_RD_CONTROL;
     } else if(frame->opcode == 0x5208 && frame->paramSize >= 3 && frame->param[0] == 0x01) {
         // Smoke sensor
         return GW_RESPONSE_SMOKE_SENSOR;
@@ -1111,19 +1093,6 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     }
 
     return GW_RESPONSE_UNKNOW;
-}
-
-
-void getStringResetDeviveSofware(char **result,const char* addressDevice)
-{
-    *result  = (char*) malloc(25 * sizeof(char));
-    // memset(*result,'\0',25*sizeof(*result));
-    const char *tmp_0 = "e8ff000000000000";
-    char *tmp_1 = (char *)addressDevice;
-    const char *tmp_2 = "8049";
-    strcpy(*result, tmp_0);
-    strcat(*result, tmp_1);
-    strcat(*result, tmp_2);
 }
 
 bool GW_DeleteDevice(const char *deviceAddr)
@@ -1297,12 +1266,6 @@ bool ble_setTimeForSensorPIR(const char* address_device,const char* time)
 
     return sendFrameToAnyGw(deviceAddrHex, setTimeForSensorPIR, 19);
 }
-
-char *get_dpid(const char *code)
-{
-    return (char *)code+3;
-}
-
 
 bool ble_logDeivce(const char *address_element,int state)
 {

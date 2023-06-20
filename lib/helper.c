@@ -13,6 +13,25 @@
 extern struct mosquitto * mosq;
 extern uint8_t SERVICE_ID;
 
+void printInfo(const char* formatedString, ...) {
+    char* currentTime = get_localtime_now();
+    va_list args;
+    va_start(args, formatedString);
+    int len = vsnprintf(NULL, 0, formatedString, args);
+    if (len > 0) {
+        char* message = (char*)malloc(len + 2);
+        vsprintf(message, formatedString, args);
+        printf(message);
+        printf("\n\r");
+        // Publish to CFG service to write to log files
+        char topic[50];
+        sprintf(topic, "LOG_REPORT/%d", SERVICE_ID);
+        mosquitto_publish(mosq, NULL, topic, strlen(message), message, 0, false);
+        free(message);
+    }
+    va_end(args);
+}
+
 void logInfo(const char* formatedString, ...) {
     char* currentTime = get_localtime_now();
     va_list args;
@@ -23,7 +42,9 @@ void logInfo(const char* formatedString, ...) {
         vsprintf(message, formatedString, args);
         char* fullLog = (char*)malloc(len + 50);    // Adding [INFO] and time
         sprintf(fullLog, "[INFO] [%s] %s", currentTime, message);
-        printf(fullLog);
+        if (StringLength(fullLog) < 4095) {
+            printf(fullLog);
+        }
         printf("\n\r");
         // Publish to CFG service to write to log files
         char topic[50];
@@ -40,18 +61,22 @@ void logError(const char* formatedString, ...) {
     va_list args;
     va_start(args, formatedString);
     int len = vsnprintf(NULL, 0, formatedString, args);
-    char* message = (char*)malloc(len);
-    vsprintf(message, formatedString, args);
-    char* fullLog = (char*)malloc(len + 50);    // Adding [INFO] and time
-    sprintf(fullLog, "[ERROR][%s] %s", currentTime, message);
-    printf(fullLog);
-    printf("\n\r");
-    // Publish to CFG service to write to log files
-    char topic[50];
-    sprintf(topic, "LOG_REPORT/%d", SERVICE_ID);
-    mosquitto_publish(mosq, NULL, topic, strlen(fullLog), fullLog, 0, false);
-    free(fullLog);
-    free(message);
+    if (len > 0) {
+        char* message = (char*)malloc(len + 2);
+        vsprintf(message, formatedString, args);
+        char* fullLog = (char*)malloc(len + 50);    // Adding [ERROR] and time
+        sprintf(fullLog, "[ERROR][%s] %s", currentTime, message);
+        if (StringLength(fullLog) < 4095) {
+            printf(fullLog);
+        }
+        printf("\n\r");
+        // Publish to CFG service to write to log files
+        char topic[50];
+        sprintf(topic, "LOG_REPORT/%d", SERVICE_ID);
+        mosquitto_publish(mosq, NULL, topic, strlen(fullLog), fullLog, 0, false);
+        free(fullLog);
+        free(message);
+    }
     va_end(args);
 }
 

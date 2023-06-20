@@ -259,6 +259,22 @@ void Ble_ProcessPacket()
                     }
                     break;
                 }
+                case GW_RESPONSE_LIGHT_RD_CONTROL: {
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    if (bleFrames[i].opcode == 0x824e) {
+                        uint16_t value = ((uint16_t)bleFrames[i].param[3] << 8) | bleFrames[i].param[2];
+                        value = ((uint32_t)value * 1000) / 65535;
+                        JSON_SetNumber(packet, "lightness", value);
+                    } else {
+                        uint16_t value = ((uint16_t)bleFrames[i].param[5] << 8) | bleFrames[i].param[4];
+                        value = ((value - 800) * 1000) / (20000 - 800);
+                        JSON_SetNumber(packet, "color", value);
+                    }
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    JSON_Delete(packet);
+                    break;
+                }
                 case GW_RESPONSE_SMOKE_SENSOR: {
                     logInfo("GW_RESPONSE_SMOKE_SENSOR");
                     uint8_t hasSmoke = bleFrames[i].param[1];
@@ -568,7 +584,6 @@ int main( int argc,char ** argv )
                     sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* pid = JSON_GetText(payload, "pid");
                     cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
-                    int lightness = -1, colorTemperature = -1;
                     int irCommandType = 0, irBrandId = 0, irRemoteId = 0, irTemp = 0, irMode = 0, irFan = 0, irSwing = 1;
                     JSON_ForEach(o, dictDPs) {
                         int dpId = JSON_GetNumber(o, "id");
@@ -581,12 +596,12 @@ int main( int argc,char ** argv )
                         } else if (dpId == 24) {
                             char* valueString = JSON_GetText(o, "valueString");
                             GW_SetLightHSL(dpAddr, valueString);
-                        } else if (dpId == 21) {
+                        } else if (dpId == 21 && dpValue >= 0) {
                             GW_SetRGBLightBlinkMode(dpAddr, dpValue);
                         } else if (dpId == 22) {
-                            lightness = dpValue;
+                            GW_SetLightness(dpAddr, dpValue);
                         } else if (dpId == 23) {
-                            colorTemperature = dpValue;
+                            GW_SetLightColor(dpAddr, dpValue);
                         } else if (dpId == 3) {
                             irCommandType = dpValue;
                             logInfo("[TYPE_CTR_DEVICE] CommandType = %d", irCommandType);
@@ -617,9 +632,6 @@ int main( int argc,char ** argv )
                                 logInfo("[TYPE_CTR_DEVICE] irTemp = %d", irTemp);
                             }
                         }
-                        if (lightness >= 0 && colorTemperature >= 0) {
-                            ble_controlCTL(dpAddr, lightness, colorTemperature);
-                        }
                     }
                     if (irCommandType > 0 && irBrandId > 0 && irRemoteId > 0) {
                         GW_ControlIR(dpAddr, irCommandType, irBrandId, irRemoteId, irTemp, irMode, irFan, irSwing);
@@ -646,13 +658,10 @@ int main( int argc,char ** argv )
                         } else if (dpId == 21) {
                             GW_SetRGBLightBlinkMode(dpAddr, dpValue);
                         } else if (dpId == 22) {
-                            lightness = dpValue;
+                            GW_SetLightness(dpAddr, dpValue);
                         } else if (dpId == 23) {
-                            colorTemperature = dpValue;
+                            GW_SetLightColor(dpAddr, dpValue);
                         }
-                    }
-                    if (lightness >= 0 && colorTemperature >= 0) {
-                        GW_CtrlGroupLightCT(dpAddr, lightness, colorTemperature);
                     }
                     break;
                 }

@@ -34,7 +34,7 @@
 #define KEY_SETTING             "setting"
 
 
-#define SENDER_APP_VIA_LOCAL        0
+#define SENDER_APP_VIA_LOCAL        2
 #define SENDER_APP_VIA_CLOUD        1
 #define SENDER_HC_VIA_LOCAL         10
 #define SENDER_HC_VIA_CLOUD         11

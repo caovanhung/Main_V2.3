@@ -76,8 +76,8 @@ JSON* Aws_GetShadow(const char* thingName, const char* shadowName) {
     sprintf(url, "https://a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", thingName, shadowName);
     char* certName = "c8f9a13dc7c253251b9e250439897bc010f501edd780348ecc1c2e91add22237";
     sprintf(request, "curl --tlsv1.2 --cacert /usr/bin/AmazonRootCA1.pem --cert /usr/bin/%s-certificate.pem.crt --key /usr/bin/%s-private.pem.key  %s", certName, certName, url);
-    printf(request);
-    printf("\n");
+    printInfo(request);
+    printInfo("\n");
     FILE* fp = popen(request, "r");
     while (fgets(result, sizeof(result), fp) != NULL);
     fclose(fp);
@@ -119,7 +119,7 @@ void Aws_SyncDatabase() {
                             JSON_SetText(device, KEY_NAME, JSON_GetText(d, "name"));
                             JSON_SetObject(device, "dictMeta", JSON_Clone(JSON_GetObject(d, "dictMeta")));
                             char* gatewayAddr = JSON_HasKey(d, "gateWay")? JSON_GetText(d, "gateWay"): "_";
-                            JSON_SetText(device, KEY_ID_GATEWAY, gatewayAddr);
+                            JSON_SetText(device, "gateWay", gatewayAddr);
                             JSON_SetText(device, KEY_UNICAST, tmp->items[3]);
                             JSON_SetText(device, "deviceAddr", tmp->items[3]);
                             JSON_SetText(device, KEY_DEVICE_KEY, tmp->items[4]);
@@ -128,7 +128,7 @@ void Aws_SyncDatabase() {
                             JSON_SetText(device, "devicePid", tmp->items[1]);
                             JSON_SetNumber(device, "pageIndex", pageIndex);
                         } else {
-                            printf("[Error] Parsing Device Error: %s\n", d->string);
+                            printInfo("[Error] Parsing Device Error: %s\n", d->string);
                         }
                         List_Delete(tmp);
                     }
@@ -184,19 +184,24 @@ void Aws_SyncDatabase() {
                 int pageIndex = JSON_HasKey(scenes, "pageIndex")? JSON_GetNumber(scenes, "pageIndex") : 1;
                 JSON_ForEach(s, scenes) {
                     if (cJSON_IsObject(s)) {
-                        JSON* scene = JArr_CreateObject(syncingScenes);
-                        JSON_SetText(scene, "id", s->string);
-                        JSON_SetText(scene, "name", JSON_GetText(s, "name"));
-                        JSON_SetNumber(scene, "state", JSON_GetNumber(s, "state"));
-                        JSON_SetNumber(scene, "isLocal", JSON_GetNumber(s, "isLocal"));
-                        JSON_SetNumber(scene, "pageIndex", pageIndex);
-                        char* sceneType = JSON_GetText(s, "scenes");
-                        sceneType[1] = 0;
-                        JSON_SetText(scene, "sceneType", sceneType);
-                        JSON* actions = JSON_Clone(JSON_GetObject(s, "actions"));
-                        JSON* conditions = JSON_Clone(JSON_GetObject(s, "conditions"));
-                        JSON_SetObject(scene, "actions", actions);
-                        JSON_SetObject(scene, "conditions", conditions);
+                        if (JSON_HasKey(s, "name")) {
+                            JSON* scene = JArr_CreateObject(syncingScenes);
+                            JSON_SetText(scene, "id", s->string);
+                            JSON_SetText(scene, "name", JSON_GetText(s, "name"));
+                            JSON_SetNumber(scene, "state", JSON_GetNumber(s, "state"));
+                            JSON_SetNumber(scene, "isLocal", JSON_GetNumber(s, "isLocal"));
+                            JSON_SetNumber(scene, "pageIndex", pageIndex);
+                            char sceneType[100];
+                            StringCopy(sceneType, JSON_GetText(s, "scenes"));
+                            sceneType[1] = 0;
+                            JSON_SetText(scene, "sceneType", sceneType);
+                            JSON* actions = JSON_Clone(JSON_GetObject(s, "actions"));
+                            JSON* conditions = JSON_Clone(JSON_GetObject(s, "conditions"));
+                            JSON_SetObject(scene, "actions", actions);
+                            JSON_SetObject(scene, "conditions", conditions);
+                        } else {
+                            logError("Error to parse sene %s", s->string);
+                        }
                     }
                 }
             }

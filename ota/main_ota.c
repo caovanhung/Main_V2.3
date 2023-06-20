@@ -54,7 +54,8 @@
 #define AWS_TOPIC_NOTIFY        "$aws/things/%s/shadow/name/notify"
 
 
-const char* SERVICE_NAME = SERVICE_AWS;
+const char* SERVICE_NAME = "OTA";
+uint8_t SERVICE_ID = 9;
 struct mosquitto * mosq;
 struct Queue *queue_received_aws,*queue_mos_sub;
 MQTTFixedBuffer_t networkBuffer;
@@ -701,7 +702,7 @@ void Aws_ProcessLoop() {
 
 void Mosq_Init() {
     mosquitto_lib_init();
-    mosq = mosquitto_new(MQTT_MOSQUITTO_CIENT_ID, true, NULL);
+    mosq = mosquitto_new("HG_OTA", true, NULL);
     int rc = mosquitto_username_pw_set(mosq, "MqttLocalHomegy", "Homegysmart");
     if (rc != 0) {
         LogInfo((get_localtime_now()),("mosquitto_username_pw_set! Error Code: %d\n", rc));

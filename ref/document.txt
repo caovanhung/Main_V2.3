@@ -15,10 +15,12 @@
 # Danh sách bản tin BLE:
     Bản tin báo trạng thái của thiết bị khi người dùng nhấn nút (công tắc):
         8204 0000 ss 0000 ll 0000: ss => trạng thái bật tắt (00 hoặc 01), ll => độ sáng của LED (00 - 64)
-    Bản tin điều khiển thiết bị từ HC có phản hồi (công tắc, đèn):
+    Bản tin điều khiển on/off thiết bị từ HC có phản hồi (công tắc, đèn):
         Request: E8FF 000000000000 adad 8202 ss: adad => địa chỉ của hạt công tắc hoặc đèn, ss => trạng thái bật tắt (00, 01)
         Response: 8204 8202 ss 0000 ll 0000: ss => trạng thái bật tắt (00 hoặc 01), ll => độ sáng của LED (00 - 64)
-
+    Bản tin điều khiển độ sáng, nhiệt độ màu của đèn CCT, RGB:
+        Request: E8FF 00000000 02 00 adad 825E 18 64 40 3D
+        Response: 8260 <4 bytes old lightness, color> <4 bytes new lightness, color> <1 remaining byte>
 
 # Chức năng lưu lịch sử hoạt động
     Các thông tin thiết bị cần lưu:

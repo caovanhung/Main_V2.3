@@ -37,6 +37,7 @@ typedef struct {
 
 typedef struct {
     char id[50];
+    char name[100];
     int  state;
     char addr[10];
     int  gwIndex;
@@ -76,7 +77,9 @@ typedef struct {
     char            entityAddr[10]; // Address của thiết bị hoặc kịch bản cần thực hiện
     uint8_t         dpIds[10];      // Danh sách Id của các dps nếu entityType = Thiết bị
     double          dpValues[10];   // dpValues của từng dp nếu entityType = Thiết bị
+    char            valueString[200];  // value of dp if valueType = ValueTypeString
     int             dpCount;        // Số lượng dp cần điều khiển
+    ValueType       valueType;
     int             delaySeconds;   // Giá trị thời gian trễ tính bằng giây nếu entityType = Độ trễ
     char            serviceName[10];// Service điều khiển cho action BLE, TUYA, XIAOMI, HOMEKIT, chỉ áp dụng khi actionType = EntityDevice, EntityScene
     char            wifiCode[100];
@@ -93,13 +96,14 @@ typedef struct {
     double          dpValue;        // Value của dp cần kiểm tra nếu entityType = Thiết bị và valueType = ValueTypeDouble
     char            dpValueStr[100];   // Value của dp cần kiểm tra nếu valueType = ValueTypeString
     char            expr[5];        // Biểu thức so sánh để so sánh giá trị thực tế của dp và dpValue để quyết định xem điều kiện có thỏa mãn hay không
-    int             schMinutes;     // Thời điểm trong ngày cần thực hiện nếu entityType = đặt lịch
+    uint32_t        schMinutes;     // Thời điểm trong ngày cần thực hiện nếu entityType = đặt lịch
     uint8_t         repeat;         // Danh sách thứ trong tuần cần lặp lại nếu entityType = đặt lịch
     int             timeReached;    // Private variable for conditionType = EntitySchedule (0: this condition is not satisfied, 1: this condition is satified)
 } SceneCondition;
 
 typedef struct {
     char            id[30];
+    char            name[100];
     bool            isLocal;
     int             isEnable;
     SceneType       type;
@@ -143,11 +147,12 @@ int Db_SaveGroupDevices(const char* groupAddr, const char* devices);
 int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex);
 int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId);
 int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr);
+int Db_FindDpByAddrAndDpId(DpInfo* dpInfo, const char* dpAddr, int dpId);
 int Db_SaveDpValue(const char* deviceId, int dpId, double value);
 int Db_SaveDpValueString(const char* deviceId, int dpId, const char* value);
 
 int Db_LoadSceneToRam();
-int Db_SaveSceneCondRepeat(const char* sceneId, int conditionIndex, uint8_t repeat);
+int Db_SaveSceneCondDate(const char* sceneId, int conditionIndex, const char* date);
 int Db_AddScene(JSON* sceneInfo);
 JSON* Db_FindScene(const char* sceneId);
 int Db_DeleteScene(const char* sceneId);
