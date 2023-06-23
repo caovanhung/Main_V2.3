@@ -409,7 +409,7 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
             JSON* reported = JSON_GetObject(state, "reported");
             if (reported) {
                 int sender = JSON_GetNumber(reported, "sender");
-                if (JSON_HasKey(reported, "type") && (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_VIA_CLOUD)) {
+                if (JSON_HasKey(reported, "type") && (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_TO_CLOUD)) {
                     printInfo("\n");
                     logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
                     int size_queue = get_sizeQueue(queue_received_aws);
@@ -421,7 +421,7 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
         } else if (JSON_HasKey(recvPacket, "type")) {
             int sender = JSON_GetNumber(recvPacket, "sender");
             int type = JSON_GetNumber(recvPacket, "type");
-            if (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_VIA_CLOUD) {
+            if (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_TO_CLOUD) {
                 if (type != 24) {
                     printInfo("\n");
                     logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
@@ -921,6 +921,7 @@ void Mosq_ProcessMessage() {
                         deviceInfo = JSON_CreateObject();
                         JSON_SetObject(page, deviceId, deviceInfo);
                     }
+                    // printf("deviceInfo: %s\n", cJSON_PrintUnformatted(deviceInfo));
                     if (JSON_HasKey(payload, "state")) {
                         JSON_SetNumber(deviceInfo, "state", JSON_GetNumber(payload, "state"));
                     }
@@ -976,13 +977,15 @@ void Mosq_ProcessMessage() {
             case GW_RESPONSE_UPDATE_SCENE:
             case GW_RESPONSE_ADD_SCENE_LC:
             case GW_RESPONSE_DEL_SCENE_HC: {
-                char* topic = Aws_GetTopic(PAGE_SCENE, 1, TOPIC_UPD_PUB);
-                sendPacketToCloud(topic, payload);
-                free(topic);
+                if (pageIndex >= 0) {
+                    char* topic = Aws_GetTopic(PAGE_SCENE, pageIndex, TOPIC_UPD_PUB);
+                    sendPacketToCloud(topic, payload);
+                    free(topic);
+                }
                 break;
             }
             case TYPE_NOTIFI_REPONSE: {
-                char* topic = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_PUB);
+                char* topic = Aws_GetTopic(PAGE_NONE, pageIndex, TOPIC_NOTI_PUB);
                 sendPacketToCloud(topic, payload);
                 free(topic);
                 break;
@@ -997,7 +1000,7 @@ void Mosq_ProcessMessage() {
 
 void Aws_SendMergePayload() {
     static long long time = 0;
-    if (timeInMilliseconds() - time > 500) {
+    if (timeInMilliseconds() - time > 5000) {
         time = timeInMilliseconds();
 
         JSON_ForEach(page, g_mergePayloads) {
@@ -1008,9 +1011,10 @@ void Aws_SendMergePayload() {
             JSON_SetObject(state, "reported", reported);
             JSON_SetObject(p, "state", state);
             JSON_SetNumber(reported, "type", TYPE_UPDATE_DEVICE);
-            JSON_SetNumber(reported, "sender", SENDER_HC_VIA_CLOUD);
+            JSON_SetNumber(reported, "sender", SENDER_HC_TO_CLOUD);
+            // printf("g_mergePayloads: %s\n", cJSON_PrintUnformatted(page));
             JSON_ForEach(d, page) {
-                JSON_SetObject(reported, d->string, d);
+                JSON_SetObject(reported, d->string, JSON_Clone(d));
             }
             char* topic = Aws_GetTopic(PAGE_DEVICE, pageIndex, TOPIC_UPD_PUB);
             sendPacketToCloud(topic, p);
@@ -1102,7 +1106,7 @@ int main( int argc,char ** argv ) {
                 if (reqType == 0) {
                     reqType = JSON_GetNumber(recvPacket, "type");
                 }
-                if (sender != SENDER_APP_VIA_LOCAL && sender != SENDER_APP_VIA_CLOUD) {
+                if (sender != SENDER_APP_VIA_LOCAL && sender != SENDER_APP_TO_CLOUD) {
                     continue;
                 }
                 char* senderId;
@@ -1150,13 +1154,12 @@ int main( int argc,char ** argv ) {
                         }
                         break;
                     }
-                    case TYPE_CTR_SCENE:
-                    case TYPE_UPDATE_GROUP_NORMAL:
                     case TYPE_GET_ALL_DEVICES:
                     case TYPE_SET_GROUP_TTL: {
                         sendPacketTo(SERVICE_CORE, reqType, reported);
                         break;
                     }
+                    case TYPE_CTR_SCENE:
                     case TYPE_ADD_SCENE:
                     case TYPE_UPDATE_SCENE:
                     case TYPE_DEL_SCENE: {
@@ -1164,10 +1167,13 @@ int main( int argc,char ** argv ) {
                         JSON_ForEach(o, reported) {
                             if (cJSON_IsObject(o)) {
                                 JSON_SetText(o, "Id", o->string);
-                                char* scenes = JSON_GetText(o, "scenes");
-                                scenes[1] = 0;
-                                JSON_SetText(o, "sceneType", scenes);
+                                if (JSON_HasKey(o, "scenes")) {
+                                    char* scenes = JSON_GetText(o, "scenes");
+                                    scenes[1] = 0;
+                                    JSON_SetText(o, "sceneType", scenes);
+                                }
                                 JSON_SetNumber(o, "pageIndex", pageIndex);
+                                JSON_SetText(o, "senderId", senderId);
                                 sendPacketTo(SERVICE_CORE, reqType, o);
                             } else if (cJSON_IsNull(o)) {
                                 JSON* p = JSON_CreateObject();
@@ -1180,19 +1186,22 @@ int main( int argc,char ** argv ) {
                     }
                     case TYPE_ADD_GROUP_NORMAL:
                     case TYPE_DEL_GROUP_NORMAL:
+                    case TYPE_UPDATE_GROUP_NORMAL:
                     case TYPE_CTR_GROUP_NORMAL:
                     case TYPE_ADD_GROUP_LINK:
                     case TYPE_DEL_GROUP_LINK:
                     case TYPE_UPDATE_GROUP_LINK: {
+                        int pageIndex = JSON_HasKey(reported, "pageIndex")? JSON_GetNumber(reported, "pageIndex") : 1;
                         JSON_ForEach(o, reported) {
                             if (cJSON_IsObject(o)) {
-                                JSON_SetText(o, "groupAdress", o->string);
+                                JSON_SetText(o, "groupAddr", o->string);
                                 JSON_SetText(o, "senderId", senderId);
                                 JSON_SetNumber(o, "provider", provider);
+                                JSON_SetNumber(o, "pageIndex", pageIndex);
                                 sendPacketTo(SERVICE_CORE, reqType, o);
                             } else if (cJSON_IsNull(o)) {
                                 JSON* p = JSON_CreateObject();
-                                JSON_SetText(p, "groupAdress", o->string);
+                                JSON_SetText(p, "groupAddr", o->string);
                                 JSON_SetText(o, "senderId", senderId);
                                 JSON_SetNumber(o, "provider", provider);
                                 sendPacketTo(SERVICE_CORE, reqType, p);

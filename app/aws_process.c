@@ -136,7 +136,9 @@ void Aws_SyncDatabase() {
             }
             JSON_Delete(devices);
         }
-        sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
+        if (JArr_Count(syncingDevices) > 0) {
+            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
+        }
         JSON_Delete(syncingDevices);
 
         // Sync groups from aws
@@ -150,27 +152,20 @@ void Aws_SyncDatabase() {
                 int pageIndex = JSON_HasKey(groups, "pageIndex")? JSON_GetNumber(groups, "pageIndex") : 1;
                 JSON_ForEach(g, groups) {
                     if (cJSON_IsObject(g)) {
-                        JSON* group = JArr_CreateObject(syncingGroups);
-                        list_t* tmp = String_Split(JSON_GetText(g, "devices"), "|");
-                        if (tmp->count >= 2) {
+                        if (JSON_HasKey(g, "devices")) {
+                            JSON* group = JSON_Clone(g);
                             JSON_SetText(group, "groupAddr", g->string);
-                            JSON_SetText(group, "groupName", JSON_GetText(g, "name"));
-                            JSON_SetText(group, "devices", JSON_GetText(g, "devices"));
-                            JSON_SetText(group, "pid", JSON_GetText(g, "pid"));
                             JSON_SetNumber(group, "pageIndex", pageIndex);
-                            if (StringLength(tmp->items[1]) == 1) {
-                                JSON_SetNumber(group, "isLight", 0);
-                            } else {
-                                JSON_SetNumber(group, "isLight", 1);
-                            }
+                            JArr_AddObject(syncingGroups, group);
                         }
-                        List_Delete(tmp);
                     }
                 }
             }
             JSON_Delete(groups);
         }
-        sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, syncingGroups);
+        if (JArr_Count(syncingGroups) > 0) {
+            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, syncingGroups);
+        }
         JSON_Delete(syncingGroups);
 
         // Sync scenes from aws
@@ -207,7 +202,9 @@ void Aws_SyncDatabase() {
             }
             JSON_Delete(scenes);
         }
-        sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, syncingScenes);
+        if (JArr_Count(syncingScenes) > 0) {
+            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, syncingScenes);
+        }
         JSON_Delete(syncingScenes);
         PlayAudio("ready");
     }
@@ -245,7 +242,7 @@ JSON* Aws_CreateCloudPacket(JSON* localPacket)
     char* deviceId = JSON_GetText(localPacket, "deviceId");
     int dpId = JSON_GetNumber(localPacket, "dpId");
     double dpValue = JSON_GetNumber(localPacket, "dpValue");
-    sprintf(packetStr,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":{\"%d\": %f},\"state\":%d }}}}", TYPE_UPDATE_DEVICE, SENDER_HC_VIA_CLOUD, deviceId, KEY_DICT_DPS, dpId, dpValue, TYPE_DEVICE_ONLINE);
+    sprintf(packetStr,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":{\"%d\": %f},\"state\":%d }}}}", TYPE_UPDATE_DEVICE, SENDER_HC_TO_CLOUD, deviceId, KEY_DICT_DPS, dpId, dpValue, TYPE_DEVICE_ONLINE);
     return JSON_Parse(packetStr);
 }
 

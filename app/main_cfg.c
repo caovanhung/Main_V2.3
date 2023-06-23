@@ -92,11 +92,11 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
         }
         return;
     }
+    logInfo("Received from topic: %s", msg->topic);
+    logInfo("Payload: %s", msg->payload);
 
     JSON* recvMsg = JSON_Parse(msg->payload);
     if (StringCompare(msg->topic, "MANAGER_SERVICES/Setting/Wifi")) {
-        logInfo("Received from topic: %s", msg->topic);
-        logInfo("Payload: %s", msg->payload);
         int type = JSON_GetNumber(recvMsg, "type");
         if (type == TYPE_CONFIG_WIFI || type == TYPE_CONFIG_WIFI_GW) {
             JSON* wifiInfo = JSON_GetObject(recvMsg, "wifi_info");

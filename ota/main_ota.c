@@ -350,7 +350,7 @@ void Aws_OnReveicedMessage( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIden
             JSON* reported = JSON_GetObject(state, "reported");
             if (reported) {
                 int sender = JSON_GetNumber(reported, "sender");
-                if (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_VIA_CLOUD) {
+                if (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_TO_CLOUD) {
                     logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
                     int size_queue = get_sizeQueue(queue_received_aws);
                     if (size_queue < QUEUE_SIZE) {

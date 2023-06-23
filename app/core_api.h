@@ -7,8 +7,8 @@ extern JSON *g_checkRespList;
 
 /************************************ COMMON APIS **************************************/
 void CoreInit();
+bool CompareDeviceById(JSON* device1, JSON* device2);
 JSON* parseGroupLinkDevices(const char* devices);
-JSON* parseGroupNormalDevices(const char* devices);
 // Add device that need to check response to response list
 JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAddr);
 // Check and get the JSON_Object of request that is in response list

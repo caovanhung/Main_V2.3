@@ -42,9 +42,9 @@ bool sendToServicePageIndexFunc(struct mosquitto* mosq, const char* serviceToSen
 bool sendPacketToFunc(struct mosquitto* mosq, const char* serviceToSend, int typeAction, JSON* packet);
 
 
-void Aws_updateGroupState(const char* groupAddr, int state);
-void Aws_updateGroupDevices(const char* groupAddr, const list_t* devices, const list_t* failedDevices);
-
+void Aws_UpdateGroupState(const char* groupAddr, int state);
+void Aws_UpdateGroupDevices(JSON* groupInfo);
+void Aws_UpdateSceneInfo(JSON* sceneInfo);
 
 
 

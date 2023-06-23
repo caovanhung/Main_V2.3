@@ -35,9 +35,9 @@
 
 
 #define SENDER_APP_VIA_LOCAL        2
-#define SENDER_APP_VIA_CLOUD        1
+#define SENDER_APP_TO_CLOUD        1
 #define SENDER_HC_VIA_LOCAL         10
-#define SENDER_HC_VIA_CLOUD         11
+#define SENDER_HC_TO_CLOUD         11
 
 #define TYPE_HOME_ID                        (48U)
 #define TYPE_APP_SEND_CHANGE_INFO_WIFI                          99

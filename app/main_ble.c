@@ -63,8 +63,6 @@ static struct Queue* g_bleFrameQueue;
 
 static JSON *g_checkRespList;
 
-bool addSceneLC(JSON* packet);
-bool delSceneLC(JSON* packet);
 bool addSceneActions(const char* sceneId, JSON* actions);
 bool deleteSceneActions(const char* sceneId, JSON* actions);
 bool addSceneCondition(const char* sceneId, JSON* condition);
@@ -785,12 +783,27 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_ADD_SCENE: {
                     sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
-                    addSceneLC(payload);
+                    char* sceneId = JSON_GetText(payload, "id");
+                    JSON* actions = JSON_GetObject(payload, "actions");
+                    bool ret = addSceneActions(sceneId, actions);
+                    if (ret) {
+                        JSON* conditions = JSON_GetObject(payload, "conditions");
+                        JSON* condition = JArr_GetObject(conditions, 0);
+                        ret = addSceneCondition(sceneId, condition);
+                    }
                     break;
                 }
                 case TYPE_DEL_SCENE: {
                     sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
-                    delSceneLC(payload);
+                    char* sceneId = JSON_GetText(payload, "sceneId");
+                    logInfo("[TYPE_DEL_SCENE] sceneId = %s", sceneId);
+                    JSON* actions = JSON_GetObject(payload, "actions");
+                    bool ret = deleteSceneActions(sceneId, actions);
+                    if (ret) {
+                        JSON* conditions = JSON_GetObject(payload, "conditions");
+                        JSON* condition = JArr_GetObject(conditions, 0);
+                        ret = deleteSceneCondition(sceneId, condition);
+                    }
                     break;
                 }
                 case TYPE_UPDATE_SCENE: {
@@ -816,9 +829,9 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_DIM_LED_SWITCH: {
-                    char* dpAddr = JSON_GetText(payload, "dpAddr");
-                    int value = JSON_GetNumber(payload, "value");
-                    ble_dimLedSwitch_HOMEGY(dpAddr, value);
+                    char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                    int value = JSON_GetNumber(payload, "led");
+                    ble_dimLedSwitch_HOMEGY(deviceAddr, value);
                     break;
                 }
                 case TYPE_LOCK_AGENCY: {
@@ -866,12 +879,10 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
         return false;
     }
     char commonDevices[1200]    = {'\0'};
-    int  i = 0, j = 0;
+    int  j = 0;
     logInfo("[addSceneActions] sceneId = %s", sceneId);
-    int actionCount = JArr_Count(actions);
     JSON* mergedActions = JSON_CreateArray();
-    for (i = 0; i < actionCount; i++) {
-        JSON* action = JArr_GetObject(actions, i);
+    JSON_ForEach(action, actions) {
         char* actionExecutor = JSON_GetText(action, "actionExecutor");
         JSON* executorProperty = JSON_GetObject(action, "executorProperty");
         char* deviceAddr = JSON_GetText(action, "entityAddr");
@@ -1053,37 +1064,4 @@ bool deleteSceneCondition(const char* sceneId, JSON* condition) {
         }
     }
     return true;
-}
-
-bool addSceneLC(JSON* packet) {
-    bool ret = false;
-    if (packet) {
-        char* sceneId = JSON_GetText(packet, "id");
-        int sceneType = String2Int(JSON_GetText(packet, "sceneType"));
-        JSON* actions = JSON_GetObject(packet, "actions");
-        JSON* conditions = JSON_GetObject(packet, "conditions");
-        ret = addSceneActions(sceneId, actions);
-        if (ret && sceneType == SceneTypeOneOfConds) {
-            JSON* condition = JArr_GetObject(conditions, 0);
-            ret = addSceneCondition(sceneId, condition);
-        }
-    }
-    return ret;
-}
-
-bool delSceneLC(JSON* packet) {
-    bool ret = false;
-    if (packet) {
-        char* sceneId = JSON_GetText(packet, "sceneId");
-        JSON* actions = JSON_GetObject(packet, "actions");
-        JSON* conditions = JSON_GetObject(packet, "conditions");
-        logInfo("[delSceneLC] sceneId = %s", sceneId);
-        // printf("actions: %s\n", cJSON_PrintUnformatted(actions));
-        ret = deleteSceneActions(sceneId, actions);
-        if (ret) {
-            JSON* condition = JArr_GetObject(conditions, 0);
-            ret = deleteSceneCondition(sceneId, condition);
-        }
-    }
-    return ret;
 }

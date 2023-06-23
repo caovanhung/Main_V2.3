@@ -13,26 +13,15 @@ void CoreInit() {
     g_checkRespList   = JSON_CreateArray();
 }
 
-JSON* parseGroupNormalDevices(const char* devices) {
-    JSON* devicesArray = cJSON_CreateArray();
-    if (devices) {
-        list_t* splitList = String_Split(devices, "|");
-        for (int i = 0; i < splitList->count; i++) {
-            JSON* arrayItem = JSON_CreateObject();
-            DeviceInfo deviceInfo;
-            int foundDevices = Db_FindDevice(&deviceInfo, splitList->items[i]);
-            if (foundDevices) {
-                JSON_SetText(arrayItem, "deviceId", deviceInfo.id);
-                JSON_SetText(arrayItem, "deviceAddr", deviceInfo.addr);
-                JSON_SetText(arrayItem, "pid", deviceInfo.pid);
-                JSON_SetNumber(arrayItem, "gwIndex", deviceInfo.gwIndex);
-                JSON_SetNumber(arrayItem, "pageIndex", deviceInfo.pageIndex);
-            }
-            cJSON_AddItemToArray(devicesArray, arrayItem);
+bool CompareDeviceById(JSON* device1, JSON* device2) {
+    if (device1 && device2) {
+        char* deviceId1 = JSON_GetText(device1, "deviceId");
+        char* deviceId2 = JSON_GetText(device2, "deviceId");
+        if (StringCompare(deviceId1, deviceId2)) {
+            return true;
         }
-        List_Delete(splitList);
     }
-    return devicesArray;
+    return false;
 }
 
 JSON* parseGroupLinkDevices(const char* devices) {
@@ -88,8 +77,9 @@ JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAdd
         JSON *device = JArr_CreateObject(devices);
         JSON_SetText(device, "addr", deviceAddr);
         JSON_SetNumber(device, "status", -1);
+        return device;
     }
-    return item;
+    return NULL;
 }
 
 JSON* requestIsInRespList(int reqType, const char* itemId) {
@@ -128,14 +118,14 @@ int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr)
 void Aws_DeleteDevice(const char* deviceId, int pageIndex) {
     ASSERT(deviceId);
     char payload[200];
-    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_DEL_DEVICE, SENDER_HC_VIA_CLOUD, deviceId);
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_DEL_DEVICE, SENDER_HC_TO_CLOUD, deviceId);
     sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_KICKOUT, pageIndex, payload);
 }
 
 void Aws_SaveDeviceState(const char* deviceId, int state, int pageIndex) {
     ASSERT(deviceId);
     char payload[200];
-    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%d}}}}", TYPE_UPDATE_DEVICE, SENDER_HC_VIA_CLOUD, deviceId, state);
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%d}}}}", TYPE_UPDATE_DEVICE, SENDER_HC_TO_CLOUD, deviceId, state);
     sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_DEVICE_STATE, pageIndex, payload);
 }
 
@@ -153,7 +143,7 @@ void Aws_UpdateGroupValue(const char* groupAddr, int dpId, int dpValue) {
     if (foundDevices == 1) {
         int pageIndex = deviceInfo.pageIndex;
         char payload[200];
-        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"dictDPs\":{\"%d\":%d}}}}}", TYPE_CTR_GROUP_NORMAL, SENDER_HC_VIA_CLOUD, groupAddr, dpId, dpValue);
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"dictDPs\":{\"%d\":%d}}}}}", TYPE_CTR_GROUP_NORMAL, SENDER_HC_TO_CLOUD, groupAddr, dpId, dpValue);
         sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
     }
 }
@@ -164,7 +154,7 @@ void Aws_EnableScene(const char* sceneId, bool state) {
     if (sceneInfo) {
         int pageIndex = JSON_GetNumber(sceneInfo, "pageIndex");
         char payload[200];
-        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%s}}}}", TYPE_UPDATE_SCENE, SENDER_HC_VIA_CLOUD, sceneId, state?"true":"false");
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%s}}}}", TYPE_UPDATE_SCENE, SENDER_HC_TO_CLOUD, sceneId, state?"true":"false");
         sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_SCENE, pageIndex, payload);
     }
 }
@@ -281,6 +271,9 @@ void Ble_ControlGroupStringDp(const char* groupAddr, uint8_t dpId, char* dpValue
 void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* causeId) {
     ASSERT(groupAddr);
     ASSERT(dictDPs);
+    char* dictDPsString = cJSON_PrintUnformatted(dictDPs);
+    printInfo("[Ble_ControlGroupJSON] groupAddr = %s, dictDPs=%s", groupAddr, dictDPsString);
+    free(dictDPsString);
     DeviceInfo deviceInfo;
     int foundDevices = Db_FindDevice(&deviceInfo, groupAddr);
     if (foundDevices == 1) {
@@ -292,9 +285,8 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
         }
 
         // Update status of devices in this group to AWS and local database
-        char* devicesStr = Db_FindDevicesInGroup(groupAddr);
-        JSON* groupDevices = parseGroupNormalDevices(devicesStr);
-        JSON_ForEach(d, groupDevices) {
+        JSON* devices = Db_FindDevicesInGroup(groupAddr);
+        JSON_ForEach(d, devices) {
             JSON_ForEach(dp, dictDPs) {
                 if (cJSON_IsNumber(dp) || cJSON_IsBool(dp)) {
                     int dpId = atoi(dp->string);
@@ -303,7 +295,7 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
                 }
             }
         }
-        free(devicesStr);
+        free(devices);
 
         JSON* p = JSON_CreateObject();
         JSON_SetText(p, "pid", deviceInfo.pid);

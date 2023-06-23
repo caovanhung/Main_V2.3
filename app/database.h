@@ -140,9 +140,9 @@ int Db_DeleteAllDevices();
 int Db_AddGroup(const char* groupAddr, const char* groupName, const char* devices, bool isLight, const char* pid, int pageIndex);
 int Db_DeleteGroup(const char* groupAddr);
 int Db_DeleteAllGroup();
-char* Db_FindDevicesInGroup(const char* groupAddr);
+JSON* Db_FindDevicesInGroup(const char* groupAddr);
 int Db_GetGroupType(const char* groupAddr);
-int Db_SaveGroupDevices(const char* groupAddr, const char* devices);
+int Db_SaveGroupDevices(const char* groupAddr, JSON* devices);
 
 int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex);
 int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId);

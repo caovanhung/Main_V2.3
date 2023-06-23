@@ -305,7 +305,8 @@ double  JSON_GetNumber(JSON* obj, const char* name);
 #define JSON_GetObject(obj, key)            cJSON_GetObjectItem(obj, key)
 JSON*   JSON_SetText(JSON* obj, const char* name, const char* value);
 JSON*   JSON_SetNumber(JSON* obj, const char* name, double value);
-#define JSON_SetObject(obj, name, item)     cJSON_AddItemToObject(obj, name, item)
+JSON*   JSON_SetNull(JSON* obj, const char* name);
+JSON*   JSON_SetObject(JSON* obj, const char* name, JSON* item);
 #define JSON_HasKey(obj, key)               cJSON_HasObjectItem(obj, key)
 #define JSON_RemoveKey(obj, key)            cJSON_DeleteItemFromObject(obj, key)
 #define JSON_AddArray(obj, key)             cJSON_AddArrayToObject(obj, key)

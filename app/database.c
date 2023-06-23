@@ -198,17 +198,28 @@ int Db_AddGroup(const char* groupAddr, const char* groupName, const char* device
     return 1;
 }
 
-char* Db_FindDevicesInGroup(const char* groupAddr) {
+JSON* Db_FindDevicesInGroup(const char* groupAddr) {
     ASSERT(groupAddr);
-    char* resultDeviceIds = NULL;
+    JSON* resultDevices = NULL;
     char sqlCommand[100];
     sprintf(sqlCommand, "SELECT * FROM group_inf WHERE groupAdress = '%s';", groupAddr);
     Sql_Query(sqlCommand, row) {
         char* devices = sqlite3_column_text(row, 5);
-        resultDeviceIds = malloc(strlen(devices) + 1);
-        StringCopy(resultDeviceIds, devices);
+        resultDevices = JSON_Parse(devices);
     }
-    return resultDeviceIds;
+    if (resultDevices) {
+        JSON_ForEach(d, resultDevices) {
+            char* deviceId = JSON_GetText(d, "deviceId");
+            DeviceInfo deviceInfo;
+            int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
+            if (foundDevices == 1) {
+                JSON_SetText(d, "deviceAddr", deviceInfo.addr);
+                JSON_SetNumber(d, "gwIndex", deviceInfo.gwIndex);
+                JSON_SetNumber(d, "pageIndex", deviceInfo.pageIndex);
+            }
+        }
+    }
+    return resultDevices;
 }
 
 int Db_GetGroupType(const char* groupAddr) {
@@ -222,12 +233,14 @@ int Db_GetGroupType(const char* groupAddr) {
     return groupType;
 }
 
-int Db_SaveGroupDevices(const char* groupAddr, const char* devices) {
+int Db_SaveGroupDevices(const char* groupAddr, JSON* devices) {
     ASSERT(groupAddr); ASSERT(devices);
-    char* sqlCmd = malloc(strlen(devices) + 300);
-    sprintf(sqlCmd, "UPDATE group_inf SET devices='%s' WHERE groupAdress = '%s'", devices, groupAddr);
+    char* devicesStr = cJSON_PrintUnformatted(devices);
+    char* sqlCmd = malloc(strlen(devicesStr) + 300);
+    sprintf(sqlCmd, "UPDATE group_inf SET devices='%s' WHERE groupAdress = '%s'", devicesStr, groupAddr);
     Sql_Exec(sqlCmd);
     free(sqlCmd);
+    free(devicesStr);
     return 1;
 }
 
@@ -704,7 +717,7 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
     ASSERT(deviceId);
     JSON* histories = JSON_CreateObject();
     JSON_SetNumber(histories, "type", TYPE_GET_DEVICE_HISTORY);
-    JSON_SetNumber(histories, "sender", SENDER_HC_VIA_CLOUD);
+    JSON_SetNumber(histories, "sender", SENDER_HC_TO_CLOUD);
     char sqlCmd[500];
     char dpIdCondition[50] = "", causeTypeCondition[50] = "", eventTypeCondition[50] = "";
     if (dpIds && strlen(dpIds) > 0) {

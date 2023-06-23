@@ -3167,6 +3167,21 @@ JSON* JSON_SetNumber(JSON* obj, const char* name, double value) {
     return cJSON_AddNumberToObject(obj, name, value);
 }
 
+JSON* JSON_SetNull(JSON* obj, const char* name) {
+    if (JSON_HasKey(obj, name)) {
+        JSON_RemoveKey(obj, name);
+    }
+    return cJSON_AddNullToObject(obj, name);
+}
+
+JSON* JSON_SetObject(JSON* obj, const char* name, JSON* item) {
+    if (JSON_HasKey(obj, name)) {
+        JSON_RemoveKey(obj, name);
+    }
+    cJSON_AddItemToObject(obj, name, item);
+    return item;
+}
+
 size_t JArr_Count(JSON* arr) {
     size_t count = 0;
     JSON_ForEach(o, arr) {
