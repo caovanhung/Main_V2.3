@@ -50,6 +50,7 @@
 
 const char* SERVICE_NAME = SERVICE_BLE;
 uint8_t SERVICE_ID = SERVICE_ID_BLE;
+bool g_printLog = true;
 
 extern int g_gatewayFds[GATEWAY_NUM];
 char rcv_uart_buff[MAXLINE];
@@ -132,15 +133,15 @@ void Mosq_ProcessLoop() {
  */
 void BLE_ReceivePacket() {
     char givenStr[MAX_PACKAGE_SIZE];
-    int len_uart = UART0_Recv(g_gatewayFds[0], rcv_uart_buff, MAX_PACKAGE_SIZE);
+    int len_uart = UART_Recv(g_gatewayFds[0], rcv_uart_buff, MAX_PACKAGE_SIZE);
     if ( len_uart > 0 && len_uart < MAX_PACKAGE_SIZE) {
         if (len_uart == 1 || len_uart > 998) {
             return;
         }
         // Ignore frame 0x91b5
-        // if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
-        //     return;
-        // }
+        if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
+            return;
+        }
         if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
             return;
         }
@@ -149,19 +150,19 @@ void BLE_ReceivePacket() {
         }
         StringCopy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
         enqueue(g_bleFrameQueue, givenStr);
-        printf("\n\r");
+        printInfo("\n\r");
         logInfo("Received from UART3: %s", givenStr);
     }
 
-    len_uart = UART0_Recv(g_gatewayFds[1], rcv_uart_buff, MAX_PACKAGE_SIZE);
+    len_uart = UART_Recv(g_gatewayFds[1], rcv_uart_buff, MAX_PACKAGE_SIZE);
     if ( len_uart > 0 && len_uart < MAX_PACKAGE_SIZE) {
         if (len_uart == 1 || len_uart > 998) {
             return;
         }
         // Ignore frame 0x91b5
-        // if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
-        //     return;
-        // }
+        if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
+            return;
+        }
         if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
             return;
         }
@@ -170,7 +171,7 @@ void BLE_ReceivePacket() {
         }
         StringCopy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
         enqueue(g_bleFrameQueue, givenStr);
-        printf("\n\r");
+        printInfo("\n\r");
         logInfo("Received from UART2: %s", givenStr);
     }
 }
@@ -205,7 +206,7 @@ void Ble_ProcessPacket()
             logInfo("Frame #%d: type: %d, %s", i, frameType, str);
             BLE_SetDeviceResp(frameType, bleFrames[i].sendAddr, 0);
             switch(frameType) {
-                case GW_RESPONSE_DEVICE_STATE: {
+                case GW_RESP_ONLINE_STATE: {
                     JSON* packet = JSON_CreateObject();
                     JSON* devicesArray = JSON_AddArray(packet, "devices");
                     JSON* arrayItem = JArr_CreateObject(devicesArray);
@@ -220,13 +221,13 @@ void Ble_ProcessPacket()
                         onlineState = bleFrames[i].onlineState2? TYPE_DEVICE_ONLINE : TYPE_DEVICE_OFFLINE;
                         JSON_SetNumber(arrayItem, "deviceState", onlineState);
                     }
-                    sendPacketTo(SERVICE_CORE, GW_RESPONSE_DEVICE_STATE, packet);
+                    sendPacketTo(SERVICE_CORE, GW_RESP_ONLINE_STATE, packet);
                     JSON_Delete(packet);
                     break;
                 }
 
                 case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
-                case GW_RESP_DEVICE_STATUS: {
+                case GW_RESP_ONOFF_STATE: {
                     if (bleFrames[i].frameSize >= 5 && bleFrames[i].param[0] == 0x82 && bleFrames[i].param[1] == 0x01) {
                         uint8_t dpCount = bleFrames[i].param[3];
                         uint16_t deviceAddr = bleFrames[i].sendAddr;
@@ -508,8 +509,8 @@ int main( int argc,char ** argv )
     g_lowPrioMqttMsgQueue = newQueue(MAX_SIZE_NUMBER_QUEUE);
     g_bleFrameQueue = newQueue(MAX_SIZE_NUMBER_QUEUE);
     //Init for uart()
-    g_gatewayFds[0] = UART0_Open(g_gatewayFds[0], UART_GATEWAY1);
-    g_gatewayFds[1] = UART0_Open(g_gatewayFds[1], UART_GATEWAY2);
+    g_gatewayFds[0] = UART_Open(g_gatewayFds[0], UART_GATEWAY1);
+    g_gatewayFds[1] = UART_Open(g_gatewayFds[1], UART_GATEWAY2);
     if (g_gatewayFds[0] == -1) {
         logError("Cannot open %s", UART_GATEWAY1);
     }
@@ -518,7 +519,7 @@ int main( int argc,char ** argv )
     }
 
     do {
-        err = UART0_Init(g_gatewayFds[0], 115200, 0, 8, 1, 'N');
+        err = UART_Init(g_gatewayFds[0], 115200, 0, 8, 1, 'N');
         usleep(50000);
     }
     while (-1 == err || -1 == g_gatewayFds[0]);
@@ -526,7 +527,7 @@ int main( int argc,char ** argv )
     usleep(50000);
 
     do {
-        err = UART0_Init(g_gatewayFds[1], 115200, 0, 8, 1, 'N');
+        err = UART_Init(g_gatewayFds[1], 115200, 0, 8, 1, 'N');
         usleep(50000);
     }
     while (-1 == err || -1 == g_gatewayFds[1]);
@@ -553,13 +554,16 @@ int main( int argc,char ** argv )
             continue;
         }
 
-        printf("\n\r");
-        logInfo("Received message: %s", recvMsg);
-
         JSON* recvPacket = JSON_Parse(recvMsg);
-        free(recvMsg);
         int reqType = JSON_GetNumber(recvPacket, MOSQ_ActionType);
         JSON* payload = JSON_Parse(JSON_GetText(recvPacket, MOSQ_Payload));
+
+        if (reqType != TYPE_GET_ONOFF_STATE) {
+            printInfo("\n\r");
+            logInfo("Received message: %s", recvMsg);
+        }
+        free(recvMsg);
+
         if (payload) {
             char* dpAddr, *groupAddr;
             switch (reqType) {
@@ -673,7 +677,7 @@ int main( int argc,char ** argv )
                     } else {
                         // Enable/Disable scene
                         // char* dpAddr = JSON_GetText(payload, "dpAddr");
-                        // ble_callSceneLocalToDevice(dpAddr, sceneId, "00", dpValue);
+                        // GW_SetSceneCondition(dpAddr, sceneId, "00", dpValue);
                     }
                     break;
                 }
@@ -850,10 +854,10 @@ int main( int argc,char ** argv )
                     }
                     break;
                 }
-                case TYPE_GET_DEVICE_STATUS: {
+                case TYPE_GET_ONOFF_STATE: {
                     JSON_ForEach(d, payload) {
                         GW_GetDeviceOnOffState(d->valuestring);
-                        addRespTypeToSendingFrame(GW_RESP_DEVICE_STATUS, d->valuestring);
+                        addRespTypeToSendingFrame(GW_RESP_ONOFF_STATE, d->valuestring);
                         addPriorityToSendingFrame(2);
                     }
                     break;
@@ -1037,11 +1041,11 @@ bool addSceneCondition(const char* sceneId, JSON* condition) {
             char *dpAddr = JSON_GetText(condition, "dpAddr");
             int dpValue   = JSON_GetNumber(condition, "dpValue");
             if (isMatchString(pid, HG_BLE_SENSOR_MOTION)) {
-                ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
+                GW_SetSceneCondition(dpAddr, sceneId, 1, dpValue);
                 // Add this device to response list to check TIMEOUT later
                 addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
             } else {
-                ble_callSceneLocalToDevice(dpAddr, sceneId, "01", dpValue);
+                GW_SetSceneCondition(dpAddr, sceneId, 1, dpValue);
                 // Add this device to response list to check TIMEOUT later
                 addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
             }
@@ -1060,7 +1064,7 @@ bool deleteSceneCondition(const char* sceneId, JSON* condition) {
         } else {
             char* dpAddr = JSON_GetText(condition, "dpAddr");
             int dpValue  = JSON_GetNumber(condition, "dpValue");
-            ble_callSceneLocalToDevice(dpAddr, "0000", "00", dpValue);
+            GW_SetSceneCondition(dpAddr, "0000", 0, dpValue);
         }
     }
     return true;

@@ -5,7 +5,7 @@
 #include "helper.h"
 
 FILE *fptr;
-int UART0_Open(int fd,char* port)
+int UART_Open(int fd,char* port)
 {
     fd = open( port, O_RDWR|O_NOCTTY|O_NDELAY);
     if(FALSE == fd)
@@ -44,17 +44,17 @@ int UART0_Open(int fd,char* port)
     return fd;
 }
 /*******************************************************************
-* name:         UART0_Close
+* name:         UART_Close
 * function:     Close the UART
 * in param:     fd: file descriptor port:UART(ttyS0,ttyS1,ttyS2)
 * out param:    void
 *******************************************************************/
-void UART0_Close(int fd)
+void UART_Close(int fd)
 {
     close(fd);
 }
 /*******************************************************************
-* name:         UART0_Set
+* name:         UART_Set
 * function:     set the data bits, stop bit, paraity bit of UART
 * in param:     fd: the file descriptor of the UART
 *               speed: UART speed
@@ -64,7 +64,7 @@ void UART0_Close(int fd)
 *               parity: parity mode, N,E,O,S
 * out param:    return 0 if success, or 1 if fail
 *******************************************************************/
-int UART0_Set(int fd,int speed,int flow_ctrl,int databits,int stopbits,int parity)
+int UART_Set(int fd,int speed,int flow_ctrl,int databits,int stopbits,int parity)
 {
     int i;
     int status;
@@ -185,7 +185,7 @@ int UART0_Set(int fd,int speed,int flow_ctrl,int databits,int stopbits,int parit
     return (TRUE); 
 }
 /*******************************************************************
-* name:         UART0_Init()
+* name:         UART_Init()
 * function:     UART initialization
 * in param:     fd: the file descriptor of the UART
 *               speed: UART speed
@@ -196,10 +196,10 @@ int UART0_Set(int fd,int speed,int flow_ctrl,int databits,int stopbits,int parit
 *                      
 * out param:        return 0 if success, or 1 if fail
 *******************************************************************/
-int UART0_Init(int fd, int speed,int flow_ctrl,int databits,int stopbits,int parity)
+int UART_Init(int fd, int speed,int flow_ctrl,int databits,int stopbits,int parity)
 {
     int err;
-    if (UART0_Set(fd,speed,0,8,1,'N') == FALSE)
+    if (UART_Set(fd,speed,0,8,1,'N') == FALSE)
     {
         return FALSE;
     }
@@ -209,14 +209,14 @@ int UART0_Init(int fd, int speed,int flow_ctrl,int databits,int stopbits,int par
     }
 }
 /*******************************************************************
-* name:         UART0_Recv
+* name:         UART_Recv
 * function:     receive the UART data
 * in param:     fd: file descriptor
 *               rcv_buf: buffer for received data
 *               data_len: length of the data frame
 * out param:    return 0 if success, or 1 if fail
 *******************************************************************/
-int UART0_Recv(int fd, char *rcv_buf,int data_len)
+int UART_Recv(int fd, char *rcv_buf,int data_len)
 {
     int len,fs_sel;
     fd_set fs_read;
@@ -244,7 +244,7 @@ int UART0_Recv(int fd, char *rcv_buf,int data_len)
     }     
 }
 /********************************************************************
-* name:         UART0_Send
+* name:         UART_Send
 * function:     sending data
 * in param:     fd: file descriptor    
 *               send_buf: buffer storaging the data will be sent
@@ -252,7 +252,7 @@ int UART0_Recv(int fd, char *rcv_buf,int data_len)
 * out param:    return 0 if success, or 1 if fail
 *******************************************************************/
 extern int g_uartSendingIdx;
-bool UART0_Send(int fd, char *send_buf,int data_len)
+bool UART_Send(int fd, char *send_buf,int data_len)
 {
     char tmp[100];
     int len = 0;
@@ -263,7 +263,7 @@ bool UART0_Send(int fd, char *send_buf,int data_len)
         for (int i = 0; i < data_len; i++) {
             sprintf(&tmp[i*3], "%02X ", send_buf[i]);
         }
-
+        printInfo(" ");
         logInfo("Sent to UART%d: %s", g_uartSendingIdx, tmp);
         return true;
     }

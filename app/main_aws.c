@@ -64,6 +64,7 @@
 
 const char* SERVICE_NAME = SERVICE_AWS;
 uint8_t SERVICE_ID = SERVICE_ID_AWS;
+bool g_printLog = true;
 
 FILE *fptr;
 int rc;
@@ -906,7 +907,7 @@ void Mosq_ProcessMessage() {
         char* payloadString = JSON_GetText(recvPacket, MOSQ_Payload);
         JSON* payload = JSON_Parse(payloadString);
         switch (reqType) {
-            case GW_RESP_DEVICE_STATUS: {
+            case GW_RESP_ONOFF_STATE: {
                 if (pageIndex >= 0) {
                     char* deviceId = JSON_GetText(payload, "deviceId");
                     char str[50];
@@ -937,7 +938,7 @@ void Mosq_ProcessMessage() {
                 break;
             }
             case GW_RESPONSE_DEVICE_KICKOUT:
-            case GW_RESPONSE_DEVICE_STATE: {
+            case GW_RESP_ONLINE_STATE: {
                 if (pageIndex >= 0) {
                     char* topic = Aws_GetTopic(PAGE_DEVICE, pageIndex, TOPIC_UPD_PUB);
                     sendPacketToCloud(topic, payload);

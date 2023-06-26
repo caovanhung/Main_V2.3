@@ -86,6 +86,8 @@
 #define TYPE_SET_DEVICE_TTL             (28U)
 #define TYPE_GET_ALL_DEVICES            (29U)
 #define TYPE_REALTIME_STATUS_FB         (31U)
+#define TYPE_GET_SCENES_OF_DEVICE       (33U)
+#define TYPE_GET_GROUPS_OF_DEVICE       (34U)
 
 #define TYPE_GET_NUM_OF_PAGE            (45U)
 #define TYPE_SYNC_DB_DEVICES            (46U)
@@ -93,15 +95,15 @@
 #define TYPE_SYNC_DB_GROUPS             (48U)
 
 #define TYPE_SYNC_DEVICE_STATE          (99U)
-#define TYPE_GET_DEVICE_STATUS          (100U)
+#define TYPE_GET_ONOFF_STATE            (100U)
 
 ///////////////////////Define type repons from Devices///////////////////////////////////////
 #define GW_RESPONSE_UNKNOW               (-1)
-#define GW_RESP_DEVICE_STATUS            (50U)
+#define GW_RESP_ONOFF_STATE              (50U)
 #define GW_RESPONSE_DEVICE_KICKOUT       (51U)
 #define GW_RESPONSE_SMOKE_SENSOR         (52U)
 #define GW_RESPONSE_SENSOR_ENVIRONMENT   (53U)
-#define GW_RESPONSE_DEVICE_STATE         (54U)
+#define GW_RESP_ONLINE_STATE         (54U)
 #define GW_RESPONSE_SENSOR_BATTERY       (55U)
 #define GW_RESPONSE_SENSOR_PIR_DETECT    (56U)
 #define GW_RESPONSE_SENSOR_PIR_LIGHT     (57U)
@@ -222,7 +224,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 
-#define TYPE_DEVICE_CTL_ADD_FROM_APP        -1
+#define TYPE_DEVICE_CTL_ADD_FROM_APP       -1
 #define TYPE_DEVICE_REPONSE_ADD_FROM_APP    0
 #define TYPE_DEVICE_ADD_UNSUCCES_HC         1
 #define TYPE_DEVICE_ADD_SUCCES_HC           2

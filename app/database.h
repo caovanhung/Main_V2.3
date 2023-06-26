@@ -44,6 +44,7 @@ typedef struct {
     int  provider;
     char pid[20];
     int  pageIndex;
+    int offlineCount;
 } DeviceInfo;
 
 typedef enum {
@@ -82,7 +83,7 @@ typedef struct {
     ValueType       valueType;
     int             delaySeconds;   // Giá trị thời gian trễ tính bằng giây nếu entityType = Độ trễ
     char            serviceName[10];// Service điều khiển cho action BLE, TUYA, XIAOMI, HOMEKIT, chỉ áp dụng khi actionType = EntityDevice, EntityScene
-    char            wifiCode[100];
+    char            wifiCode[400];
 } SceneAction;
 
 typedef struct {
@@ -134,6 +135,7 @@ int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand);
 int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId);
 int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr);
 int Db_SaveDeviceState(const char* deviceId, int state);
+int Db_SaveOfflineCountForDevice(const char* deviceId, int offlineCount);
 int Db_DeleteDevice(const char* deviceId);
 int Db_DeleteAllDevices();
 

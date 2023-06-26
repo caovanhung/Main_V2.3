@@ -99,7 +99,7 @@ bool ble_logTouch(const char *address_element, uint8_t dpId, int state);
 bool GW_SetSceneActionForSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param);
 bool GW_SetSceneActionForLight(const char* address_device,const char* sceneID);
 bool ble_setSceneLocalToDeviceLight_RANGDONG(const char* address_device,const char* sceneID, uint8_t blinkMode);
-bool ble_callSceneLocalToDevice(const char* address_device,const char* sceneID, const char* enableOrDisable, uint8_t dpValue);
+bool GW_SetSceneCondition(const char* address_device,const char* sceneID, uint8_t enableOrDisable, uint8_t dpValue);
 bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID);
 bool ble_setTimeForSensorPIR(const char* address_device,const char* time);
 bool ble_callSceneLocalToHC(const char* address_device, const char* sceneID);

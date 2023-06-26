@@ -49,6 +49,7 @@
 
 const char* SERVICE_NAME = SERVICE_TUYA;
 uint8_t     SERVICE_ID   = SERVICE_ID_TUYA;
+bool g_printLog = true;
 
 static char g_homeId[30] = {0};
 struct mosquitto * mosq;
@@ -201,7 +202,7 @@ int main( int argc,char ** argv )
                 {
                     memset(body,'\0',1000);
                     memset(message,'\0',MAX_SIZE_ELEMENT_QUEUE);
-                    sprintf(body, "{\"commands\": [%s]}", code);
+                    sprintf(body, "{\"commands\": %s}", code);
                     if(!strlen(access_token)){
                         get_access_token(access_token,access_token_refresh);
                         break;
@@ -228,7 +229,7 @@ int main( int argc,char ** argv )
                 {
                     memset(body,'\0',1000);
                     memset(message,'\0',MAX_SIZE_ELEMENT_QUEUE);
-                    sprintf(body, "{\"functions\": [%s]}", code);
+                    sprintf(body, "{\"functions\": %s}", code);
                     if(!strlen(access_token)){
                         get_access_token(access_token,access_token_refresh);
                         break;

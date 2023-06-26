@@ -76,8 +76,8 @@ int Db_AddDevice(JSON* deviceInfo) {
     char* pid = JSON_GetText(deviceInfo, KEY_PID);
     int pageIndex = JSON_GetNumber(deviceInfo, "pageIndex");
     char sqlCmd[500];
-    sprintf(sqlCmd, "INSERT INTO DEVICES_INF(deviceId, name,  Unicast, gwIndex, deviceKey, provider, pid,   state, pageIndex) \
-                                      VALUES('%s',     '%s',  '%s',    %d,      '%s',      '%d',     '%s',  '%d',    %d)",
+    sprintf(sqlCmd, "INSERT INTO DEVICES_INF(deviceId, name,  Unicast, gwIndex, deviceKey, provider, pid,   state, pageIndex, offlineCount) \
+                                      VALUES('%s',     '%s',  '%s',    %d,      '%s',      '%d',     '%s',  '%d',    %d,      '0')",
                                              id,       name,  unicast, gwIndex, deviceKey, provider, pid,   3,     pageIndex);
     // printf("%s", sqlCmd);
     Sql_Exec(sqlCmd);
@@ -132,6 +132,7 @@ int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand) {
             deviceInfo->gwIndex = sqlite3_column_int(sqlResponse, 5);
             StringCopy(deviceInfo->pid, sqlite3_column_text(sqlResponse, 8));
             deviceInfo->pageIndex = sqlite3_column_int(sqlResponse, 15);
+            deviceInfo->offlineCount = sqlite3_column_int(sqlResponse, 16);
             rowCount = 1;
         }
     }
@@ -158,6 +159,15 @@ int Db_SaveDeviceState(const char* deviceId, int state) {
     long long int currentTime = timeInMilliseconds();
     char sqlCmd[200];
     sprintf(sqlCmd, "UPDATE devices_inf SET state='%d', last_updated='%lld' WHERE deviceId='%s';", state, currentTime, deviceId);
+    Sql_Exec(sqlCmd);
+    return 1;
+}
+
+int Db_SaveOfflineCountForDevice(const char* deviceId, int offlineCount) {
+    ASSERT(deviceId);
+    long long int currentTime = timeInMilliseconds();
+    char sqlCmd[200];
+    sprintf(sqlCmd, "UPDATE devices_inf SET offlineCount='%d', last_updated='%lld' WHERE deviceId='%s';", offlineCount, currentTime, deviceId);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -778,7 +788,7 @@ bool creat_table_database(sqlite3 **db)
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES_INF;CREATE TABLE DEVICES_INF(deviceID TEXT, state INTEGER, name TEXT, MAC TEXT, Unicast TEXT, gwIndex INTEGER, deviceKey TEXT, provider INTEGER, pid TEXT, created INTEGER, modified INTEGER, last_updated INTEGER, firmware TEXT, GroupList TEXT, SceneList TEXT, pageIndex INTEGER);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES_INF;CREATE TABLE DEVICES_INF(deviceID TEXT, state INTEGER, name TEXT, MAC TEXT, Unicast TEXT, gwIndex INTEGER, deviceKey TEXT, provider INTEGER, pid TEXT, created INTEGER, modified INTEGER, last_updated INTEGER, firmware TEXT, GroupList TEXT, SceneList TEXT, pageIndex INTEGER, offlineCount INTEGER);");
     if(check != 0)
     {
         printf("DELETE DEVICES_INF is error!\n");

@@ -32,6 +32,7 @@
 
 const char* SERVICE_NAME = SERVICE_CORE;
 uint8_t SERVICE_ID = SERVICE_ID_CORE;
+bool g_printLog = true;
 
 struct mosquitto * mosq;
 sqlite3 *db;
@@ -739,7 +740,7 @@ void GetDeviceStatusForScene(Scene* scene) {
         }
     }
     if (JArr_Count(devicesArray) > 0) {
-        sendPacketTo(SERVICE_BLE, TYPE_GET_DEVICE_STATUS, devicesArray);
+        sendPacketTo(SERVICE_BLE, TYPE_GET_ONOFF_STATE, devicesArray);
     }
     JSON_Delete(devicesArray);
 }
@@ -766,7 +767,7 @@ void GetDeviceStatusForGroup(const char* deviceId, int dpId) {
         JSON_Delete(groupDevices);
     }
     if (JArr_Count(devicesArray) > 0) {
-        sendPacketTo(SERVICE_BLE, TYPE_GET_DEVICE_STATUS, devicesArray);
+        sendPacketTo(SERVICE_BLE, TYPE_GET_ONOFF_STATE, devicesArray);
     }
     JSON_Delete(devicesArray);
 }
@@ -774,7 +775,7 @@ void GetDeviceStatusForGroup(const char* deviceId, int dpId) {
 void GetDeviceStatusInterval() {
     static long long int oldTick = 0;
 
-    if (timeInMilliseconds() - oldTick > 120000) {
+    if (timeInMilliseconds() - oldTick > 60000) {
         oldTick = timeInMilliseconds();
         char sqlCmd[500];
         char pid[1000];
@@ -787,7 +788,7 @@ void GetDeviceStatusInterval() {
             JArr_AddText(devicesArray, addr);
         }
         if (JArr_Count(devicesArray) > 0) {
-            sendPacketTo(SERVICE_BLE, TYPE_GET_DEVICE_STATUS, devicesArray);
+            sendPacketTo(SERVICE_BLE, TYPE_GET_ONOFF_STATE, devicesArray);
         }
         JSON_Delete(devicesArray);
     }
@@ -816,7 +817,7 @@ int main(int argc, char ** argv)
         Mosq_ProcessLoop();
         ResponseWaiting();
         ExecuteScene();
-        // GetDeviceStatusInterval();
+        GetDeviceStatusInterval();
 
         size_queue = get_sizeQueue(queue_received);
         if (size_queue > 0) {
@@ -863,7 +864,7 @@ int main(int argc, char ** argv)
                         }
                         break;
                     }
-                    case GW_RESP_DEVICE_STATUS: {
+                    case GW_RESP_ONOFF_STATE: {
                         char* dpAddr = JSON_GetText(payload, "dpAddr");
                         double dpValue = JSON_GetNumber(payload, "dpValue");
                         uint16_t opcode = JSON_HasKey(payload, "opcode")? JSON_GetNumber(payload, "opcode") : 0;
@@ -901,7 +902,7 @@ int main(int argc, char ** argv)
                         }
                         break;
                     }
-                    case GW_RESPONSE_DEVICE_STATE: {
+                    case GW_RESP_ONLINE_STATE: {
                         JSON* devicesArray = JSON_GetObject(payload, "devices");
                         JSON_ForEach(arrayItem, devicesArray) {
                             char* deviceAddr = JSON_GetText(arrayItem, "deviceAddr");
@@ -909,7 +910,14 @@ int main(int argc, char ** argv)
                             DeviceInfo deviceInfo;
                             int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr);
                             if (foundDevices == 1) {
+                                if (deviceState == STATE_OFFLINE) {
+                                    if (deviceInfo.offlineCount < 2) {
+                                        Db_SaveOfflineCountForDevice(deviceInfo.id, deviceInfo.offlineCount + 1);
+                                        break;
+                                    }
+                                }
                                 JSON_SetText(payload, "deviceId", deviceInfo.id);
+                                Db_SaveOfflineCountForDevice(deviceInfo.id, 0);
                                 Db_SaveDeviceState(deviceInfo.id, deviceState);
                                 Aws_SaveDeviceState(deviceInfo.id, deviceState, deviceInfo.pageIndex);
                                 JSON_SetNumber(payload, "dpValue", deviceState == 2? 1 : 0);
@@ -1568,14 +1576,12 @@ int main(int argc, char ** argv)
                         // Add this request to response list for checking response
                         JSON_ForEach(device, devicesNeedAdd) {
                             char* deviceId = JSON_GetText(device, "deviceId");
-                            char* deviceAddr = JSON_GetText(device, "deviceAddr");
-                            JSON* addedDevice = addDeviceToRespList(reqType, groupAddr, deviceAddr);
+                            JSON* addedDevice = addDeviceToRespList(reqType, groupAddr, JSON_GetText(device, "dpAddr"));
                             JSON_SetText(addedDevice, "deviceId", deviceId);
                         }
                         JSON_ForEach(device, devicesNeedRemove) {
                             char* deviceId = JSON_GetText(device, "deviceId");
-                            char* deviceAddr = JSON_GetText(device, "deviceAddr");
-                            JSON* addedDevice = addDeviceToRespList(reqType, groupAddr, deviceAddr);
+                            JSON* addedDevice = addDeviceToRespList(reqType, groupAddr, JSON_GetText(device, "dpAddr"));
                             JSON_SetText(addedDevice, "deviceId", deviceId);
                         }
                         JSON_Delete(packet);

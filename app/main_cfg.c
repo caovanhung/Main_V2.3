@@ -50,6 +50,7 @@ typedef enum {
 
 const char* SERVICE_NAME = SERVICE_CFG;
 uint8_t     SERVICE_ID   = SERVICE_ID_CFG;
+bool g_printLog = true;
 
 struct mosquitto * mosq;
 static bool g_mosqIsConnected = false;
