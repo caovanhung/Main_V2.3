@@ -1,0 +1,11 @@
+[Unit]
+Description=Homegy Starting Services
+
+[Service]
+User=root
+WorkingDirectory=/home/szbaijie/hc_bin
+ExecStart=/usr/bin/python3 /home/szbaijie/hc_bin/starting_services.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

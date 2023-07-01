@@ -310,33 +310,23 @@ void MainLoop() {
                 count = 0;
                 if (g_wifiIsConnected) {
                     LED_ON;
+                    PlayAudio("wifi_config_success");
                     // Save homeId and accountId to app.json file
-                    if (g_homeId[0] != 0 && g_accountId[0] != 0) {
-                        char str[500];
+                    if (g_needConfigGw && g_homeId[0] != 0 && g_accountId[0] != 0) {
                         FILE* f = fopen("app.json", "w");
-                        fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\"}", g_accountId, g_homeId);
+                        int isMaster = JSON_GetNumber(g_gatewayInfo, "isMaster");
+                        char* hcAddr = JSON_GetText(g_gatewayInfo, "gateway1");
+                        fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\",\"isMaster\":%d,\"hcAddr\":\"%s\"}", g_accountId, g_homeId, isMaster, hcAddr);
                         fclose(f);
-                        PlayAudio("wifi_config_success");
-                        if (g_needConfigGw) {
-                            char* message = "{\"type\":102}";
-                            mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
-                            // Send message to AWS service to configure gateway
-                            JSON* p = JSON_CreateObject();
-                            JSON* state = JSON_CreateObject();
-                            JSON* reported = JSON_CreateObject();
-                            JSON_SetObject(state, "reported", reported);
-                            JSON_SetObject(p, "state", state);
-                            JSON_SetNumber(reported, "type", TYPE_ADD_GW);
-                            JSON_SetNumber(reported, "sender", SENDER_APP_VIA_LOCAL);
-                            JSON* tmp = JSON_CreateObject();
-                            JSON_SetObject(tmp, "0A00", g_gatewayInfo);
-                            JSON_SetObject(reported, "gateWay", tmp);
-                            char* payload = cJSON_PrintUnformatted(p);
-                            mosquitto_publish(mosq, NULL, MOSQ_TOPIC_CONTROL_LOCAL, strlen(payload), payload, 0, false);
-                            logInfo("Sent to service AWS: (%s): (%s)", MOSQ_TOPIC_CONTROL_LOCAL, payload);
-                            JSON_Delete(p);
-                            free(payload);
-                        }
+
+                        // char* message = "{\"type\":102}";
+                        // mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
+                        // Send message to AWS service to configure gateway
+                        sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
+                        // char* payload = cJSON_PrintUnformatted(g_gatewayInfo);
+                        // mosquitto_publish(mosq, NULL, MOSQ_TOPIC_DEVICE_BLE, strlen(payload), payload, 0, false);
+                        // logInfo("Sent to service AWS: (%s): (%s)", MOSQ_TOPIC_CONTROL_LOCAL, payload);
+                        // free(payload);
                     }
                 } else {
                     LED_OFF;
@@ -344,7 +334,7 @@ void MainLoop() {
                 if (!g_needConfigGw) {
                     system("pkill -15 create_ap");
                 }
-                pclose(g_createApFile);
+                // pclose(g_createApFile);
                 logInfo("Done configuring");
                 state = 0;
             }

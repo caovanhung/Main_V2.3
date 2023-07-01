@@ -2,6 +2,7 @@
 #include "helper.h"
 #include <math.h>
 #include <stdlib.h>
+#include <common.h>
 
 extern sqlite3* db;
 
@@ -34,9 +35,10 @@ bool close_database(sqlite3 **db)
 
 int Db_AddGateway(JSON* gatewayInfo) {
     ASSERT(gatewayInfo);
-    creat_table_database(&db);
     char sqlCmd[500];
+    char* name = JSON_GetText(gatewayInfo, "name");
     char* address1 = JSON_GetText(gatewayInfo, "gateway1");
+    char* hcAddr = address1;
     char* address2 = JSON_GetText(gatewayInfo, "gateway2");
     char* appkey = JSON_GetText(gatewayInfo, KEY_APP_KEY);
     char* ivIndex = JSON_GetText(gatewayInfo, KEY_IV_INDEX);
@@ -45,10 +47,20 @@ int Db_AddGateway(JSON* gatewayInfo) {
     char* appkeyIndex = JSON_GetText(gatewayInfo, KEY_APP_KEY_INDEX);
     char* deviceKey1 = JSON_GetText(gatewayInfo, "deviceKey1");
     char* deviceKey2 = JSON_GetText(gatewayInfo, "deviceKey2");
-    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(0,'%s','%s','%s','%s','%s','%s','%s')", address1, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey1);
-    Sql_Exec(sqlCmd);
+    int isMaster = JSON_GetNumber(gatewayInfo, "isMaster");
 
-    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(1,'%s','%s','%s','%s','%s','%s','%s')", address2, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey2);
+    // Get maximum gateway id
+    int currentId = -1;
+    Sql_Query("SELECT id FROM gateway ORDER BY id DESC LIMIT 1", row) {
+        currentId = sqlite3_column_int(row, 0);
+    }
+    // printInfo("[Db_AddGateway] currentId=%d", currentId);
+
+    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(%d,'%s',%d,'%s','%s','%s','%s','%s','%s','%s','%s')", currentId + 1, name, isMaster, hcAddr, address1, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey1);
+    Sql_Exec(sqlCmd);
+    // printf("sqlCmd: %s\n", sqlCmd);
+
+    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(%d,'%s',%d,'%s','%s','%s','%s','%s','%s','%s','%s')", currentId + 2, name, isMaster, hcAddr, address2, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey2);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -62,6 +74,18 @@ int Db_FindGatewayId(const char* gatewayAddr) {
         id = sqlite3_column_int(row, 0);
     }
     return id;
+}
+
+char* Db_FindGatewayAddr(int gwIndex) {
+    ASSERT(gwIndex >= 0);
+    char* gwAddr = NULL;
+    char sqlCmd[300];
+    sprintf(sqlCmd, "SELECT address FROM gateway WHERE id = '%d'", gwIndex);
+    Sql_Query(sqlCmd, row) {
+        gwAddr = malloc(10);
+        StringCopy(gwAddr, sqlite3_column_text(row, 0));
+    }
+    return gwAddr;
 }
 
 int Db_AddDevice(JSON* deviceInfo) {
@@ -227,6 +251,14 @@ JSON* Db_FindDevicesInGroup(const char* groupAddr) {
                 JSON_SetNumber(d, "gwIndex", deviceInfo.gwIndex);
                 JSON_SetNumber(d, "pageIndex", deviceInfo.pageIndex);
             }
+            if (JSON_HasKey(d, "dpId")) {
+                int dpId = JSON_GetNumber(d, "dpId");
+                DpInfo dpInfo;
+                int foundDps = Db_FindDp(&dpInfo, deviceId, dpId);
+                if (foundDps == 1) {
+                    JSON_SetText(d, "dpAddr", dpInfo.addr);
+                }
+            }
         }
     }
     return resultDevices;
@@ -309,11 +341,12 @@ int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId) {
     return rowCount;
 }
 
-int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr) {
+int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr, const* hcAddr) {
     ASSERT(dpInfo); ASSERT(dpAddr);
     int rowCount = 0;
     char sqlCommand[300];
-    sprintf(sqlCommand, "SELECT deviceId, dpId, address, dpValue, pageIndex FROM devices WHERE address='%s' ORDER BY dpId LIMIT 1;", dpAddr);
+    sprintf(sqlCommand, "SELECT dp.deviceId, dp.dpId, dp.address, dp.dpValue, dp.pageIndex FROM devices dp JOIN devices_inf d ON dp.deviceId = d.deviceId JOIN gateway g ON g.id=d.gwIndex WHERE dp.address='%s' AND g.hcAddr='%s' ORDER BY dpId LIMIT 1;", dpAddr, hcAddr);
+    printf("sqlCommand: %s\n", sqlCommand);
     Sql_Query(sqlCommand, row) {
         dpInfo->id = atoi(sqlite3_column_text(row, 1));
         char* value = sqlite3_column_text(row, 3);
@@ -774,7 +807,7 @@ int sql_creat_table(sqlite3 **db,char *name_table)
 bool creat_table_database(sqlite3 **db)
 {
     int check = 0;
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS GATEWAY;CREATE TABLE GATEWAY(id INTEGER,address TEXT,appkey TEXT,ivIndex TEXT,netkeyIndex TEXT,netkey TEXT,appkeyIndex TEXT,deviceKey TEXT);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS GATEWAY;CREATE TABLE GATEWAY(id INTEGER, name TEXT, isMaster INTEGER, hcAddr TEXT, address TEXT, appkey TEXT, ivIndex TEXT, netkeyIndex TEXT, netkey TEXT, appkeyIndex TEXT, deviceKey TEXT);");
     if(check != 0)
     {
         printf("DELETE GATEWAY is error!\n");

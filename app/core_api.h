@@ -7,6 +7,7 @@ extern JSON *g_checkRespList;
 
 /************************************ COMMON APIS **************************************/
 void CoreInit();
+void sendPacketToBle(int gwIndex, int reqType, JSON* packet);
 bool CompareDeviceById(JSON* device1, JSON* device2);
 JSON* parseGroupLinkDevices(const char* devices);
 // Add device that need to check response to response list

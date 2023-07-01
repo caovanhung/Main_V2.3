@@ -1001,7 +1001,7 @@ void Mosq_ProcessMessage() {
 
 void Aws_SendMergePayload() {
     static long long time = 0;
-    if (timeInMilliseconds() - time > 5000) {
+    if (timeInMilliseconds() - time > 500) {
         time = timeInMilliseconds();
 
         JSON_ForEach(page, g_mergePayloads) {
@@ -1028,48 +1028,6 @@ void Aws_SendMergePayload() {
     }
 }
 
-void GetIpAddressLoop() {
-    static long long tick = 0;
-    if (g_awsIsConnected && timeInMilliseconds() - tick > 10000) {
-        tick = timeInMilliseconds();
-        char address[50];
-        FILE* fp = popen("python3 getIp.py", "r");
-        while (fgets(address, sizeof(address), fp) != NULL);
-        if (address) {
-            if (StringCompare(address, g_ipAddress) == false) {
-                StringCopy(g_ipAddress, address);
-                logInfo("New IP Address: %s", g_ipAddress);
-                // Update new IP address to AWS
-                char msg[200];
-                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"0A00\":{\"ipLocal\":\"%s\"}}, \"sender\":11}}}", g_ipAddress);
-                char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
-                mqttCloudPublish(topic, msg);
-                free(topic);
-            }
-        }
-        fclose(fp);
-
-        // Check connected wifi name
-        char wifiName[100];
-        fp = popen("iw wlan0 info | grep -Po '(?<=ssid ).*'", "r");
-        while (fgets(wifiName, sizeof(wifiName), fp) != NULL);
-        if (wifiName && StringLength(wifiName) > 1) {
-            wifiName[StringLength(wifiName) - 1] = 0;
-            if (StringCompare(wifiName, g_wifiName) == false) {
-                StringCopy(g_wifiName, wifiName);
-                logInfo("New connected wifi name: %s", g_wifiName);
-                // Update new wifi name to AWS
-                char msg[200];
-                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"0A00\":{\"nameWifi\":\"%s\"}}, \"sender\":11}}}", g_wifiName);
-                char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
-                mqttCloudPublish(topic, msg);
-                free(topic);
-            }
-        }
-        fclose(fp);
-    }
-}
-
 int main( int argc,char ** argv ) {
     int xRun = 1;
 
@@ -1089,7 +1047,7 @@ int main( int argc,char ** argv ) {
         Aws_SendMergePayload();
         Mosq_ProcessLoop();
         Mosq_ProcessMessage();
-        GetIpAddressLoop();
+        // GetIpAddressLoop();
 
         size_queue = get_sizeQueue(queue_received_aws);
         if (size_queue > 0) {
@@ -1212,6 +1170,8 @@ int main( int argc,char ** argv ) {
                         break;
                     }
                     case TYPE_GET_DEVICE_HISTORY:
+                    case TYPE_GET_GROUPS_OF_DEVICE:
+                    case TYPE_GET_SCENES_OF_DEVICE:
                         sendPacketTo(SERVICE_CORE, reqType, recvPacket);
                         break;
                 }

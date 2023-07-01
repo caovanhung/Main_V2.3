@@ -10,4 +10,4 @@
 #define MQTT_MOSQUITTO_CIENT_ID             "Command"
 
 
-#define ASSERT(...)  if (!(__VA_ARGS__)) { printf("ERROR ASSERT: %s:%d", __FILE__, __LINE__); return; }
+#define ASSERT(...)  if (!(__VA_ARGS__)) { printf("ERROR ASSERT: %s:%d\n", __FILE__, __LINE__); return; }

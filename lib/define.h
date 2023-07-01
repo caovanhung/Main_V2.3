@@ -9,8 +9,6 @@
 
 #define FILENAME               ( strrchr( __FILE__, '/' ) ? strrchr( __FILE__, '/' ) + 1 : __FILE__ )
 
-#define ASSERT(...)  if (!(__VA_ARGS__)) { printf("ERROR ASSERT: %s:%d", __FILE__, __LINE__); return; }
-
 #define GATEWAY_NUM             2
 //UART
 #define UART_GATEWAY1           "/dev/ttyS3"
@@ -103,7 +101,7 @@
 #define GW_RESPONSE_DEVICE_KICKOUT       (51U)
 #define GW_RESPONSE_SMOKE_SENSOR         (52U)
 #define GW_RESPONSE_SENSOR_ENVIRONMENT   (53U)
-#define GW_RESP_ONLINE_STATE         (54U)
+#define GW_RESP_ONLINE_STATE             (54U)
 #define GW_RESPONSE_SENSOR_BATTERY       (55U)
 #define GW_RESPONSE_SENSOR_PIR_DETECT    (56U)
 #define GW_RESPONSE_SENSOR_PIR_LIGHT     (57U)
@@ -352,7 +350,6 @@
 #define KEY_GROUPS                      "groups"
 
 #define KEY_DICT_INFO                   "dictInfo"
-#define KEY_DICT_META                   "dictMeta"
 #define KEY_DICT_DPS                    "dictDPs"
 #define KEY_DICT_NAME                   "dictName"
 #define KEY_MAC                         "MAC"
@@ -486,7 +483,7 @@
 #define MOSQ_TOPIC_RULE                     "SUPPORTING_SERVICES/Rule_Schedule/#"
 #define MOSQ_TOPIC_NOTIFILE                 "SUPPORTING_SERVICES/Notifile/#"
 
-#define MOSQ_TOPIC_DEVICE_BLE               "DEVICE_SERVICES/BLE/#"
+#define MOSQ_TOPIC_DEVICE_BLE               "DEVICE_SERVICES/BLE"
 #define MOSQ_TOPIC_DEVICE_TUYA              "DEVICE_SERVICES/TUYA/#"
 
 

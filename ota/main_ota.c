@@ -56,6 +56,8 @@
 
 const char* SERVICE_NAME = "OTA";
 uint8_t SERVICE_ID = 9;
+bool g_printLog = true;
+
 struct mosquitto * mosq;
 struct Queue *queue_received_aws,*queue_mos_sub;
 MQTTFixedBuffer_t networkBuffer;

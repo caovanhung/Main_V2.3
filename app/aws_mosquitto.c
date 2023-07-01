@@ -4,6 +4,7 @@
 #include "time_t.h"
 #include "helper.h"
 #include "database.h"
+#include "common.h"
 
 extern const char* SERVICE_NAME;
 char* g_dbgFileName;
@@ -130,7 +131,6 @@ void Aws_UpdateGroupDevices(JSON* groupInfo) {
             char* payload = malloc(StringLength(str) + 200);
             sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\": 2, \"devices\":%s}}}}", TYPE_UPDATE_GROUP_NORMAL, SENDER_HC_TO_CLOUD, groupAddr, str);
             sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
-            printf("pushed: %s\n", payload);
             free(str);
             free(payload);
         }

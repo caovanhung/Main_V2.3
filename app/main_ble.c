@@ -37,7 +37,7 @@
 #include <mosquitto.h>
 #include <unistd.h>
 
-
+#include "common.h"
 #include "ble_common.h"
 #include "define.h"
 #include "ble_process.h"
@@ -51,6 +51,10 @@
 const char* SERVICE_NAME = SERVICE_BLE;
 uint8_t SERVICE_ID = SERVICE_ID_BLE;
 bool g_printLog = true;
+char g_ipAddress[100];
+char g_hcAddr[10];
+char g_masterIP[100];
+char g_mosqIP[100];
 
 extern int g_gatewayFds[GATEWAY_NUM];
 char rcv_uart_buff[MAXLINE];
@@ -76,8 +80,27 @@ void On_mqttConnect(struct mosquitto *mosq, void *obj, int rc)
         logError("Error with result code: %d", rc);
         exit(-1);
     }
-    mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_DEVICE_BLE, 0);
+
+    // Read slave address if this HC is slave
+    FILE* f = fopen("app.json", "r");
+    char buff[1000];
+    fread(buff, sizeof(char), 1000, f);
+    fclose(f);
+    JSON* setting = JSON_Parse(buff);
+    char* hcAddr = JSON_GetText(setting, "hcAddr");
+    StringCopy(g_hcAddr, hcAddr);
+    logInfo("hcAddr: %s", g_hcAddr);
+
+    char topic[200];
+    if (StringCompare(g_mosqIP, "192.168.12.1")) {
+        StringCopy(topic, "BLE_LOCAL/#");
+    } else {
+        sprintf(topic, "%s_%s/#", MOSQ_TOPIC_DEVICE_BLE, g_hcAddr);
+    }
+    mosquitto_subscribe(mosq, NULL, topic, 0);
+    logInfo("[On_mqttConnect]: Subscribed topic: %s", topic);
     g_mosqIsConnected = true;
+    JSON_Delete(setting);
 }
 
 void On_mqttMessage(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
@@ -103,10 +126,11 @@ void Mosq_Init(const char* clientId) {
     rc = mosquitto_username_pw_set(mosq, "MqttLocalHomegy", "Homegysmart");
     mosquitto_connect_callback_set(mosq, On_mqttConnect);
     mosquitto_message_callback_set(mosq, On_mqttMessage);
-    rc = mosquitto_connect(mosq, MQTT_MOSQUITTO_HOST, MQTT_MOSQUITTO_PORT, MQTT_MOSQUITTO_KEEP_ALIVE);
+    logInfo("[Mosq_Init] Connecting to %s", g_mosqIP);
+    rc = mosquitto_connect(mosq, g_mosqIP, MQTT_MOSQUITTO_PORT, MQTT_MOSQUITTO_KEEP_ALIVE);
     if (rc != 0) {
         logInfo("Client could not connect to broker! Error Code: %d", rc);
-        mosquitto_destroy(mosq);
+        // mosquitto_destroy(mosq);
         return;
     }
     logInfo("Mosq_Init() done");
@@ -122,7 +146,9 @@ void Mosq_ProcessLoop() {
         }
     } else {
         mosquitto_destroy(mosq);
-        Mosq_Init(SERVICE_BLE);
+        char clientId[100];
+        sprintf(clientId, "%lu", timeInMilliseconds());
+        Mosq_Init(clientId);
     }
 }
 
@@ -208,6 +234,7 @@ void Ble_ProcessPacket()
             switch(frameType) {
                 case GW_RESP_ONLINE_STATE: {
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON* devicesArray = JSON_AddArray(packet, "devices");
                     JSON* arrayItem = JArr_CreateObject(devicesArray);
                     JSON_SetText(arrayItem, "deviceAddr", tmp->address_element);
@@ -234,6 +261,7 @@ void Ble_ProcessPacket()
                         char str[10];
                         for (int d = 0; d < dpCount; d++) {
                             JSON* packet = JSON_CreateObject();
+                            JSON_SetText(packet, "hcAddr", g_hcAddr);
                             JSON_SetNumber(packet, "opcode", 0x8201);
                             uint16_t addr = (uint8_t)(deviceAddr >> 8);
                             addr += d;
@@ -247,6 +275,7 @@ void Ble_ProcessPacket()
                         }
                     } else {
                         JSON* packet = JSON_CreateObject();
+                        JSON_SetText(packet, "hcAddr", g_hcAddr);
                         uint16_t opcode = bleFrames[i].param[0];
                         opcode = (opcode << 8) | bleFrames[i].param[1];
                         JSON_SetNumber(packet, "opcode", opcode);
@@ -260,12 +289,15 @@ void Ble_ProcessPacket()
                 }
                 case GW_RESPONSE_LIGHT_RD_CONTROL: {
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     if (bleFrames[i].opcode == 0x824e) {
+                        // Get lightness
                         uint16_t value = ((uint16_t)bleFrames[i].param[3] << 8) | bleFrames[i].param[2];
                         value = ((uint32_t)value * 1000) / 65535;
                         JSON_SetNumber(packet, "lightness", value);
                     } else {
+                        // Get color temperature
                         uint16_t value = ((uint16_t)bleFrames[i].param[5] << 8) | bleFrames[i].param[4];
                         value = ((value - 800) * 1000) / (20000 - 800);
                         JSON_SetNumber(packet, "color", value);
@@ -281,6 +313,7 @@ void Ble_ProcessPacket()
 
                     // Send smoke detection to core service
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpId", TYPE_DPID_SMOKE_SENSOR_DETECT);
                     JSON_SetNumber(packet, "dpValue", hasSmoke);
@@ -289,6 +322,7 @@ void Ble_ProcessPacket()
 
                     // Send battery to core service
                     packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpId", TYPE_DPID_SMOKE_SENSOR_BATTERY);
                     JSON_SetNumber(packet, "dpValue", battery);
@@ -303,6 +337,7 @@ void Ble_ProcessPacket()
 
                     // Send temperature to core service
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpId", TYPE_DPID_ENVIRONMENT_SENSOR_TEMPER);
                     JSON_SetNumber(packet, "dpValue", (double)temperature);
@@ -311,6 +346,7 @@ void Ble_ProcessPacket()
 
                     // Send battery to core service
                     packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpId", TYPE_DPID_ENVIRONMENT_SENSOR_HUMIDITY);
                     JSON_SetNumber(packet, "dpValue", (double)humidity);
@@ -323,6 +359,7 @@ void Ble_ProcessPacket()
                     logInfo("GW_RESPONSE_SENSOR_DOOR");
                     // Send information to core service
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     if (frameType == GW_RESPONSE_SENSOR_DOOR_ALARM) {
                         JSON_SetNumber(packet, "dpId", TYPE_DPID_DOOR_SENSOR_ALRM);
@@ -338,6 +375,7 @@ void Ble_ProcessPacket()
                 case GW_RESPONSE_SENSOR_BATTERY: {
                     logInfo("GW_RESPONSE_SENSOR_BATTERY");
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpId", TYPE_DPID_BATTERY_SENSOR);
                     JSON_SetNumber(packet, "dpValue", bleFrames[i].param[2]);
@@ -348,6 +386,7 @@ void Ble_ProcessPacket()
                 case GW_RESPONSE_SENSOR_PIR_DETECT: {
                     logInfo("GW_RESPONSE_SENSOR_PIR_DETECT");
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpId", TYPE_DPID_PIR_SENSOR_DETECT);
                     JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]);
@@ -358,6 +397,7 @@ void Ble_ProcessPacket()
                 case GW_RESPONSE_SENSOR_PIR_LIGHT: {
                     logInfo("GW_RESPONSE_SENSOR_PIR_LIGHT");
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     uint16_t lightIntensity = ((uint16_t)bleFrames[i].param[1] << 8) | bleFrames[i].param[2];
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpId", TYPE_DPID_PIR_SENSOR_LUX);
@@ -380,6 +420,7 @@ void Ble_ProcessPacket()
                 case GW_RESPONSE_DEVICE_KICKOUT: {
                     logInfo("GW_RESPONSE_DEVICE_KICKOUT");
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
@@ -389,11 +430,20 @@ void Ble_ProcessPacket()
                 case GW_RESPONSE_ADD_SCENE: {
                     logInfo("GW_RESPONSE_ADD_SCENE");
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     char sceneId[10];
-                    sprintf(sceneId, "%02X%02X", bleFrames[i].param[1], bleFrames[i].param[2]);
+                    int status = 0;
+                    if (bleFrames[i].opcode == 0x8245) {
+                        // Response for scene action
+                        sprintf(sceneId, "%02X%02X", bleFrames[i].param[1], bleFrames[i].param[2]);
+                        status = bleFrames[i].param[0];
+                    } else {
+                        // Response for scene condition
+                        sprintf(sceneId, "%02X%02X", bleFrames[i].param[3], bleFrames[i].param[4]);
+                    }
                     JSON_SetText(packet, "sceneId", sceneId);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                    JSON_SetNumber(packet, "status", bleFrames[i].param[0]);
+                    JSON_SetNumber(packet, "status", status);
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
                     break;
@@ -405,6 +455,7 @@ void Ble_ProcessPacket()
                     sprintf(deviceAddr, "%02X%02X", bleFrames[i].param[1], bleFrames[i].param[2]);
                     sprintf(groupAddr, "%02X%02X", bleFrames[i].param[3], bleFrames[i].param[4]);
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", deviceAddr);
                     JSON_SetText(packet, "groupAddr", groupAddr);
                     JSON_SetNumber(packet, "status", bleFrames[i].param[0]);
@@ -414,6 +465,7 @@ void Ble_ProcessPacket()
                 }
                 case GW_RESPONSE_SET_TTL: {
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetNumber(packet, "status", 0);
                     sendPacketTo(SERVICE_CORE, frameType, packet);
@@ -423,6 +475,7 @@ void Ble_ProcessPacket()
                 case GW_RESPONSE_IR: {
                     logInfo("GW_RESPONSE_IR");
                     JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     if (tmp->dpValue == 0) {
                         uint16_t brandId = ((uint16_t)bleFrames[i].param[4] << 8) + bleFrames[i].param[3];
@@ -486,6 +539,7 @@ void checkResponseLoop() {
                 // Send FAILED response to CORE service
                 JSON* p = JSON_CreateObject();
                 if (reqType == GW_RESPONSE_GROUP) {
+                    JSON_SetText(p, "hcAddr", g_hcAddr);
                     JSON_SetText(p, "groupAddr", itemId);
                     JSON_SetText(p, "deviceAddr", addr);
                     JSON_SetNumber(p, "status", status);
@@ -497,6 +551,55 @@ void checkResponseLoop() {
             JArr_RemoveIndex(g_checkRespList, i);
             break;
         }
+    }
+}
+
+void GetIpAddressLoop() {
+    static long long tick = 0;
+    if (timeInMilliseconds() - tick > 10000) {
+        tick = timeInMilliseconds();
+        char address[50];
+        FILE* fp = popen("python3 getIp.py", "r");
+        while (fgets(address, sizeof(address), fp) != NULL);
+        if (address) {
+            if (StringCompare(address, g_ipAddress) == false) {
+                StringCopy(g_ipAddress, address);
+                logInfo("New IP Address: %s", g_ipAddress);
+                if (StringCompare(g_ipAddress, "192.168.12.1")) {
+                    StringCopy(g_mosqIP, g_ipAddress);
+                    mosquitto_destroy(mosq);
+                    char clientId[100];
+                    sprintf(clientId, "%lu", timeInMilliseconds());
+                    Mosq_Init(clientId);
+                }
+                // Update new IP address to AWS
+                // char msg[200];
+                // sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"0A00\":{\"ipLocal\":\"%s\"}}, \"sender\":11}}}", g_ipAddress);
+                // char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
+                // mqttCloudPublish(topic, msg);
+                // free(topic);
+            }
+        }
+        fclose(fp);
+
+        // // Check connected wifi name
+        // char wifiName[100];
+        // fp = popen("iw wlan0 info | grep -Po '(?<=ssid ).*'", "r");
+        // while (fgets(wifiName, sizeof(wifiName), fp) != NULL);
+        // if (wifiName && StringLength(wifiName) > 1) {
+        //     wifiName[StringLength(wifiName) - 1] = 0;
+        //     if (StringCompare(wifiName, g_wifiName) == false) {
+        //         StringCopy(g_wifiName, wifiName);
+        //         logInfo("New connected wifi name: %s", g_wifiName);
+        //         // Update new wifi name to AWS
+        //         char msg[200];
+        //         sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"0A00\":{\"nameWifi\":\"%s\"}}, \"sender\":11}}}", g_wifiName);
+        //         char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
+        //         mqttCloudPublish(topic, msg);
+        //         free(topic);
+        //     }
+        // }
+        // fclose(fp);
     }
 }
 
@@ -533,6 +636,19 @@ int main( int argc,char ** argv )
     while (-1 == err || -1 == g_gatewayFds[1]);
     logInfo("Init %s done", UART_GATEWAY2);
     usleep(50000);
+
+    // Read ip of master HC
+    FILE* f = fopen("masterIP", "r");
+    if (f) {
+        int len = fread(g_masterIP, sizeof(char), 100, f);
+        g_masterIP[len] = 0;
+        fclose(f);
+    } else {
+        StringCopy(g_masterIP, MQTT_MOSQUITTO_HOST);
+    }
+    logInfo("Master IP: %s", g_masterIP);
+    StringCopy(g_mosqIP, g_masterIP);
+
     Mosq_Init(SERVICE_BLE);
     sleep(3);
     // GW_SetSceneActionForSwitch("2E10", "E901", 1, 0x12000000);
@@ -542,6 +658,7 @@ int main( int argc,char ** argv )
         BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue
         Ble_ProcessPacket();  // Get BLE frames from bleFrameQueue => publish message to CORE service
         Mosq_ProcessLoop();   // Receive mqtt message from CORE service => Push to mqttMsgQueue
+        GetIpAddressLoop();
 
         int mqttSizeQueue = get_sizeQueue(g_mqttMsgQueue);
         int lowPrioMqttSizeQueue = get_sizeQueue(g_lowPrioMqttMsgQueue);
@@ -708,6 +825,8 @@ int main( int argc,char ** argv )
                         int gwIndex = JSON_GetNumber(dpNeedRemove, "gwIndex");
                         char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
                         GW_DeleteGroup(gwIndex, groupAddr, deviceAddr, deviceAddr);
+                        // Add this device to response list to check TIMEOUT later
+                        addRespTypeToSendingFrame(GW_RESPONSE_GROUP, groupAddr);
                     }
                     JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
                         int gwIndex = JSON_GetNumber(dpNeedAdd, "gwIndex");
@@ -747,6 +866,8 @@ int main( int argc,char ** argv )
                         char* deviceAddr = JSON_GetText(dpNeedRemove, "deviceAddr");
                         char* dpAddr = JSON_GetText(dpNeedRemove, "dpAddr");
                         GW_DeleteGroup(gwIndex, groupAddr, deviceAddr, dpAddr);
+                        // Add this device to response list to check TIMEOUT later
+                        addRespTypeToSendingFrame(GW_RESPONSE_GROUP, groupAddr);
                     }
                     JSON_ForEach(dpNeedAdd, dpsNeedAdd) {
                         int gwIndex = JSON_GetNumber(dpNeedAdd, "gwIndex");
@@ -812,7 +933,6 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_UPDATE_SCENE: {
                     sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
-                    bool ret = false;
                     char* sceneId = JSON_GetText(payload, "sceneId");
                     JSON* actionsNeedRemove = JSON_GetObject(payload, "actionsNeedRemove");
                     JSON* actionsNeedAdd = JSON_GetObject(payload, "actionsNeedAdd");
@@ -822,13 +942,13 @@ int main( int argc,char ** argv )
                     if (JArr_Count(actionsNeedAdd) > 0) {
                         addSceneActions(sceneId, actionsNeedAdd);
                     }
-                    if (ret && JSON_HasKey(payload, "conditionNeedRemove")) {
+                    if (JSON_HasKey(payload, "conditionNeedRemove")) {
                         JSON* conditionNeedRemove = JSON_GetObject(payload, "conditionNeedRemove");
+                        deleteSceneCondition(sceneId, conditionNeedRemove);
+                    }
+                    if (JSON_HasKey(payload, "conditionNeedAdd")) {
                         JSON* conditionNeedAdd = JSON_GetObject(payload, "conditionNeedAdd");
-                        ret = deleteSceneCondition(sceneId, conditionNeedRemove);
-                        if (ret) {
-                            ret = addSceneCondition(sceneId, conditionNeedAdd);
-                        }
+                        addSceneCondition(sceneId, conditionNeedAdd);
                     }
                     break;
                 }
@@ -866,6 +986,10 @@ int main( int argc,char ** argv )
                     int gwIndex = JSON_GetNumber(payload, "gwIndex");
                     GW_SetTTL(gwIndex, JSON_GetText(payload, "deviceAddr"), JSON_GetNumber(payload, "ttl"));
                     break;
+                }
+                case TYPE_GET_GROUPS_OF_DEVICE:
+                case TYPE_GET_SCENES_OF_DEVICE: {
+
                 }
             }
         } else {
@@ -924,7 +1048,7 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                         JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
                     }
                 } else if (StringContains(RD_BLE_LIGHT_WHITE_TEST, pid) && dpId == 20) {
-                    ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, 0);
+                    GW_SetSceneActionForLightRGB(deviceAddr, sceneId, 0);
                     // Add this device to response list to check TIMEOUT later
                     addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                 } else if (StringContains(RD_BLE_LIGHT_RGB, pid) && (dpId == 20 || dpId == 21)) {
@@ -936,15 +1060,15 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                         list_t* tmp = String_Split(dpValueString, "_");
                         if (tmp->count == 2) {
                             uint8_t blinkMode = atoi(tmp->items[1]);
-                            ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, blinkMode);
+                            GW_SetSceneActionForLightRGB(deviceAddr, sceneId, blinkMode);
                         }
                     } else {
-                        ble_setSceneLocalToDeviceLight_RANGDONG(deviceAddr, sceneId, 0);
+                        GW_SetSceneActionForLightRGB(deviceAddr, sceneId, 0);
                     }
                     // Add this device to response list to check TIMEOUT later
                     addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
-                } else if (StringContains(HG_BLE_LIGHT_WHITE, pid) && dpId == 20) {
-                    GW_SetSceneActionForLight(deviceAddr, sceneId);
+                } else if (StringContains(HG_BLE_LIGHT_WHITE, pid)) {
+                    GW_SetSceneActionForLightCCT(deviceAddr, sceneId);
                     // Add this device to response list to check TIMEOUT later
                     addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                 }
@@ -1038,17 +1162,11 @@ bool addSceneCondition(const char* sceneId, JSON* condition) {
             uint16_t voiceCode = JSON_GetNumber(condition, "dpValue");
             GW_AddSceneConditionIR(deviceAddr, sceneId, voiceCode);
         } else {
-            char *dpAddr = JSON_GetText(condition, "dpAddr");
+            char* dpAddr = JSON_GetText(condition, "dpAddr");
             int dpValue   = JSON_GetNumber(condition, "dpValue");
-            if (isMatchString(pid, HG_BLE_SENSOR_MOTION)) {
-                GW_SetSceneCondition(dpAddr, sceneId, 1, dpValue);
-                // Add this device to response list to check TIMEOUT later
-                addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
-            } else {
-                GW_SetSceneCondition(dpAddr, sceneId, 1, dpValue);
-                // Add this device to response list to check TIMEOUT later
-                addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
-            }
+            GW_SetSceneCondition(dpAddr, sceneId, 1, dpValue);
+            // Add this device to response list to check TIMEOUT later
+            addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
         }
     }
     return true;
@@ -1064,7 +1182,7 @@ bool deleteSceneCondition(const char* sceneId, JSON* condition) {
         } else {
             char* dpAddr = JSON_GetText(condition, "dpAddr");
             int dpValue  = JSON_GetNumber(condition, "dpValue");
-            GW_SetSceneCondition(dpAddr, "0000", 0, dpValue);
+            GW_SetSceneCondition(dpAddr, sceneId, 0, dpValue);
         }
     }
     return true;

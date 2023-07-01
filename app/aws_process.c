@@ -100,6 +100,14 @@ void Aws_SyncDatabase() {
         int devicePages = JSON_HasKey(accountInfo, "pageIndex0")? JSON_GetNumber(accountInfo, "pageIndex0") : 1;
         int groupPages = JSON_HasKey(accountInfo, "pageIndex3")? JSON_GetNumber(accountInfo, "pageIndex3") : 1;
         int scenePages = JSON_HasKey(accountInfo, "pageIndex2")? JSON_GetNumber(accountInfo, "pageIndex2") : 1;
+        // Sync gateways
+        JSON* gatewayInfo = JSON_GetObject(accountInfo, "gateWay");
+        JSON_ForEach(gw, gatewayInfo) {
+            if (cJSON_IsObject(gw)) {
+                JSON_SetNumber(gw, "needToConfig", 0);
+                sendPacketTo(SERVICE_CORE, TYPE_ADD_GW, gw);
+            }
+        }
         JSON_Delete(accountInfo);
         // Sync devices from aws
         JSON* syncingDevices = JSON_CreateArray();
@@ -112,25 +120,10 @@ void Aws_SyncDatabase() {
                 int pageIndex = JSON_HasKey(devices, "pageIndex")? JSON_GetNumber(devices, "pageIndex") : 1;
                 JSON_ForEach(d, devices) {
                     if (cJSON_IsObject(d)) {
-                        list_t* tmp = String_Split(JSON_GetText(d, "devices"), "|");
-                        if (tmp->count >= 5) {
-                            JSON* device = JArr_CreateObject(syncingDevices);
-                            JSON_SetText(device, "deviceId", d->string);
-                            JSON_SetText(device, KEY_NAME, JSON_GetText(d, "name"));
-                            JSON_SetObject(device, "dictMeta", JSON_Clone(JSON_GetObject(d, "dictMeta")));
-                            char* gatewayAddr = JSON_HasKey(d, "gateWay")? JSON_GetText(d, "gateWay"): "_";
-                            JSON_SetText(device, "gateWay", gatewayAddr);
-                            JSON_SetText(device, KEY_UNICAST, tmp->items[3]);
-                            JSON_SetText(device, "deviceAddr", tmp->items[3]);
-                            JSON_SetText(device, KEY_DEVICE_KEY, tmp->items[4]);
-                            JSON_SetNumber(device, KEY_PROVIDER, atoi(tmp->items[0]));
-                            JSON_SetText(device, KEY_PID, tmp->items[1]);
-                            JSON_SetText(device, "devicePid", tmp->items[1]);
-                            JSON_SetNumber(device, "pageIndex", pageIndex);
-                        } else {
-                            printInfo("[Error] Parsing Device Error: %s\n", d->string);
-                        }
-                        List_Delete(tmp);
+                        JSON* device = JSON_Clone(d);
+                        JSON_SetText(device, "deviceId", d->string);
+                        JSON_SetNumber(device, "pageIndex", pageIndex);
+                        JArr_AddObject(syncingDevices, device);
                     }
                 }
             }

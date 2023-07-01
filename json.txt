@@ -1,0 +1,59 @@
+# Config gateway:
+{
+    "type": 100,
+    "wifi_info": {
+        "ssid": "Homegy",
+        "pass": "Homegysmart"
+    },
+    "home_info": {
+        "home_id": "158291761",
+        "account_id": "158291761"
+    },
+    "gateWay": {
+        "state": 0,
+        "isMaster": false,
+        "deviceKey1": "BB26A6FACD576C377476EBBD66D3D7A2",
+        "ivIndex": "00000000",
+        "netkey": "31353832393137363188888888889996",
+        "appkeyIndex": "0000",
+        "appkey": "31353832393137363188888888887777",
+        "deviceKey2": "BB26A6FACD576C377476EBBD66D3D7A1",
+        "gateway1": "0C00",
+        "gateway2": "0D00",
+        "netkeyIndex": "0000",
+        "ipLocal": "192.168.110.123",
+        "nameWifi": "Homegy",
+        "name": "Slave T2"
+    }
+}
+
+# Add device
+{
+    "state": {
+        "reported": {
+            "pageIndex": 1,
+            "senderid": "192723F2-9D6A-A666-F7A4-D8CC718DC31B",
+            "type": 2,
+            "sender": 1,
+            "provider": 2,
+            "A4C138B6BF6B": {
+                "state": 2,
+                "devices": "2|BLEHGAA0103|A4C138B6BF6B|6E01|143E9C00008A02490E9C544CDB8C1163|NA",
+                "led": 1,
+                "version": "0601",
+                "dictName": {
+                    "1": "Hạt 1",
+                    "2": "Hạt 2",
+                    "3": "Hạt 3"
+                },
+                "dictDPs": {
+                    "1": false,
+                    "2": false,
+                    "3": false
+                },
+                "gateWay": "0B00",
+                "name": "Mặt công tắc 3"
+            }
+        }
+    }
+}

@@ -4,13 +4,28 @@
 #include "time_t.h"
 #include "helper.h"
 #include "database.h"
-
+#include "common.h"
 
 JSON *g_checkRespList;
 
 
 void CoreInit() {
     g_checkRespList   = JSON_CreateArray();
+}
+
+void sendPacketToBle(int gwIndex, int reqType, JSON* packet) {
+    ASSERT(gwIndex >= 0);
+    ASSERT(packet);
+    char topic[200];
+    // find address of the HC
+    int firstGwIndex = gwIndex % 2 > 0? gwIndex - 1 : gwIndex;
+    char* gwAddr = Db_FindGatewayAddr(firstGwIndex);
+    if (gwAddr) {
+        sprintf(topic, "%s_%s", MOSQ_TOPIC_DEVICE_BLE, gwAddr);
+        sendPacketTo(topic, reqType, packet);
+    } else {
+        logError("Cannot found gateway at index %d", gwIndex);
+    }
 }
 
 bool CompareDeviceById(JSON* device1, JSON* device2) {
@@ -76,7 +91,7 @@ JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAdd
     if (JArr_FindByText(devices, "addr", deviceAddr) == NULL) {
         JSON *device = JArr_CreateObject(devices);
         JSON_SetText(device, "addr", deviceAddr);
-        JSON_SetNumber(device, "status", -1);
+        JSON_SetNumber(device, "status", -2);
         return device;
     }
     return NULL;
@@ -100,6 +115,9 @@ void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceA
             JSON_SetNumber(device, "status", status);
         }
     }
+    char* str = cJSON_PrintUnformatted(g_checkRespList);
+    logInfo("[updateDeviceRespStatus] itemId=%s, deviceAddr=%s, g_checkRespList=%s", itemId, deviceAddr, str);
+    free(str);
 }
 
 int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr) {
@@ -234,7 +252,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
                 }
             }
         }
-        sendPacketTo(SERVICE_BLE, TYPE_CTR_DEVICE, p);
+        sendPacketToBle(deviceInfo.gwIndex, TYPE_CTR_DEVICE, p);
         JSON_Delete(p);
     } else {
         printf("Device %s is not found in the database\n", deviceId);
@@ -338,7 +356,7 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
             }
         }
 
-        sendPacketTo(SERVICE_BLE, TYPE_CTR_GROUP_NORMAL, p);
+        sendPacketToBle(deviceInfo.gwIndex, TYPE_CTR_GROUP_NORMAL, p);
         JSON_Delete(p);
     }
 }
@@ -349,7 +367,7 @@ void Ble_SetTTL(int gwIndex, const char* deviceAddr, uint8_t ttl) {
     JSON_SetNumber(p, "gwIndex", gwIndex);
     JSON_SetText(p, "deviceAddr", deviceAddr);
     JSON_SetNumber(p, "ttl", ttl);
-    sendPacketTo(SERVICE_BLE, TYPE_SET_DEVICE_TTL, p);
+    sendPacketToBle(gwIndex, TYPE_SET_DEVICE_TTL, p);
     JSON_Delete(p);
 }
 
