@@ -1077,17 +1077,17 @@ int main( int argc,char ** argv ) {
                     provider = JSON_GetNumber(reported, "provider");
                 }
                 switch(reqType) {
-                    case TYPE_ADD_GW: {
-                        JSON* gw = JSON_GetObject(reported, "gateWay");
-                        JSON_ForEach(o, gw) {
-                            if (cJSON_IsObject(o)) {
-                                JSON_SetText(o, "address1", JSON_GetText(o, "gateway1"));
-                                JSON_SetText(o, "address2", JSON_GetText(o, "gateway2"));
-                                sendPacketTo(SERVICE_CORE, reqType, o);
-                            }
-                        }
-                        break;
-                    }
+                    // case TYPE_ADD_GW: {
+                    //     JSON* gw = JSON_GetObject(reported, "gateWay");
+                    //     JSON_ForEach(o, gw) {
+                    //         if (cJSON_IsObject(o)) {
+                    //             JSON_SetText(o, "address1", JSON_GetText(o, "gateway1"));
+                    //             JSON_SetText(o, "address2", JSON_GetText(o, "gateway2"));
+                    //             sendPacketTo(SERVICE_CORE, reqType, o);
+                    //         }
+                    //     }
+                    //     break;
+                    // }
                     case TYPE_ADD_DEVICE:
                     case TYPE_CTR_DEVICE:
                     case TYPE_DEL_DEVICE:
@@ -1143,9 +1143,9 @@ int main( int argc,char ** argv ) {
                         }
                         break;
                     }
-                    case TYPE_ADD_GROUP_NORMAL:
-                    case TYPE_DEL_GROUP_NORMAL:
-                    case TYPE_UPDATE_GROUP_NORMAL:
+                    case TYPE_ADD_GROUP_LIGHT:
+                    case TYPE_DEL_GROUP_LIGHT:
+                    case TYPE_UPDATE_GROUP_LIGHT:
                     case TYPE_CTR_GROUP_NORMAL:
                     case TYPE_ADD_GROUP_LINK:
                     case TYPE_DEL_GROUP_LINK:

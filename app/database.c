@@ -76,16 +76,26 @@ int Db_FindGatewayId(const char* gatewayAddr) {
     return id;
 }
 
-char* Db_FindGatewayAddr(int gwIndex) {
+char* Db_FindHcAddr(int gwIndex) {
     ASSERT(gwIndex >= 0);
-    char* gwAddr = NULL;
+    char* hcAddr = NULL;
     char sqlCmd[300];
-    sprintf(sqlCmd, "SELECT address FROM gateway WHERE id = '%d'", gwIndex);
+    sprintf(sqlCmd, "SELECT hcAddr FROM gateway WHERE id = '%d'", gwIndex);
     Sql_Query(sqlCmd, row) {
-        gwAddr = malloc(10);
-        StringCopy(gwAddr, sqlite3_column_text(row, 0));
+        hcAddr = malloc(10);
+        StringCopy(hcAddr, sqlite3_column_text(row, 0));
     }
-    return gwAddr;
+    return hcAddr;
+}
+
+List* Db_FindAllHcAddr() {
+    List* resultList = List_Create();
+    char sqlCmd[200];
+    sprintf(sqlCmd, "SELECT DISTINCT hcAddr FROM gateway");
+    Sql_Query(sqlCmd, row) {
+        List_PushString(resultList, sqlite3_column_text(row, 0));
+    }
+    return resultList;
 }
 
 int Db_AddDevice(JSON* deviceInfo) {
@@ -141,40 +151,42 @@ JSON* Db_GetAllDevices() {
 
 int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand) {
     ASSERT(deviceInfo); ASSERT(sqlCommand);
-    int rc = 0, rowCount = 0;
-    sqlite3_stmt *sqlResponse;
-    rc = sqlite3_prepare_v2(db, sqlCommand, -1, &sqlResponse, NULL);
-    if (rc == SQLITE_OK)
-    {
-        while (sqlite3_step(sqlResponse) == SQLITE_ROW)
-        {
-            deviceInfo->state = sqlite3_column_int(sqlResponse, 1);
-            deviceInfo->provider = sqlite3_column_int(sqlResponse, 7);
-            StringCopy(deviceInfo->id, sqlite3_column_text(sqlResponse, 0));
-            StringCopy(deviceInfo->name, sqlite3_column_text(sqlResponse, 2));
-            StringCopy(deviceInfo->addr, sqlite3_column_text(sqlResponse, 4));
-            deviceInfo->gwIndex = sqlite3_column_int(sqlResponse, 5);
-            StringCopy(deviceInfo->pid, sqlite3_column_text(sqlResponse, 8));
-            deviceInfo->pageIndex = sqlite3_column_int(sqlResponse, 15);
-            deviceInfo->offlineCount = sqlite3_column_int(sqlResponse, 16);
-            rowCount = 1;
+    int rowCount = 0;
+    Sql_Query(sqlCommand, row) {
+        deviceInfo->state = sqlite3_column_int(row, 1);
+        deviceInfo->provider = sqlite3_column_int(row, 7);
+        StringCopy(deviceInfo->id, sqlite3_column_text(row, 0));
+        StringCopy(deviceInfo->name, sqlite3_column_text(row, 2));
+        StringCopy(deviceInfo->addr, sqlite3_column_text(row, 4));
+        deviceInfo->gwIndex = sqlite3_column_int(row, 5);
+        StringCopy(deviceInfo->pid, sqlite3_column_text(row, 8));
+        deviceInfo->pageIndex = sqlite3_column_int(row, 15);
+        deviceInfo->offlineCount = sqlite3_column_int(row, 16);
+        rowCount = 1;
+    }
+    if (rowCount == 1) {
+        char sql[200];
+        sprintf(sql, "SELECT hcAddr FROM gateway WHERE id=%d", deviceInfo->gwIndex);
+        Sql_Query(sql, r) {
+            StringCopy(deviceInfo->hcAddr, sqlite3_column_text(r, 0));
         }
     }
-    sqlite3_finalize(sqlResponse);
     return rowCount;
 }
 
 int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId) {
     ASSERT(deviceInfo); ASSERT(deviceId);
-    char sqlCommand[100];
+    char sqlCommand[200];
     sprintf(sqlCommand, "SELECT * FROM devices_inf WHERE deviceID = '%s';", deviceId);
     return Db_FindDeviceBySql(deviceInfo, sqlCommand);
 }
 
-int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr) {
-    ASSERT(deviceInfo); ASSERT(deviceAddr);
-    char sqlCommand[100];
-    sprintf(sqlCommand, "SELECT * FROM devices_inf WHERE Unicast = '%s';", deviceAddr);
+int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr, const* hcAddr) {
+    ASSERT(deviceInfo);
+    ASSERT(deviceAddr);
+    ASSERT(hcAddr);
+    char sqlCommand[200];
+    sprintf(sqlCommand, "SELECT * FROM devices_inf d JOIN gateway g ON g.id = d.gwIndex WHERE Unicast = '%s' AND g.hcAddr = '%s';", deviceAddr, hcAddr);
     return Db_FindDeviceBySql(deviceInfo, sqlCommand);
 }
 
@@ -249,6 +261,7 @@ JSON* Db_FindDevicesInGroup(const char* groupAddr) {
             if (foundDevices == 1) {
                 JSON_SetText(d, "deviceAddr", deviceInfo.addr);
                 JSON_SetNumber(d, "gwIndex", deviceInfo.gwIndex);
+                JSON_SetText(d, "hcAddr", deviceInfo.hcAddr);
                 JSON_SetNumber(d, "pageIndex", deviceInfo.pageIndex);
             }
             if (JSON_HasKey(d, "dpId")) {
@@ -346,7 +359,6 @@ int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr, const* hcAddr) {
     int rowCount = 0;
     char sqlCommand[300];
     sprintf(sqlCommand, "SELECT dp.deviceId, dp.dpId, dp.address, dp.dpValue, dp.pageIndex FROM devices dp JOIN devices_inf d ON dp.deviceId = d.deviceId JOIN gateway g ON g.id=d.gwIndex WHERE dp.address='%s' AND g.hcAddr='%s' ORDER BY dpId LIMIT 1;", dpAddr, hcAddr);
-    printf("sqlCommand: %s\n", sqlCommand);
     Sql_Query(sqlCommand, row) {
         dpInfo->id = atoi(sqlite3_column_text(row, 1));
         char* value = sqlite3_column_text(row, 3);
@@ -426,7 +438,7 @@ int Db_LoadSceneToRam() {
             g_sceneList[g_sceneCount].effectRepeat = strtol(loops, NULL, 2);
             char* start = JSON_GetText(pre, "start");
             char* end = JSON_GetText(pre, "end");
-            list_t* timeItems = String_Split(start, ":");
+            List* timeItems = String_Split(start, ":");
             if (timeItems->count == 2) {
                 g_sceneList[g_sceneCount].effectFrom = atoi(timeItems->items[0]) * 60 + atoi(timeItems->items[1]);
             }
@@ -476,7 +488,7 @@ int Db_LoadSceneToRam() {
                     } else if (cJSON_IsString(o)) {
                         if (action->dpIds[action->dpCount] == 21) {
                             if (StringContains(o->valuestring, "scene_")) {
-                                list_t* tmp = String_Split(o->valuestring, "_");
+                                List* tmp = String_Split(o->valuestring, "_");
                                 if (tmp->count == 2) {
                                     uint8_t value = atoi(tmp->items[1]);
                                     action->dpValues[action->dpCount] = value;
@@ -520,7 +532,7 @@ int Db_LoadSceneToRam() {
                 cond->conditionType = EntitySchedule;
                 cond->repeat = strtol(JSON_GetText(exprArray, "loops"), NULL, 2);
                 char* time = JSON_GetText(exprArray, "time");
-                list_t* timeItems = String_Split(time, ":");
+                List* timeItems = String_Split(time, ":");
                 if (timeItems->count == 2) {
                     int hour = atoi(timeItems->items[0]);
                     int minute = atoi(timeItems->items[1]);

@@ -15,6 +15,7 @@
 #include "sqlite3.h"
 #include "core_process_t.h"
 #include "cJSON.h"
+#include "helper.h"
 
 typedef enum {
     GroupSwitch = 0,     // Nhóm công tắc (liên động mềm)
@@ -45,6 +46,7 @@ typedef struct {
     char pid[20];
     int  pageIndex;
     int offlineCount;
+    char hcAddr[10];
 } DeviceInfo;
 
 typedef enum {
@@ -128,13 +130,14 @@ extern int g_sceneCount;
 
 int Db_AddGateway(JSON* gatewayInfo);
 int Db_FindGatewayId(const char* gatewayAddr);
-char* Db_FindGatewayAddr(int gwIndex);
+char* Db_FindHcAddr(int gwIndex);
+List* Db_FindAllHcAddr();
 
 int Db_AddDevice(JSON* deviceInfo);
 JSON* Db_GetAllDevices();
 int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand);
 int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId);
-int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr);
+int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr, const* hcAddr);
 int Db_SaveDeviceState(const char* deviceId, int state);
 int Db_SaveOfflineCountForDevice(const char* deviceId, int offlineCount);
 int Db_DeleteDevice(const char* deviceId);

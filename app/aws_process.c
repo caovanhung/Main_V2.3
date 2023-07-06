@@ -100,6 +100,7 @@ void Aws_SyncDatabase() {
         int devicePages = JSON_HasKey(accountInfo, "pageIndex0")? JSON_GetNumber(accountInfo, "pageIndex0") : 1;
         int groupPages = JSON_HasKey(accountInfo, "pageIndex3")? JSON_GetNumber(accountInfo, "pageIndex3") : 1;
         int scenePages = JSON_HasKey(accountInfo, "pageIndex2")? JSON_GetNumber(accountInfo, "pageIndex2") : 1;
+        sendPacketTo(SERVICE_CORE, TYPE_RESET_DATABASE, accountInfo);
         // Sync gateways
         JSON* gatewayInfo = JSON_GetObject(accountInfo, "gateWay");
         JSON_ForEach(gw, gatewayInfo) {

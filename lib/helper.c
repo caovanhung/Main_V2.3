@@ -114,13 +114,13 @@ bool StringContains(const char* mainString, const char* subString) {
 }
 
 
-list_t* List_Create() {
-    list_t* l = malloc(sizeof(list_t));
+List* List_Create() {
+    List* l = malloc(sizeof(List));
     l->count = 0;
     return l;
 }
 
-void List_Delete(list_t* l) {
+void List_Delete(List* l) {
     if (l) {
         for (int i = 0; i < l->count; i++) {
             if (l->items[i]) {
@@ -131,21 +131,21 @@ void List_Delete(list_t* l) {
     }
 }
 
-int List_PushString(list_t* l, const char* item) {
+int List_PushString(List* l, const char* item) {
     char* newItem = malloc(strlen(item) + 1);
     StringCopy(newItem, item);
     l->items[l->count++] = newItem;
     return (l->count - 1);
 }
 
-int List_Push(list_t* l, const void* item, size_t size) {
+int List_Push(List* l, const void* item, size_t size) {
     char* newItem = malloc(size);
     memcpy(newItem, item, size);
     l->items[l->count++] = newItem;
     return (l->count - 1);
 }
 
-void List_ToString(list_t* l, const char* separator, char* resultStr) {
+void List_ToString(List* l, const char* separator, char* resultStr) {
     resultStr[0] = 0;
     for (size_t i = 0; i < l->count; i++) {
         strcat(resultStr, l->items[i]);
@@ -155,8 +155,8 @@ void List_ToString(list_t* l, const char* separator, char* resultStr) {
     }
 }
 
-list_t* String_Split(const char* str, const char* delim) {
-    list_t* resultList = List_Create();
+List* String_Split(const char* str, const char* delim) {
+    List* resultList = List_Create();
     if (str && delim) {
         // Copy to temp string before split because strtok will modify the original string
         char* tmpString = malloc(strlen(str) + 1);

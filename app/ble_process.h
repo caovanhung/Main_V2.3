@@ -75,7 +75,8 @@ typedef struct
 
 void addRespTypeToSendingFrame(int reqType, const char* itemId);
 void addPriorityToSendingFrame(int priority);
-void BLE_SetDeviceResp(int respType, uint16_t deviceAddr, int status);
+void addTimeoutToSendingFrame(uint16_t timeout);
+void BLE_SetDeviceResp(int respType, uint16_t deviceAddr, int status, bool printLog);
 void BLE_SendUartFrameLoop();
 
 // Send request to get the device ON/OFF state
@@ -117,6 +118,8 @@ bool GW_DeleteDevice(const char* deviceAddr);
 bool GW_CtrlGroupLightOnOff(const char *groupAddr, uint8_t onoff);
 bool GW_CtrlGroupLightCT(const char *dpAddr, int lightness, int colorTemperature);
 bool GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl);
+bool GW_GetScenes(const char *deviceAddr);
+bool GW_GetGroups(const char *deviceAddr);
 
 /*
  * Control IR
@@ -128,7 +131,5 @@ bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t co
 bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex);
 bool GW_AddSceneConditionIR(const char* deviceAddr, const char* sceneId, uint16_t voiceCode);
 bool GW_DeleteSceneConditionIR(const char* deviceAddr, const char* sceneId);
-bool GW_GetScenes(const char *deviceAddr);
-
 
 #endif

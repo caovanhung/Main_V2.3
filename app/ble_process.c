@@ -10,6 +10,7 @@
 #define UART_DEVICE_RESP_SIZE       100
 
 extern struct mosquitto * mosq;
+extern char g_hcAddr[10];
 
 typedef struct {
     uint8_t  priority;
@@ -37,8 +38,10 @@ int g_uartSendingFramesIdx = 0;
 int g_uartSendingIdx = 0;
 extern bool g_printLog;
 
-void BLE_SetDeviceResp(int respType, uint16_t deviceAddr, int status) {
-    logInfo("[BLE_SetDeviceResp] respType=%d, deviceAddr=%04X, status=%d", respType, deviceAddr, status);
+void BLE_SetDeviceResp(int respType, uint16_t deviceAddr, int status, bool printLog) {
+    if (printLog) {
+        logInfo("[BLE_SetDeviceResp] respType=%d, deviceAddr=%04X, status=%d", respType, deviceAddr, status);
+    }
     for (int i = 0; i < UART_DEVICE_RESP_SIZE; i++) {
         if ((g_uartDeviceResps[i].respType == 0xff || g_uartDeviceResps[i].respType == respType)
             && g_uartDeviceResps[i].deviceAddr == deviceAddr) {
@@ -68,7 +71,7 @@ void addTimeoutToSendingFrame(uint16_t timeout) {
     g_uartSendingFrames[g_uartSendingFramesIdx].timeout = timeout + (rand() % 50);
 }
 
-bool sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
+UartSendingFrame* sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
     ASSERT(data);
     gwIndex = gwIndex % 2;
     for (int i = 0; i < UART_SENDING_FRAME_SIZE; i++) {
@@ -82,13 +85,13 @@ bool sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
             g_uartSendingFrames[i].retryCount = 1;
             g_uartSendingFrames[i].timeout = 250 + rand() % 50;
             g_uartSendingFramesIdx = i;
-            return true;
+            return &g_uartSendingFrames[i];
         }
     }
-    return false;
+    return NULL;
 }
 
-bool sendFrameToAnyGw(uint16_t addr, uint8_t* data, size_t len) {
+UartSendingFrame* sendFrameToAnyGw(uint16_t addr, uint8_t* data, size_t len) {
     ASSERT(data);
     return sendFrameToGwIndex(-1, addr, data, len);
 }
@@ -129,6 +132,7 @@ void BLE_SendToGateway(int gwIndex) {
                 sentFrame[gwIndex].respType = frame->respType;
                 sentFrame[gwIndex].addr = frame->addr;
                 sentFrame[gwIndex].dataLength = frame->dataLength;
+                sentFrame[gwIndex].priority = frame->priority;
                 StringCopy(sentFrame[gwIndex].itemId, frame->itemId);
                 memcpy(sentFrame[gwIndex].data, frame->data, frame->dataLength);
                 frame->respType = 0;
@@ -142,9 +146,6 @@ void BLE_SendToGateway(int gwIndex) {
         case 1: {
             // Send frame to gateway
             g_uartSendingIdx = gwIndex == 0? 3 : 2;
-            if (sentFrame[gwIndex].priority == 2) {
-                g_printLog = false;     // Disable printing log for getting onoff state actively because these frames are sent every minute so much more log will be printed in a day
-            }
             UART_Send(g_gatewayFds[gwIndex], sentFrame[gwIndex].data, sentFrame[gwIndex].dataLength);
             state[gwIndex] = 2;
 
@@ -167,9 +168,7 @@ void BLE_SendToGateway(int gwIndex) {
             if (g_uartDeviceResps[respIdx[gwIndex]].respType > 0 && g_uartDeviceResps[respIdx[gwIndex]].status == 0) {
                 g_uartDeviceResps[respIdx[gwIndex]].respType = 0;
                 g_uartDeviceResps[respIdx[gwIndex]].deviceAddr = 0;
-                if (sentFrame[gwIndex].priority == 2) {
-                    g_printLog = true;
-                } else {
+                if (sentFrame[gwIndex].priority != 2) {
                     logInfo("Sending to 0x%04X took %d ms", sentFrame[gwIndex].addr, currentTime - sentTime[gwIndex]);
                 }
                 sentFrame[gwIndex].respType = 0;
@@ -204,6 +203,7 @@ void BLE_SendToGateway(int gwIndex) {
                         JSON_SetNumber(p, "status", -1);
                         sendPacketTo(SERVICE_CORE, sentFrame[gwIndex].respType, p);
                     } else if (sentFrame[gwIndex].respType == GW_RESP_ONOFF_STATE) {
+                        JSON_SetText(p, "hcAddr", g_hcAddr);
                         JSON* devicesArray = JSON_AddArray(p, "devices");
                         JSON* arrayItem = JArr_CreateObject(devicesArray);
                         char str[50];
@@ -213,9 +213,6 @@ void BLE_SendToGateway(int gwIndex) {
                         sendPacketTo(SERVICE_CORE, GW_RESP_ONLINE_STATE, p);
                     }
                     JSON_Delete(p);
-                    if (sentFrame[gwIndex].priority == 2) {
-                        g_printLog = true;
-                    }
                     sendingIsBusy = false;
                     state[gwIndex] = 0;      // Goto step 0 to process next frame
                 }
@@ -281,7 +278,9 @@ bool GW_GetDeviceOnOffState(const char* dpAddr) {
         int sentLength = 0, i = 0;
         data[9] = dpAddrHex & (0xFF);
         data[8] = (dpAddrHex >> 8) & 0xFF;
-        sendFrameToAnyGw(dpAddrHex, data, 13);
+        UartSendingFrame* frame = sendFrameToAnyGw(dpAddrHex, data, 13);
+        frame->timeout = 500;
+        frame->priority = 2;
     }
     return true;
 }
@@ -889,7 +888,7 @@ bool GW_DeleteGroup(int gwIndex, const char *groupAddr, const char *deviceAddr, 
 /************ Commands to controll light *******************/
 bool GW_CtrlLightOnOff(const char *deviceAddr, uint8_t onoff) {
     ASSERT(deviceAddr);
-    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00, 0x02, 0x00,  0xff,0xff,  0x82,0x02, 0x00};
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00, 0x00, 0x00,  0xff,0xff,  0x82,0x02, 0x00};
     long int dpAddrHex = strtol(deviceAddr, NULL, 16);
     data[8] = (uint8_t)(dpAddrHex >> 8);
     data[9] = (uint8_t)(dpAddrHex);
@@ -1083,6 +1082,9 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         }
         return GW_RESP_ONOFF_STATE;
     } else if ((frame->opcode == 0x824e || frame->opcode == 0x8266) && frame->paramSize >= 4) {
+        // Response of lightness and temperature of light
+        return GW_RESPONSE_LIGHT_RD_CONTROL;
+    } else if (frame->opcode == 0x8260 && frame->paramSize >= 8) {
         // Response of lightness and temperature of light
         return GW_RESPONSE_LIGHT_RD_CONTROL;
     } else if(frame->opcode == 0x5208 && frame->paramSize >= 3 && frame->param[0] == 0x01) {

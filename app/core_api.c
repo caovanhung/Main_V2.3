@@ -14,17 +14,25 @@ void CoreInit() {
 }
 
 void sendPacketToBle(int gwIndex, int reqType, JSON* packet) {
-    ASSERT(gwIndex >= 0);
     ASSERT(packet);
     char topic[200];
-    // find address of the HC
-    int firstGwIndex = gwIndex % 2 > 0? gwIndex - 1 : gwIndex;
-    char* gwAddr = Db_FindGatewayAddr(firstGwIndex);
-    if (gwAddr) {
-        sprintf(topic, "%s_%s", MOSQ_TOPIC_DEVICE_BLE, gwAddr);
-        sendPacketTo(topic, reqType, packet);
+    if (gwIndex >= 0) {
+        // find address of the HC
+        char* hcAddr = Db_FindHcAddr(gwIndex);
+        if (hcAddr) {
+            sprintf(topic, "%s_%s", MOSQ_TOPIC_DEVICE_BLE, hcAddr);
+            sendPacketTo(topic, reqType, packet);
+            free(hcAddr);
+        } else {
+            logError("Cannot found gateway at index %d", gwIndex);
+        }
     } else {
-        logError("Cannot found gateway at index %d", gwIndex);
+        // Send to all HC if gwIndex < 0
+        List* hcList = Db_FindAllHcAddr();
+        for (int i = 0; i < hcList->count; i++) {
+            sprintf(topic, "%s_%s", MOSQ_TOPIC_DEVICE_BLE, hcList->items[i]);
+            sendPacketTo(topic, reqType, packet);
+        }
     }
 }
 
@@ -42,7 +50,7 @@ bool CompareDeviceById(JSON* device1, JSON* device2) {
 JSON* parseGroupLinkDevices(const char* devices) {
     JSON* devicesArray = cJSON_CreateArray();
     if (devices) {
-        list_t* splitList = String_Split(devices, "|");
+        List* splitList = String_Split(devices, "|");
         if (splitList->count % 2 == 0) {
             JSON* arrayItem;
             for (int i = 0; i < splitList->count; i++) {
@@ -106,7 +114,8 @@ JSON* requestIsInRespList(int reqType, const char* itemId) {
 }
 
 void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr, int status) {
-    ASSERT(itemId); ASSERT(deviceAddr);
+    ASSERT(itemId);
+    ASSERT(deviceAddr);
     JSON* item = requestIsInRespList(reqType, itemId);
     if (item) {
         JSON* devices = JSON_GetObject(item, "devices");
@@ -182,6 +191,8 @@ void Ble_ControlDeviceArray(const char* deviceId, uint8_t* dpIds, double* dpValu
     ASSERT(deviceId);
     ASSERT(dpIds);
     ASSERT(dpValues);
+    ASSERT(dpCount > 0);
+    printInfo("[Ble_ControlDeviceArray] deviceId=%s, dpIds[0]=%d, dpValues[0]=%f", deviceId, dpIds[0], dpValues[0]);
     JSON* dictDPs = JSON_CreateObject();
     for (int i = 0; i < dpCount; i++) {
         char str[10];
@@ -195,6 +206,7 @@ void Ble_ControlDeviceArray(const char* deviceId, uint8_t* dpIds, double* dpValu
 void Ble_ControlDeviceStringDp(const char* deviceId, uint8_t dpId, char* dpValue, const char* causeId) {
     ASSERT(deviceId);
     ASSERT(dpValue);
+    printInfo("[Ble_ControlDeviceStringDp] deviceId=%s, dpId=%d, dpValue=%s", deviceId, dpId, dpValue);
     JSON* dictDPs = JSON_CreateObject();
     char str[10];
     sprintf(str, "%d", dpId);
@@ -218,7 +230,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
         JSON_ForEach(o, dictDPs) {
             int dpId = atoi(o->string);
             if (cJSON_IsString(o) && StringContains(o->valuestring, "scene_")) {
-                list_t* tmp = String_Split(o->valuestring, "_");
+                List* tmp = String_Split(o->valuestring, "_");
                 if (tmp->count == 2) {
                     uint8_t value = atoi(tmp->items[1]);
                     o->valueint = value;
@@ -321,7 +333,7 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
         JSON_ForEach(o, dictDPs) {
             int dpId = atoi(o->string);
             if (cJSON_IsString(o) && StringContains(o->valuestring, "scene_")) {
-                list_t* tmp = String_Split(o->valuestring, "_");
+                List* tmp = String_Split(o->valuestring, "_");
                 if (tmp->count == 2) {
                     uint8_t value = atoi(tmp->items[1]);
                     o->valueint = value;
@@ -356,7 +368,7 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
             }
         }
 
-        sendPacketToBle(deviceInfo.gwIndex, TYPE_CTR_GROUP_NORMAL, p);
+        sendPacketToBle(-1, TYPE_CTR_GROUP_NORMAL, p);
         JSON_Delete(p);
     }
 }

@@ -116,7 +116,7 @@ bool sendToServicePageIndexFunc(struct mosquitto* mosq, const char* serviceToSen
 void Aws_UpdateGroupState(const char* groupAddr, int state)
 {
     char payload[200];
-    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":%d}}}}", TYPE_UPDATE_GROUP_NORMAL, SENDER_HC_TO_CLOUD, groupAddr, KEY_STATE, state);
+    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"%s\":%d}}}}", TYPE_UPDATE_GROUP_LIGHT, SENDER_HC_TO_CLOUD, groupAddr, KEY_STATE, state);
     sendToService(SERVICE_AWS, GW_RESPONSE_ADD_GROUP_NORMAL, payload);
 }
 
@@ -129,7 +129,7 @@ void Aws_UpdateGroupDevices(JSON* groupInfo) {
         if (devices) {
             char* str = cJSON_PrintUnformatted(devices);
             char* payload = malloc(StringLength(str) + 200);
-            sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\": 2, \"devices\":%s}}}}", TYPE_UPDATE_GROUP_NORMAL, SENDER_HC_TO_CLOUD, groupAddr, str);
+            sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\": 2, \"devices\":%s}}}}", TYPE_UPDATE_GROUP_LIGHT, SENDER_HC_TO_CLOUD, groupAddr, str);
             sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
             free(str);
             free(payload);

@@ -6,8 +6,8 @@ all : HG_AWS HG_CORE HG_BLE HG_WIFI HG_CFG
 HG_AWS:    app/main_aws.o lib/core_mqtt_state.o lib/openssl_posix.o lib/sockets_posix.o lib/backoff_algorithm.o lib/clock_posix.o lib/core_mqtt.o lib/core_mqtt_serializer.o lib/parson.o lib/queue.o app/aws_process.o lib/core_process_t.o app/aws_mosquitto.o lib/time_t.o lib/helper.o app/messages.o lib/cJSON.o
 	$(CC) app/main_aws.o lib/core_mqtt_state.o lib/openssl_posix.o lib/sockets_posix.o lib/backoff_algorithm.o lib/clock_posix.o lib/core_mqtt.o lib/core_mqtt_serializer.o lib/parson.o lib/queue.o app/aws_process.o lib/core_process_t.o app/aws_mosquitto.o lib/time_t.o lib/helper.o app/messages.o lib/cJSON.o -lm -o HG_AWS $(CFLAGS)
 
-HG_CORE: app/main_core.o app/ble_process.o app/database.o lib/uart.o lib/sqlite3.o lib/time_t.o lib/queue.o lib/parson.o lib/core_process_t.o app/aws_mosquitto.o lib/helper.o app/messages.o lib/cJSON.o app/core_api.o
-	$(CC)   app/main_core.o app/ble_process.o app/database.o lib/uart.o lib/sqlite3.o lib/time_t.o lib/queue.o lib/parson.o  lib/core_process_t.o app/aws_mosquitto.o lib/helper.o app/messages.o lib/cJSON.o app/core_api.o -lm -o HG_CORE $(CFLAGS)
+HG_CORE: app/main_core.o app/database.o lib/sqlite3.o lib/time_t.o lib/queue.o lib/parson.o lib/core_process_t.o app/aws_mosquitto.o lib/helper.o app/messages.o lib/cJSON.o app/core_api.o
+	$(CC)   app/main_core.o app/database.o lib/sqlite3.o lib/time_t.o lib/queue.o lib/parson.o  lib/core_process_t.o app/aws_mosquitto.o lib/helper.o app/messages.o lib/cJSON.o app/core_api.o -lm -o HG_CORE $(CFLAGS)
 
 HG_BLE: app/main_ble.o app/ble_process.o lib/queue.o app/aws_mosquitto.o lib/time_t.o lib/uart.o lib/parson.o lib/core_process_t.o lib/helper.o app/messages.o lib/cJSON.o
 	$(CC) app/main_ble.o app/ble_process.o lib/queue.o app/aws_mosquitto.o lib/time_t.o lib/uart.o lib/parson.o lib/core_process_t.o lib/helper.o app/messages.o lib/cJSON.o -lm -o HG_BLE $(CFLAGS)

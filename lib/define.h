@@ -66,10 +66,10 @@
 #define TYPE_DEL_SCENE_LC               (7U)
 #define TYPE_CTR_SCENE_LC               (8U)
 #define TYPE_UPDATE_DEVICE              (9U)
-#define TYPE_ADD_GROUP_NORMAL           (12U)
-#define TYPE_DEL_GROUP_NORMAL           (13U)
+#define TYPE_ADD_GROUP_LIGHT           (12U)
+#define TYPE_DEL_GROUP_LIGHT           (13U)
 #define TYPE_CTR_GROUP_NORMAL           (14U)
-#define TYPE_UPDATE_GROUP_NORMAL        (15U)
+#define TYPE_UPDATE_GROUP_LIGHT        (15U)
 //SWITCH
 #define TYPE_ADD_GROUP_LINK             (16U)
 #define TYPE_UPDATE_GROUP_LINK          (17U)
@@ -87,6 +87,7 @@
 #define TYPE_GET_SCENES_OF_DEVICE       (33U)
 #define TYPE_GET_GROUPS_OF_DEVICE       (34U)
 
+#define TYPE_RESET_DATABASE             (44U)
 #define TYPE_GET_NUM_OF_PAGE            (45U)
 #define TYPE_SYNC_DB_DEVICES            (46U)
 #define TYPE_SYNC_DB_SCENES             (47U)
@@ -321,7 +322,7 @@
 #define BLE_LIGHT               "uyaenrl6qdapsclz,qil8rhfmzguzxchz,zfbj19qm,szfpeatw,ijsj2evj,BLEHGAA0201,BLEHG01020D,BLEHG01020B,BLEHG01020A,BLEHG010201,BLEHG010202,BLEHG010204,BLEHG010205,BLEHG010206,BLEHG010207,lqezswimvgrha0fm,WVy6k8Lc6g0sHYC5,bcuobg1jjmtxmesx,uuA2N4dyCeYlcvqA,bIovIDMEC0SdkqZD,BLEHGAA0202,BLEHG010401,BLEHG010402"
 
 
-#define CAM_HANET            "BLEHGCH0101"
+#define CAM_HANET               "BLEHGCH0101"
 #define TUYA_DEVICE             "WIFI"
 #define HG_BLE_CURTAIN_NORMAL   "BLEHGAA0105"
 #define HG_BLE_ROLLING_DOOR     "BLEHGAA0106"
