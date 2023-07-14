@@ -102,12 +102,13 @@ bool addNewDevice(JSON* packet) {
         // Calculate addresses of dps for Homegy switch
         char dpAddrStr[5];
         StringCopy(dpAddrStr, deviceAddr);
+        uint8_t dpAddrMsb = strtol(&dpAddrStr[2], NULL, 16);
         dpAddrStr[2] = 0;
         uint16_t dpAddrLsb = strtol(dpAddrStr, NULL, 16);
 
         JSON_ForEach(dp, dictDPs) {
             int dpId = atoi(dp->string);
-            sprintf(dpAddrStr, "%02X01", dpAddrLsb + dpId - 1);
+            sprintf(dpAddrStr, "%02X%02d", dpAddrLsb + dpId - 1, dpAddrMsb);
             if (addressIncrement) {
                 Db_AddDp(deviceId, dpId, dpAddrStr, pageIndex);
             } else {
@@ -363,9 +364,7 @@ void ResponseWaiting() {
                             }
                         }
                     }
-                    if (JArr_Count(updatedActions) > 0) {
-                        JSON_SetObject(g_sceneTobeUpdated, "actions", updatedActions);
-                    }
+                    JSON_SetObject(g_sceneTobeUpdated, "actions", updatedActions);
 
                     JSON* newConditions = JSON_GetObject(g_sceneTobeUpdated, "conditions");
                     JSON* updatedConditions = JSON_CreateArray();
@@ -408,13 +407,8 @@ void ResponseWaiting() {
                             }
                         }
                     }
-                    if (JArr_Count(updatedConditions) > 0) {
-                        JSON_SetObject(g_sceneTobeUpdated, "conditions", updatedConditions);
-                    }
-
-                    if (JArr_Count(updatedActions) > 0 || JArr_Count(updatedConditions) > 0) {
-                        Aws_UpdateSceneInfo(g_sceneTobeUpdated);
-                    }
+                    JSON_SetObject(g_sceneTobeUpdated, "conditions", updatedConditions);
+                    Aws_UpdateSceneInfo(g_sceneTobeUpdated);
                 }
                 JSON_Delete(g_sceneTobeUpdated);
             }
@@ -490,17 +484,11 @@ void sendSceneRunEventToUser(Scene* scene, int triggerConditionIndex) {
     sendNotiToUser(noti, false);
 }
 
-// Check if a scene is need to be executed or not
-void checkSceneCondition(Scene* scene) {
-    printInfo("  checkSceneCondition: %s", scene->id);
-    // Don't check condition for manual scene
-    if (scene->type == SceneTypeManual) {
-        sendSceneRunEventToUser(scene, 0);
-        markSceneToRun(scene, NULL);
-        return;
+bool checkScenePrecondition(Scene* scene) {
+    if (!scene->isEnable) {
+        printInfo("  Scene is disabled");
+        return false;
     }
-
-    // Check effective time
     bool effectTime = false;
     if (scene->effectFrom > 0 || scene->effectTo > 0) {
         time_t rawtime; struct tm *info; time( &rawtime ); info = localtime(&rawtime);
@@ -524,15 +512,25 @@ void checkSceneCondition(Scene* scene) {
     } else {
         effectTime = true;
     }
+    if (!effectTime) {
+        printInfo("  Effect time is not satisfied");
+    }
+    return effectTime;
+}
 
-    if (!scene->isEnable) {
-        printInfo("  Scene is disabled");
+// Check if a scene is need to be executed or not
+void checkSceneCondition(Scene* scene) {
+    printInfo("  checkSceneCondition: %s", scene->id);
+    // Don't check condition for manual scene
+    if (scene->type == SceneTypeManual) {
+        sendSceneRunEventToUser(scene, 0);
+        markSceneToRun(scene, NULL);
         return;
     }
 
-    if (!effectTime) {
-        printInfo("  Effect time is not satisfied");
-        return;
+    // Check effective time
+    if (checkScenePrecondition(scene) == false) {
+        return false;
     }
 
     // Only check conditions of scene if current time is effective and scene is enabled
@@ -609,7 +607,7 @@ void checkSceneCondition(Scene* scene) {
 
 
 // Check if there are scenes need to be executed if status of a device is changed
-void checkSceneForDevice(const char* deviceId, int dpId, bool syncRelatedDevices) {
+void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const char* dpValueStr, bool syncRelatedDevices) {
     printInfo("checkSceneForDevice: %s.%d", deviceId, dpId);
     // Find all scenes that this device is in conditions
     for (int i = 0; i < g_sceneCount; i++) {
@@ -621,7 +619,21 @@ void checkSceneForDevice(const char* deviceId, int dpId, bool syncRelatedDevices
                 (scene->conditions[c].dpId == dpId)) {
                 if (scene->isLocal == false) {
                     printInfo("  Found scene %s contains this element in conditions", scene->id);
-                    checkSceneCondition(scene);
+                    if ((scene->conditions[c].valueType == ValueTypeDouble && scene->conditions[c].dpValue == dpValue) ||
+                        (scene->conditions[c].valueType == ValueTypeString && StringCompare(scene->conditions[c].dpValueStr, dpValueStr))) {
+                        if (scene->type == SceneTypeOneOfConds) {
+                            if (checkScenePrecondition(scene)) {
+                                printInfo("      Satisfied. current value=%.0f, expect=%.0f", dpValue, scene->conditions[i].dpValue);
+                                sendSceneRunEventToUser(scene, c);
+                                markSceneToRun(scene, NULL);
+                                break;
+                            }
+                        } else {
+                            checkSceneCondition(scene);
+                        }
+                    } else {
+                        printInfo("  Not satisfied. current value=%.0f, expect=%.0f", dpValue, scene->conditions[c].dpValue);
+                    }
                 } else if (syncRelatedDevices && scene->isEnable) {
                     DpInfo dpInfo;
                     int foundDps = Db_FindDp(&dpInfo, scene->conditions[c].entityId, scene->conditions[c].dpId);
@@ -768,9 +780,19 @@ void ExecuteScene() {
                         time_t currentEpochTime = time(NULL);
                         if (currentEpochTime >= cond->schMinutes) {
                             cond->timeReached = 1;
-                            checkSceneCondition(scene);     // Check other conditions of this scene
+                            if (scene->type == SceneTypeOneOfConds) {
+                                if (checkScenePrecondition(scene)) {
+                                    printInfo("      Satisfied. currentEpoch=%lu, schMinutes=%d", currentEpochTime, scene->conditions[c].schMinutes);
+                                    sendSceneRunEventToUser(scene, c);
+                                    markSceneToRun(scene, NULL);
+                                }
+                            } else {
+                                checkSceneCondition(scene);     // Check other conditions of this scene
+                            }
                             scene->conditions[c].schMinutes = 3000000000;
+                            cond->timeReached = 0;
                             Db_SaveSceneCondDate(scene->id, c, "30000101");     // Increase date to maximum date to disable any executing later
+                            break;
                         }
                     } else if ((0x40 >> info->tm_wday) & cond->repeat) {
                         if (cond->timeReached == 0 && todayMinutes == cond->schMinutes) {
@@ -844,7 +866,7 @@ void GetDeviceStatusInterval() {
         oldTick = timeInMilliseconds();
         char sqlCmd[500];
         char pid[1000];
-        sprintf(pid, "%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN);
+        sprintf(pid, "%s,%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN, HG_BLE_IR);
         sprintf(sqlCmd, "SELECT unicast, g.hcAddr FROM devices_inf d JOIN gateway g ON d.gwIndex = g.id \
                         WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NULL OR %lld - d.last_updated > 50000) AND d.deviceKey IS NOT NULL", pid, oldTick);
         JSON* devicesArray = cJSON_CreateArray();
@@ -969,7 +991,7 @@ int main(int argc, char ** argv)
                                     }
                                 } else {
                                     // Check and run scenes for this device if any
-                                    checkSceneForDevice(dpInfo.deviceId, dpInfo.id, true);
+                                    checkSceneForDevice(dpInfo.deviceId, dpInfo.id, dpValue, NULL, true);
                                     if (opcode == 0) {
                                         JSON_SetNumber(payload, "causeType", EV_CAUSE_TYPE_DEVICE);
                                         Db_AddDeviceHistory(payload);
@@ -1049,7 +1071,7 @@ int main(int argc, char ** argv)
                                 JSON_SetNumber(history, "dpValue", voiceId);
                                 Db_AddDeviceHistory(history);
                                 JSON_Delete(history);
-                                checkSceneForDevice(deviceId, 1, true);
+                                checkSceneForDevice(deviceId, 1, voiceId, NULL, true);
                                 // Clear voiceId in database to prevent executing scene later
                                 Db_SaveDpValue(deviceId, 1, 0);
                             }
@@ -1077,7 +1099,7 @@ int main(int argc, char ** argv)
                             JSON_SetText(payload, "causeId", "");
                             JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);
                             Db_AddDeviceHistory(payload);
-                            checkSceneForDevice(deviceInfo.id, dpId, true);     // Check and run scenes for this device if any
+                            checkSceneForDevice(deviceInfo.id, dpId, dpValue, NULL, true);     // Check and run scenes for this device if any
                         }
 
                         break;
@@ -1380,6 +1402,18 @@ int main(int argc, char ** argv)
                                     char* sceneId = JSON_GetText(payload, "id");
                                     char* deviceAddr = JSON_GetText(action, "entityAddr");
                                     char* deviceId = JSON_GetText(action, "entityId");
+                                    JSON* addedDevice = addDeviceToRespList(reqType, sceneId, deviceAddr);
+                                    if (addedDevice) {
+                                        JSON_SetText(addedDevice, "deviceId", deviceId);
+                                    }
+                                }
+                            }
+                            JSON* conditions = JSON_GetObject(payload, "conditions");
+                            JSON_ForEach(condition, conditions) {
+                                if (JSON_HasKey(condition, "pid")) {
+                                    char* sceneId = JSON_GetText(payload, "id");
+                                    char* deviceAddr = JSON_GetText(condition, "entityAddr");
+                                    char* deviceId = JSON_GetText(condition, "entityId");
                                     JSON* addedDevice = addDeviceToRespList(reqType, sceneId, deviceAddr);
                                     if (addedDevice) {
                                         JSON_SetText(addedDevice, "deviceId", deviceId);
@@ -1811,7 +1845,7 @@ int main(int argc, char ** argv)
                             logInfo("foundDps = %d",foundDps);
                             if (foundDps == 1) {
                                 Db_SaveDpValueString(dpInfo.deviceId, dpInfo.id, person_id);
-                                checkSceneForDevice(camera_id, person_type, true);
+                                checkSceneForDevice(camera_id, person_type, 0, person_id, true);
                             }
                         } else if(person_type == 2){//camera phát hiện người la
                             person_type = 5; //synch dpID reponse of Hanet with app Homegy
@@ -1820,7 +1854,7 @@ int main(int argc, char ** argv)
                             logInfo("foundDps = %d",foundDps);
                             if (foundDps == 1) {
                                 Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, 2);
-                                checkSceneForDevice(camera_id, person_type, true);
+                                checkSceneForDevice(camera_id, person_type, 2, NULL, true);
                             }
                         }
                         break;
@@ -1877,8 +1911,15 @@ bool Scene_GetFullInfo(JSON* packet) {
                 JSON_Delete(devices);
             }
         } else if (StringCompare(actionExecutor, "irHGBLE")) {
-            Ble_AddExtraDpsToIrDevices(entityId, executorProperty);
-            JSON_SetNumber(action, "commandIndex", i++);
+            DeviceInfo deviceInfo;
+            int foundDevices = Db_FindDevice(&deviceInfo, entityId);
+            if (foundDevices == 1) {
+                JSON_SetText(action, "pid", deviceInfo.pid);
+                JSON_SetText(action, "entityAddr", deviceInfo.addr);
+                JSON_SetText(action, "hcAddr", deviceInfo.hcAddr);
+                Ble_AddExtraDpsToIrDevices(entityId, executorProperty);
+                JSON_SetNumber(action, "commandIndex", i++);
+            }
         } else {
             DeviceInfo deviceInfo;
             int foundDevices = Db_FindDevice(&deviceInfo, entityId);

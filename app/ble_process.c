@@ -1216,7 +1216,7 @@ bool GW_SetSceneCondition(const char* address_device,const char* sceneID, uint8_
 {
     ASSERT(address_device); ASSERT(sceneID);
 
-    uint8_t  CallSceneLocalToDevice[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x02, 0xff,0xff,      0xE0,0x11,0x02,0x00,0x00,     0x04,0x00,          0x00,0x00,  0x00, 0x00};
+    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x02, 0xff,0xff,      0xE0,0x11,0x02,0x00,0x00,     0x04,0x00,          0x00,0x00,  0x00, 0x00};
     long int deviceAddrHex = strtol(address_device, NULL, 16);
     uint8_t hex_address_device[5];
     uint8_t hex_sceneID[5];
@@ -1224,15 +1224,15 @@ bool GW_SetSceneCondition(const char* address_device,const char* sceneID, uint8_
     String2HexArr((char*)address_device,hex_address_device);
     String2HexArr((char*)sceneID,hex_sceneID);
 
-    CallSceneLocalToDevice[8] = hex_address_device[0];
-    CallSceneLocalToDevice[9] = hex_address_device[1];
+    data[8] = hex_address_device[0];
+    data[9] = hex_address_device[1];
 
-    CallSceneLocalToDevice[17] = hex_sceneID[0];
-    CallSceneLocalToDevice[18] = hex_sceneID[1];
-    CallSceneLocalToDevice[19] = enableOrDisable;
-    CallSceneLocalToDevice[20] = dpValue;
+    data[17] = hex_sceneID[0];
+    data[18] = hex_sceneID[1];
+    data[19] = enableOrDisable;
+    data[20] = dpValue;
 
-    sendFrameToAnyGw(deviceAddrHex, CallSceneLocalToDevice, 21);
+    sendFrameToAnyGw(deviceAddrHex, data, 21);
     addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
     return true;
 }
@@ -1420,15 +1420,13 @@ bool GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remo
     return ret;
 }
 
-bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex, uint8_t commandType, uint8_t brandId, uint8_t remoteId, uint8_t temp, uint8_t mode, uint8_t fan, uint8_t swing) {
+bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandType, uint8_t brandId, uint8_t remoteId, uint8_t temp, uint8_t mode, uint8_t fan, uint8_t swing) {
     ASSERT(deviceAddr);
     ASSERT(sceneId);
-    ASSERT(commandIndex > 0 && commandIndex < 32);
     ASSERT(commandType == 2 || commandType == 3);
     uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0xff,0xff,   0xE4,0x11,0x02,0x00,0x00,    0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
     temp -= 16;
     fan -= 1;
-    swing = swing == 0? 1 : swing;
     swing -= 1;
     swing /= 2;
     long int dpAddrHex = strtol(deviceAddr, NULL, 16);
@@ -1437,8 +1435,8 @@ bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t co
     data[9] = (uint8_t)(dpAddrHex);
     data[16] = (uint8_t)(sceneIdHex >> 8);
     data[17] = (uint8_t)(sceneIdHex);
-    data[18] = (uint8_t)(2 << 6);
-    data[18] |= (uint8_t)(commandIndex << 1);
+    data[18] = (uint8_t)(2 << 6);   // Add: 2, Delete: 1
+    data[18] |= (uint8_t)(1 << 1);  // CommandIndex is 1 as default
     data[18] |= (commandType - 2);
     data[19] = (uint8_t)(brandId);
     data[20] = (uint8_t)(brandId >> 8);
@@ -1448,24 +1446,29 @@ bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t co
     data[22] |= (uint8_t)(fan << 2);
     data[22] |= (uint8_t)(swing);
     bool ret = sendFrameToAnyGw(dpAddrHex, data, 23);
+    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
     return ret;
 }
 
 
-bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex) {
+bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandType, uint8_t brandId, uint8_t remoteId) {
     ASSERT(deviceAddr);
     ASSERT(sceneId);
-    ASSERT(commandIndex > 0 && commandIndex < 32);
-    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0xff,0xff,   0xE4,0x11,0x02,0x00,0x00,    0x06,0x00,0x00,0x00};
+    ASSERT(commandType == 2 || commandType == 3);
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00,   0xff,0xff,   0xE4,0x11,0x02,0x00,0x00,    0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
     long int dpAddrHex = strtol(deviceAddr, NULL, 16);
     long int sceneIdHex = strtol(sceneId, NULL, 16);
     data[8] = (uint8_t)(dpAddrHex >> 8);
     data[9] = (uint8_t)(dpAddrHex);
     data[16] = (uint8_t)(sceneIdHex >> 8);
     data[17] = (uint8_t)(sceneIdHex);
-    data[18] = (uint8_t)(1 << 6);
-    data[18] |= (uint8_t)(commandIndex << 1);
-    bool ret = sendFrameToAnyGw(dpAddrHex, data, 19);
+    data[18] = (uint8_t)(1 << 6);   // Add: 2, Delete: 1
+    data[18] |= (uint8_t)(1 << 1);  // CommandIndex is 1 as default
+    data[18] |= (commandType - 2);
+    data[19] = (uint8_t)(brandId);
+    data[20] = (uint8_t)(brandId >> 8);
+    data[21] = (uint8_t)(remoteId << 3);
+    bool ret = sendFrameToAnyGw(dpAddrHex, data, 23);
     addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
     return ret;
 }

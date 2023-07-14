@@ -53,23 +53,43 @@ def getMasterIp():
     sock.close()
 
 def main():
+    # Create logs folder if not exist
+    logsPath = "/home/szbaijie/hc_bin/logs/"
+    if not os.path.exists(logsPath + "aws"):
+        os.makedirs(logsPath + "aws")
+    if not os.path.exists(logsPath + "core"):
+        os.makedirs(logsPath + "core")
+    if not os.path.exists(logsPath + "ble"):
+        os.makedirs(logsPath + "ble")
+    if not os.path.exists(logsPath + "tuya"):
+        os.makedirs(logsPath + "tuya")
+    if not os.path.exists(logsPath + "cfg"):
+        os.makedirs(logsPath + "cfg")
+    if not os.path.exists(logsPath + "ota"):
+        os.makedirs(logsPath + "ota")
+
     # Check if this HC is master or slave
     f = open("app.json", "r")
-    appConfig = json.loads(f.read())
-    isMaster = 0
-    if "isMaster" in appConfig:
-        isMaster = appConfig["isMaster"]
-    print("isMaster:", isMaster)
-    if (isMaster):
+    fileContent = f.read()
+    try:
+        appConfig = json.loads(fileContent)
+        isMaster = 0
+        if "isMaster" in appConfig:
+            isMaster = appConfig["isMaster"]
+        print("isMaster:", isMaster)
+        if (isMaster):
+            os.system("systemctl restart hg_cfg")
+            os.system("systemctl restart hg_ble")
+            os.system("systemctl restart hg_core")
+            os.system("systemctl restart hg_aws")
+            os.system("systemctl restart hg_wifi")
+            listenCommands()
+        else:
+            getMasterIp()
+    except:
+        print("HC was not configured")
         os.system("systemctl restart hg_cfg")
         os.system("systemctl restart hg_ble")
-        os.system("systemctl restart hg_core")
-        os.system("systemctl restart hg_aws")
-        os.system("systemctl restart hg_wifi")
-        listenCommands()
-    else:
-        getMasterIp()
-
 
 main()
 

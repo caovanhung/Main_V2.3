@@ -127,8 +127,8 @@ bool GW_GetGroups(const char *deviceAddr);
  */
 bool GW_ControlIRCmd(const char* command);
 bool GW_ControlIR(const char* deviceAddr, int commandType, int brandId, int remoteId, int temp, int mode, int fan, int swing);
-bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex, uint8_t commandType, uint8_t brandId, uint8_t remoteId, uint8_t temp, uint8_t mode, uint8_t fan, uint8_t swing);
-bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandIndex);
+bool GW_AddSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandType, uint8_t brandId, uint8_t remoteId, uint8_t temp, uint8_t mode, uint8_t fan, uint8_t swing);
+bool GW_DeleteSceneActionIR(const char* deviceAddr, const char* sceneId, uint8_t commandType, uint8_t brandId, uint8_t remoteId);
 bool GW_AddSceneConditionIR(const char* deviceAddr, const char* sceneId, uint16_t voiceCode);
 bool GW_DeleteSceneConditionIR(const char* deviceAddr, const char* sceneId);
 

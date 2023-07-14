@@ -101,6 +101,6 @@ char* GetCurrentDate()
     struct tm *info;
     time( &rawtime );
     info = localtime( &rawtime );
-    sprintf(g_currentDateStr, "%02d-%02d-%02d", info->tm_mday, info->tm_mon, info->tm_year + 1900);
+    sprintf(g_currentDateStr, "%02d-%02d-%02d", info->tm_mday, info->tm_mon + 1, info->tm_year + 1900);
     return g_currentDateStr;
 }

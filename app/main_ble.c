@@ -92,13 +92,10 @@ void On_mqttConnect(struct mosquitto *mosq, void *obj, int rc)
     logInfo("hcAddr: %s", g_hcAddr);
 
     char topic[200];
-    if (StringCompare(g_mosqIP, "192.168.12.1")) {
-        StringCopy(topic, "BLE_LOCAL/#");
-    } else {
-        sprintf(topic, "%s_%s/#", MOSQ_TOPIC_DEVICE_BLE, g_hcAddr);
-    }
+    sprintf(topic, "%s_%s/#", MOSQ_TOPIC_DEVICE_BLE, g_hcAddr);
+    mosquitto_subscribe(mosq, NULL, "BLE_LOCAL/#", 0);
     mosquitto_subscribe(mosq, NULL, topic, 0);
-    logInfo("[On_mqttConnect]: Subscribed topic: %s", topic);
+    logInfo("[On_mqttConnect]: Subscribed topic: BLE_LOCAL/#, %s", topic);
     g_mosqIsConnected = true;
     JSON_Delete(setting);
 }
@@ -1082,15 +1079,19 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
             JSON* executorProperty = JSON_GetObject(action, "executorProperty");
             char* deviceAddr = JSON_GetText(action, "entityAddr");
             if (StringCompare(actionExecutor, "irHGBLE")) {
-                uint8_t commandIndex = JSON_GetNumber(action, "commandIndex");
                 uint8_t commandType = JSON_GetNumber(executorProperty, DPID_IR_COMMAND_TYPE);
                 uint8_t brandId = JSON_GetNumber(executorProperty, DPID_IR_BRAND_ID);
                 uint8_t remoteId = JSON_GetNumber(executorProperty, DPID_IR_REMOTE_ID);
-                uint8_t temp = JSON_HasKey(executorProperty, DPID_IR_TEMP)? JSON_GetNumber(executorProperty, DPID_IR_TEMP) : 0;
+                uint8_t temp = 0;
+                if (JSON_HasKey(executorProperty, DPID_IR_TEMP)) {
+                    temp = JSON_GetNumber(executorProperty, DPID_IR_TEMP);
+                } else if (JSON_HasKey(executorProperty, DPID_IR_ONOFF)) {
+                    temp = atoi(JSON_GetText(executorProperty, DPID_IR_ONOFF));
+                }
                 uint8_t mode = JSON_HasKey(executorProperty, DPID_IR_MODE)? JSON_GetNumber(executorProperty, DPID_IR_MODE) : 0;
-                uint8_t fan = JSON_HasKey(executorProperty, DPID_IR_FAN)? JSON_GetNumber(executorProperty, DPID_IR_FAN) : 0;
-                uint8_t swing = JSON_HasKey(executorProperty, DPID_IR_SWING)? JSON_GetNumber(executorProperty, DPID_IR_SWING) : 0;
-                GW_AddSceneActionIR(deviceAddr, sceneId, commandIndex, commandType, brandId, remoteId, temp, mode, fan, swing);
+                uint8_t fan = JSON_HasKey(executorProperty, DPID_IR_FAN)? JSON_GetNumber(executorProperty, DPID_IR_FAN) : 1;
+                uint8_t swing = JSON_HasKey(executorProperty, DPID_IR_SWING)? JSON_GetNumber(executorProperty, DPID_IR_SWING) : 1;
+                GW_AddSceneActionIR(deviceAddr, sceneId, commandType, brandId, remoteId, temp, mode, fan, swing);
             } else if (JSON_HasKey(action, "pid")) {
                 char* pid = JSON_GetText(action, "pid");
                 int dpId = JSON_GetNumber(action, "dpId");
@@ -1168,11 +1169,14 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
         char* hcAddr = JSON_GetText(action, "hcAddr");
         if (StringCompare(hcAddr, g_hcAddr)) {
             char* actionExecutor = JSON_HasKey(action, "actionExecutor")? JSON_GetText(action, "actionExecutor") : "";
+            JSON* executorProperty = JSON_GetObject(action, "executorProperty");
             // printf("Action: %s\n", cJSON_PrintUnformatted(action));
             if (StringCompare(actionExecutor, "irHGBLE")) {
                 char* deviceAddr = JSON_GetText(action, "entityAddr");
-                uint8_t commandIndex = JSON_GetNumber(action, "commandIndex");
-                GW_DeleteSceneActionIR(deviceAddr, sceneId, commandIndex);
+                uint8_t commandType = JSON_GetNumber(executorProperty, DPID_IR_COMMAND_TYPE);
+                uint8_t brandId = JSON_GetNumber(executorProperty, DPID_IR_BRAND_ID);
+                uint8_t remoteId = JSON_GetNumber(executorProperty, DPID_IR_REMOTE_ID);
+                GW_DeleteSceneActionIR(deviceAddr, sceneId, commandType, brandId, remoteId);
             } else if (JSON_HasKey(action, "pid")) {
                 char* pid = JSON_GetText(action, "pid");
                 int dpId = JSON_GetNumber(action, "dpId");
