@@ -26,6 +26,7 @@ void Aws_SaveDeviceState(const char* deviceId, int state, int pageIndex);
 void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex);
 void Aws_UpdateGroupValue(const char* groupAddr, int dpId, int dpValue);
 void Aws_EnableScene(const char* sceneId, bool state);
+void Aws_ResponseLearningIR(const char* deviceId, const char* respCmd);
 /***************************************************************************************/
 
 /********************* APIS TO COMMUNICATE WITH BLE SERVICE ****************************/

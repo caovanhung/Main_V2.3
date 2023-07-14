@@ -1122,13 +1122,7 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     } else if (frame->opcode == 0x800E && frame->paramSize >= 1) {
         return GW_RESPONSE_SET_TTL;
     } else if (frame->opcode == 0xE511 && frame->paramSize >= 9 && frame->param[0] == 0x02) {
-        if (frame->param[1] == 0x0A) {
-            temp->dpValue = 0;
-            return GW_RESPONSE_IR;
-        } else if (frame->param[1] == 0x09) {
-            temp->dpValue = ((uint16_t)frame->param[3] << 8) | frame->param[2];
-            return GW_RESPONSE_IR;
-        }
+        return GW_RESPONSE_IR;
     }
 
     return GW_RESPONSE_UNKNOW;

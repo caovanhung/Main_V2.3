@@ -258,8 +258,7 @@ bool UART_Send(int fd, char *send_buf,int data_len)
     int len = 0;
    
     len = write(fd, send_buf, data_len);
-    if (len == data_len )
-    {
+    if (len == data_len) {
         for (int i = 0; i < data_len; i++) {
             sprintf(&tmp[i*3], "%02X ", send_buf[i]);
         }
@@ -268,9 +267,7 @@ bool UART_Send(int fd, char *send_buf,int data_len)
             logInfo("Sent to UART%d: %s", g_uartSendingIdx, tmp);
         }
         return true;
-    }
-    else
-    {
+    } else {
         tcflush(fd,TCOFLUSH);
         logError("Failed to sent data to UART. Sent length = %d", len);
         return false;

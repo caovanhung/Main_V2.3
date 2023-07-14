@@ -96,12 +96,12 @@ JSON* addDeviceToRespList(int reqType, const char* itemId, const char* deviceAdd
         JSON* devices = JSON_AddArray(item, "devices");
     }
     JSON* devices = JSON_GetObject(item, "devices");
-    if (JArr_FindByText(devices, "addr", deviceAddr) == NULL) {
+    // if (JArr_FindByText(devices, "addr", deviceAddr) == NULL) {
         JSON *device = JArr_CreateObject(devices);
         JSON_SetText(device, "addr", deviceAddr);
         JSON_SetNumber(device, "status", -2);
         return device;
-    }
+    // }
     return NULL;
 }
 
@@ -119,9 +119,11 @@ void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceA
     JSON* item = requestIsInRespList(reqType, itemId);
     if (item) {
         JSON* devices = JSON_GetObject(item, "devices");
-        JSON* device = JArr_FindByText(devices, "addr", deviceAddr);
-        if (device) {
-            JSON_SetNumber(device, "status", status);
+        JSON_ForEach(d, devices) {
+            char* addr = JSON_GetText(d, "addr");
+            if (StringCompare(addr, deviceAddr)) {
+                JSON_SetNumber(d, "status", status);
+            }
         }
     }
     char* str = cJSON_PrintUnformatted(g_checkRespList);
@@ -183,6 +185,18 @@ void Aws_EnableScene(const char* sceneId, bool state) {
         char payload[200];
         sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%s}}}}", TYPE_UPDATE_SCENE, SENDER_HC_TO_CLOUD, sceneId, state?"true":"false");
         sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_SCENE, pageIndex, payload);
+    }
+}
+
+void Aws_ResponseLearningIR(const char* deviceId, const char* respCmd) {
+    ASSERT(deviceId);
+    ASSERT(respCmd);
+    DeviceInfo deviceInfo;
+    int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
+    if (foundDevices == 1) {
+        char payload[500];
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"dictDPs\":{\"%s\":\"%s\"}}}}}", TYPE_CTR_DEVICE, SENDER_HC_TO_CLOUD, deviceId, DPID_IR_COMMAND, respCmd);
+        sendToServicePageIndex(SERVICE_AWS, TYPE_NOTIFI_REPONSE, deviceInfo.pageIndex, payload);
     }
 }
 

@@ -513,7 +513,8 @@ void Ble_ProcessPacket()
                     JSON* packet = JSON_CreateObject();
                     JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                    if (tmp->dpValue == 0) {
+                    bool sentToCoreService = false;
+                    if (bleFrames[i].param[1] == 0x0A) {
                         uint16_t brandId = ((uint16_t)bleFrames[i].param[4] << 8) + bleFrames[i].param[3];
                         uint8_t  remoteId = bleFrames[i].param[5];
                         uint8_t  temp = bleFrames[i].param[6];
@@ -528,12 +529,20 @@ void Ble_ProcessPacket()
                         JSON_SetNumber(packet, "mode", mode);
                         JSON_SetNumber(packet, "fan", fan);
                         JSON_SetNumber(packet, "swing", swing);
-                    } else {
-                        // dpValue is voiceId received from IR device
+                        sentToCoreService = true;
+                    } else if (bleFrames[i].param[1] == 0x09) {
+                        uint16_t voiceId = ((uint16_t)bleFrames[i].param[3] << 8) | bleFrames[i].param[2];
                         JSON_SetNumber(packet, "respType", 1);
-                        JSON_SetNumber(packet, "voiceId", tmp->dpValue);
+                        JSON_SetNumber(packet, "voiceId", voiceId);
+                        sentToCoreService = true;
+                    } else if (bleFrames[i].param[1] == 0x0B) {
+                        JSON_SetNumber(packet, "respType", 2);
+                        JSON_SetText(packet, "respCmd", recvPackage);
+                        sentToCoreService = true;
                     }
-                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    if (sentToCoreService) {
+                        sendPacketTo(SERVICE_CORE, frameType, packet);
+                    }
                     JSON_Delete(packet);
                     break;
                 }

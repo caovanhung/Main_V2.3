@@ -53,34 +53,6 @@ void SyncDevicesState();
 void GetDeviceStatusForScene(Scene* scene);
 void GetDeviceStatusForGroup(const char* deviceId, int dpId);
 
-bool compareSceneEntity(JSON* entity1, JSON* entity2) {
-    if (entity1 && entity2) {
-        int dpId1 = JSON_GetNumber(entity1, "dpId");
-        int dpValue1 = JSON_GetNumber(entity1, "dpValue");
-        char* dpAddr1 = JSON_GetText(entity1, "dpAddr");
-        int dpId2 = JSON_GetNumber(entity2, "dpId");
-        int dpValue2 = JSON_GetNumber(entity2, "dpValue");
-        char* dpAddr2 = JSON_GetText(entity2, "dpAddr");
-        if (dpId1 == dpId2 && dpValue1 == dpValue2 && StringCompare(dpAddr1, dpAddr2)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool compareDp(JSON* dp1, JSON* dp2) {
-    if (dp1 && dp2) {
-        char* deviceId1 = JSON_GetText(dp1, "deviceId");
-        int dpId1 = JSON_GetNumber(dp1, "dpId");
-        char* deviceId2 = JSON_GetText(dp2, "deviceId");
-        int dpId2 = JSON_GetNumber(dp2, "dpId");
-        if (dpId1 == dpId2 && StringCompare(deviceId1, deviceId2)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool addNewDevice(JSON* packet) {
     char* deviceStr = JSON_GetText(packet, "devices");
     List* tmp = String_Split(deviceStr, "|");
@@ -148,6 +120,47 @@ bool addNewDevice(JSON* packet) {
     }
     List_Delete(tmp);
     return false;
+}
+
+
+void SetOnlineStateForIRDevices(const char* deviceAddr, int onlineState, const char* hcAddr, bool syncToAws) {
+    ASSERT(deviceAddr);
+    ASSERT(hcAddr);
+    DeviceInfo deviceInfos[50];
+    int count = 0;
+    char sqlCommand[200];
+    sprintf(sqlCommand, "SELECT * FROM devices_inf d JOIN gateway g ON g.id = d.gwIndex WHERE Unicast = '%s' AND g.hcAddr = '%s';", deviceAddr, hcAddr);
+
+    Sql_Query(sqlCommand, row) {
+        deviceInfos[count].state = sqlite3_column_int(row, 1);
+        deviceInfos[count].provider = sqlite3_column_int(row, 7);
+        StringCopy(deviceInfos[count].id, sqlite3_column_text(row, 0));
+        StringCopy(deviceInfos[count].name, sqlite3_column_text(row, 2));
+        StringCopy(deviceInfos[count].addr, sqlite3_column_text(row, 4));
+        deviceInfos[count].gwIndex = sqlite3_column_int(row, 5);
+        StringCopy(deviceInfos[count].pid, sqlite3_column_text(row, 8));
+        deviceInfos[count].pageIndex = sqlite3_column_int(row, 15);
+        deviceInfos[count].offlineCount = sqlite3_column_int(row, 16);
+        count++;
+    }
+
+    for (int i = 0; i < count; i++) {
+        if (onlineState == STATE_OFFLINE) {
+            if (deviceInfos[i].offlineCount < 2) {
+                Db_SaveOfflineCountForDevice(deviceInfos[i].id, deviceInfos[i].offlineCount + 1);
+                break;
+            }
+        }
+        if (onlineState != deviceInfos[i].state) {
+            Aws_SaveDeviceState(deviceInfos[i].id, onlineState, deviceInfos[i].pageIndex);
+        }
+        // JSON_SetText(payload, "deviceId", deviceInfos[i].id);
+        Db_SaveOfflineCountForDevice(deviceInfos[i].id, 0);
+        Db_SaveDeviceState(deviceInfos[i].id, onlineState);
+        // JSON_SetNumber(payload, "dpValue", onlineState == 2? 1 : 0);
+        // JSON_SetNumber(payload, "eventType", EV_DEVICE_STATE_CHANGED);
+        // Db_AddDeviceHistory(payload);
+    }
 }
 
 
@@ -974,6 +987,9 @@ int main(int argc, char ** argv)
                             double oldDpValue = dpInfo.value;
                             int foundDevices = Db_FindDevice(&deviceInfo, dpInfo.deviceId);
                             if (foundDevices == 1) {
+                                if (StringContains(HG_BLE_IR_FULL, deviceInfo.pid)) {
+                                    SetOnlineStateForIRDevices(deviceInfo.addr, STATE_ONLINE, hcAddr, false);
+                                }
                                 if (opcode != 0x8201 || oldDpValue != dpValue || deviceInfo.state == STATE_OFFLINE) {
                                     Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
                                 }
@@ -1011,19 +1027,23 @@ int main(int argc, char ** argv)
                             DeviceInfo deviceInfo;
                             int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr, hcAddr);
                             if (foundDevices == 1) {
-                                if (deviceState == STATE_OFFLINE) {
-                                    if (deviceInfo.offlineCount < 2) {
-                                        Db_SaveOfflineCountForDevice(deviceInfo.id, deviceInfo.offlineCount + 1);
-                                        break;
+                                if (StringContains(HG_BLE_IR_FULL, deviceInfo.pid)) {
+                                    SetOnlineStateForIRDevices(deviceAddr, deviceState, hcAddr, true);
+                                } else {
+                                    if (deviceState == STATE_OFFLINE) {
+                                        if (deviceInfo.offlineCount < 2) {
+                                            Db_SaveOfflineCountForDevice(deviceInfo.id, deviceInfo.offlineCount + 1);
+                                            break;
+                                        }
                                     }
+                                    JSON_SetText(payload, "deviceId", deviceInfo.id);
+                                    Db_SaveOfflineCountForDevice(deviceInfo.id, 0);
+                                    Db_SaveDeviceState(deviceInfo.id, deviceState);
+                                    Aws_SaveDeviceState(deviceInfo.id, deviceState, deviceInfo.pageIndex);
+                                    JSON_SetNumber(payload, "dpValue", deviceState == 2? 1 : 0);
+                                    JSON_SetNumber(payload, "eventType", EV_DEVICE_STATE_CHANGED);
+                                    Db_AddDeviceHistory(payload);
                                 }
-                                JSON_SetText(payload, "deviceId", deviceInfo.id);
-                                Db_SaveOfflineCountForDevice(deviceInfo.id, 0);
-                                Db_SaveDeviceState(deviceInfo.id, deviceState);
-                                Aws_SaveDeviceState(deviceInfo.id, deviceState, deviceInfo.pageIndex);
-                                JSON_SetNumber(payload, "dpValue", deviceState == 2? 1 : 0);
-                                JSON_SetNumber(payload, "eventType", EV_DEVICE_STATE_CHANGED);
-                                Db_AddDeviceHistory(payload);
                             }
                         }
                         break;
@@ -1056,10 +1076,10 @@ int main(int argc, char ** argv)
                                     Aws_SaveDpValue(deviceId, 105, swing, pageIndex);
                                 }
                             }
-                        } else {
+                        } else if (respType == 1) {
                             uint16_t voiceId = JSON_GetNumber(payload, "voiceId");
                             char sql[500];
-                            sprintf(sql, "select d.deviceId from devices d JOIN devices_inf di ON d.deviceId=di.deviceId where address='%s' AND dpId=1 AND pid='BLEHGAA0301'", deviceAddr);
+                            sprintf(sql, "select d.deviceId from devices d JOIN devices_inf di ON d.deviceId=di.deviceId where address='%s' AND dpId=1 AND pid='%s'", deviceAddr, HG_BLE_IR);
                             Sql_Query(sql, row) {
                                 char* deviceId = sqlite3_column_text(row, 0);
                                 Db_SaveDpValue(deviceId, 1, voiceId);
@@ -1074,6 +1094,15 @@ int main(int argc, char ** argv)
                                 checkSceneForDevice(deviceId, 1, voiceId, NULL, true);
                                 // Clear voiceId in database to prevent executing scene later
                                 Db_SaveDpValue(deviceId, 1, 0);
+                            }
+                        } else {
+                            // Command learning response
+                            char* respCmd = JSON_GetText(payload, "respCmd");
+                            char sql[500];
+                            sprintf(sql, "SELECT deviceId FROM devices_inf WHERE unicast='%s' AND pid='%s'", deviceAddr, HG_BLE_IR);
+                            Sql_Query(sql, row) {
+                                char* deviceId = sqlite3_column_text(row, 0);
+                                Aws_ResponseLearningIR(deviceId, respCmd);
                             }
                         }
                         break;
