@@ -83,7 +83,7 @@ void BLE_SendUartFrameLoop();
 bool GW_GetDeviceOnOffState(const char* dpAddr);
 bool GW_HgSwitchOnOff(const char* dpAddr, uint8_t dpValue);
 bool GW_HgSwitchOnOff_NoResp(const char* dpAddr, uint8_t dpValue);
-bool ble_dimLedSwitch_HOMEGY(const char *address_device, int lightness);
+bool GW_SwitchDimLed(const char *address_device, int lightness);
 
 bool GW_CtrlLightOnOff(const char *deviceAddr, uint8_t onoff);
 bool GW_SetLightness(const char *deviceAddr, int lightness);
@@ -95,15 +95,18 @@ bool GW_SetRGBLightBlinkMode(const char *dpAddr, int blinkMode);
 bool GW_AddGroupLight(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
 bool GW_AddGroupSwitch(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
 bool GW_DeleteGroup(int gwIndex, const char *address_group, const char *address_device, const char *address_element);
-bool ble_logDeivce(const char *address_element, int state);
-bool ble_logTouch(const char *address_element, uint8_t dpId, int state);
-bool GW_SetSceneActionForSwitch(const char* sceneId, const char* deviceAddr, uint8_t dpCount, uint32_t param);
+bool GW_LockDevice(const char *address_element, int state);
+bool GW_LockTouch(const char *address_element, uint8_t dpId, int state);
+bool GW_SetSceneActionForSwitch(const char* dpAddr, const char* sceneId, uint8_t dpValue);
 bool GW_SetSceneActionForLightCCT(const char* address_device,const char* sceneID);
 bool GW_SetSceneActionForLightRGB(const char* address_device,const char* sceneID, uint8_t blinkMode);
-bool GW_SetSceneCondition(const char* address_device,const char* sceneID, uint8_t enableOrDisable, uint8_t dpValue);
-bool ble_delSceneLocalToDevice(const char* address_device,const char* sceneID);
+bool GW_DelSceneAction(const char* dpAddr, const char* sceneId);
+bool GW_DelAllSceneAction(const char* dpAddr);
+bool GW_SetSceneCondition(const char* dpAddr, const char* sceneId, uint8_t dpValue);
+bool GW_DelSceneCondition(const char* dpAddr, const char* sceneId);
+bool GW_EnableDisableScene(const char* dpAddr, const char* sceneId, uint8_t enableOrDisable);
 bool ble_setTimeForSensorPIR(const char* address_device,const char* time);
-bool ble_callSceneLocalToHC(const char* address_device, const char* sceneID);
+bool GW_CallScene(const char* sceneId);
 void BLE_PrintFrame(char* str, ble_rsp_frame_t* frame);
 bool ble_getInfoProvison(provison_inf *PRV, JSON* packet);
 bool GW_ConfigGateway(int gwIndex, provison_inf *PRV);
@@ -119,7 +122,7 @@ bool GW_CtrlGroupLightOnOff(const char *groupAddr, uint8_t onoff);
 bool GW_CtrlGroupLightCT(const char *dpAddr, int lightness, int colorTemperature);
 bool GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl);
 bool GW_GetScenes(const char *deviceAddr);
-bool GW_GetGroups(const char *deviceAddr);
+bool GW_GetGroups(const char *deviceAddr, const char *dpAddr);
 
 /*
  * Control IR

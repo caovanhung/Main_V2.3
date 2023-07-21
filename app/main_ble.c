@@ -263,8 +263,8 @@ void Ble_ProcessPacket()
 
                 case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
                 case GW_RESP_ONOFF_STATE: {
-                    if (bleFrames[i].frameSize >= 5 && bleFrames[i].param[0] == 0x82 && bleFrames[i].param[1] == 0x01) {
-                        uint8_t dpCount = bleFrames[i].param[3];
+                    if (bleFrames[i].frameSize >= 4 && bleFrames[i].param[0] == 0x82 && bleFrames[i].param[1] == 0x01) {
+                        uint8_t dpCount = bleFrames[i].param[2];
                         uint16_t deviceAddr = bleFrames[i].sendAddr;
                         char str[10];
                         for (int d = 0; d < dpCount; d++) {
@@ -277,22 +277,23 @@ void Ble_ProcessPacket()
                             sprintf(str, "%04X", addr);
                             JSON_SetText(packet, "deviceAddr", str);
                             JSON_SetText(packet, "dpAddr", str);
-                            JSON_SetNumber(packet, "dpValue", bleFrames[i].param[4 + d]);
+                            JSON_SetNumber(packet, "dpValue", bleFrames[i].param[3 + d]);
                             g_printLog = false;
                             sendPacketTo(SERVICE_CORE, frameType, packet);
                             g_printLog = true;
                             JSON_Delete(packet);
                         }
-                    } else if (bleFrames[i].paramSize > 1) {
+                    } else if (bleFrames[i].paramSize > 2) {
                         // Response onoff for HG switch, CCT light
                         JSON* packet = JSON_CreateObject();
                         JSON_SetText(packet, "hcAddr", g_hcAddr);
                         uint16_t opcode = bleFrames[i].param[0];
                         opcode = (opcode << 8) | bleFrames[i].param[1];
+                        uint8_t dpValue = bleFrames[i].param[2]? 1 : 0;
                         JSON_SetNumber(packet, "opcode", opcode);
                         JSON_SetText(packet, "deviceAddr", tmp->address_element);
                         JSON_SetText(packet, "dpAddr", tmp->address_element);
-                        JSON_SetNumber(packet, "dpValue", tmp->dpValue);
+                        JSON_SetNumber(packet, "dpValue", dpValue);
                         sendPacketTo(SERVICE_CORE, frameType, packet);
                         JSON_Delete(packet);
                     } else {
@@ -302,7 +303,7 @@ void Ble_ProcessPacket()
                         JSON_SetNumber(packet, "opcode", 0);
                         JSON_SetText(packet, "deviceAddr", tmp->address_element);
                         JSON_SetText(packet, "dpAddr", tmp->address_element);
-                        JSON_SetNumber(packet, "dpValue", bleFrames[i].param[0]);
+                        JSON_SetNumber(packet, "dpValue", bleFrames[i].param[0]? 1 : 0);
                         sendPacketTo(SERVICE_CORE, frameType, packet);
                         JSON_Delete(packet);
                     }
@@ -331,8 +332,8 @@ void Ble_ProcessPacket()
                         JSON_SetNumber(packet, "color", value);
                     } else if (bleFrames[i].opcode == 0x8260) {
                         // Get lightless and color temperature
-                        uint16_t lightness = ((uint16_t)bleFrames[i].param[5] << 8) | bleFrames[i].param[4];
-                        uint16_t colorTemperature = ((uint16_t)bleFrames[i].param[7] << 8) | bleFrames[i].param[6];
+                        uint16_t lightness = ((uint16_t)bleFrames[i].param[4] << 8) | bleFrames[i].param[3];
+                        uint16_t colorTemperature = ((uint16_t)bleFrames[i].param[6] << 8) | bleFrames[i].param[5];
                         lightness = ((uint32_t)lightness * 1000) / 65535;
                         colorTemperature = ((colorTemperature - 800) * 1000) / (20000 - 800);
                         JSON_SetNumber(packet, "lightness", lightness);
@@ -475,7 +476,8 @@ void Ble_ProcessPacket()
                         status = bleFrames[i].param[0];
                     } else {
                         // Response for scene condition
-                        sprintf(sceneId, "%02X%02X", bleFrames[i].param[3], bleFrames[i].param[4]);
+                        status = bleFrames[i].param[3];
+                        sprintf(sceneId, "%02X%02X", bleFrames[i].param[4], bleFrames[i].param[5]);
                     }
                     JSON_SetText(packet, "sceneId", sceneId);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
@@ -696,7 +698,7 @@ int main( int argc,char ** argv )
 
     Mosq_Init(SERVICE_BLE);
     sleep(3);
-    // GW_GetGroups("B401");
+    // GW_DelAllSceneAction("4001");
     while (xRun!=0) {
         BLE_SendUartFrameLoop();
         BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue
@@ -840,11 +842,12 @@ int main( int argc,char ** argv )
                     int state = JSON_GetNumber(payload, "state");
                     if (state >= 2) {
                         logInfo("Executing LC scene %s", sceneId);
-                        ble_callSceneLocalToHC("FFFF", sceneId);
+                        GW_CallScene(sceneId);
                     } else {
                         // Enable/Disable scene
-                        // char* dpAddr = JSON_GetText(payload, "dpAddr");
-                        // GW_SetSceneCondition(dpAddr, sceneId, "00", dpValue);
+                        char* dpAddr = JSON_GetText(payload, "dpAddr");
+                        int enableState = JSON_GetNumber(payload, "state");
+                        GW_EnableDisableScene("FFFF", sceneId, enableState);
                     }
                     break;
                 }
@@ -1023,13 +1026,13 @@ int main( int argc,char ** argv )
                 case TYPE_DIM_LED_SWITCH: {
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                     int value = JSON_GetNumber(payload, "led");
-                    ble_dimLedSwitch_HOMEGY(deviceAddr, value);
+                    GW_SwitchDimLed(deviceAddr, value);
                     break;
                 }
                 case TYPE_LOCK_AGENCY: {
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                     int value = JSON_GetNumber(payload, "value");
-                    ble_logDeivce(deviceAddr, value);
+                    GW_LockDevice(deviceAddr, value);
                     break;
                 }
                 case TYPE_LOCK_KIDS: {
@@ -1037,7 +1040,7 @@ int main( int argc,char ** argv )
                     JSON* dps = JSON_GetObject(payload, "lock");
                     JSON_ForEach(dp, dps) {
                         if (dp->string) {
-                            ble_logTouch(deviceAddr, atoi(dp->string), dp->valueint);
+                            GW_LockTouch(deviceAddr, atoi(dp->string), dp->valueint);
                         }
                     }
                     break;
@@ -1080,7 +1083,6 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
     char commonDevices[1200]    = {'\0'};
     int  j = 0;
     logInfo("[addSceneActions] sceneId = %s", sceneId);
-    JSON* mergedActions = JSON_CreateArray();
     JSON_ForEach(action, actions) {
         char* hcAddr = JSON_GetText(action, "hcAddr");
         if (StringCompare(hcAddr, g_hcAddr)) {
@@ -1107,29 +1109,15 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                 int dpValue = JSON_GetNumber(action, "dpValue");
                 if (pid != NULL) {
                     if (StringContains(HG_BLE_SWITCH, pid) || StringContains(HG_BLE_CURTAIN, pid)) {
-                        /* For the switch, we will send only 1 command for 1 switch even if this switch has 1 or more elements.
-                           So we need to merge all actions related to the elements of this switch and then will send 1 command
-                           to this switch later */
-                        int dpParam = (dpId - 1)*0x10 + dpValue;
-                        dpParam = dpParam << 24;
-                        JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
-                        if (mergedActionItem == NULL) {
-                            mergedActionItem = JArr_CreateObject(mergedActions);
-                            JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
-                            JSON_SetNumber(mergedActionItem, "param", dpParam);
-                            JSON_SetNumber(mergedActionItem, "dpCount", 1);
-                        } else {
-                            uint32_t newParam = (uint32_t)JSON_GetNumber(mergedActionItem, "param");
-                            newParam = dpParam | (newParam >> 8);
-                            JSON_SetNumber(mergedActionItem, "param", newParam);
-                            JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
-                        }
+                        char* dpAddr = JSON_GetText(action, "dpAddr");
+                        int dpValue = JSON_GetNumber(action, "dpValue");
+                        GW_SetSceneActionForSwitch(dpAddr, sceneId, dpValue);
+                        // Add this device to response list to check TIMEOUT later
+                        addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                     } else if (StringContains(RD_BLE_LIGHT_RGB, pid) && (dpId == 20 || dpId == 21 || dpId == 24)) {
                         if (dpId == 21) {
                             char* dpValueString;
-                            JSON_ForEach(e, executorProperty) {
-                                dpValueString = e->valuestring;
-                            }
+                            dpValueString = JSON_GetText(executorProperty, "21");
                             List* tmp = String_Split(dpValueString, "_");
                             if (tmp->count == 2) {
                                 uint8_t blinkMode = atoi(tmp->items[1]);
@@ -1147,17 +1135,6 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                     }
                 }
             }
-        }
-    }
-
-    if (JArr_Count(mergedActions) > 0) {
-        JSON_ForEach(item, mergedActions) {
-            char* addr = JSON_GetText(item, "deviceAddr");
-            int dpCount = JSON_GetNumber(item, "dpCount");
-            uint32_t param = (uint32_t)JSON_GetNumber(item, "param");
-            GW_SetSceneActionForSwitch(sceneId, addr, dpCount, param);
-            // Add this device to response list to check TIMEOUT later
-            addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
         }
     }
 
@@ -1191,43 +1168,22 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
                 int dpId = JSON_GetNumber(action, "dpId");
                 char* deviceAddr = JSON_GetText(action, "entityAddr");
                 if (pid != NULL) {
-                    if (StringContains(HG_BLE_SWITCH, pid)) {
-                        /* For the switch, we will send only 1 command for 1 switch even if this switch has 1 or more elements.
-                           So we need to merge all actions related to the elements of this switch and then will send 1 command
-                           to this switch later */
-                        int dpParam = (dpId - 1)*0x10 + 2;
-                        dpParam = dpParam << 24;
-                        JSON* mergedActionItem = JArr_FindByText(mergedActions, "deviceAddr", deviceAddr);
-                        if (mergedActionItem == NULL) {
-                            mergedActionItem = JArr_CreateObject(mergedActions);
-                            JSON_SetText(mergedActionItem, "deviceAddr", deviceAddr);
-                            JSON_SetNumber(mergedActionItem, "param", dpParam);
-                            JSON_SetNumber(mergedActionItem, "dpCount", 1);
-                        } else {
-                            uint32_t newParam = (uint32_t)JSON_GetNumber(mergedActionItem, "param");
-                            newParam = dpParam | (newParam >> 8);
-                            JSON_SetNumber(mergedActionItem, "param", newParam);
-                            JSON_SetNumber(mergedActionItem, "dpCount", JSON_GetNumber(mergedActionItem, "dpCount") + 1);
-                        }
+                    if (StringContains(HG_BLE_SWITCH, pid) || StringContains(HG_BLE_CURTAIN, pid)) {
+                        char* dpAddr = JSON_GetText(action, "dpAddr");
+                        GW_DelSceneAction(dpAddr, sceneId);
+                        addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                     } else if (StringContains(RD_BLE_LIGHT_RGB, pid)) {
-                        ble_delSceneLocalToDevice(deviceAddr, sceneId);
+                        GW_DelSceneAction(deviceAddr, sceneId);
+                        addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                     } else if (StringContains(HG_BLE_LIGHT_WHITE, pid)) {
-                        ble_delSceneLocalToDevice(deviceAddr, sceneId);
+                        GW_DelSceneAction(deviceAddr, sceneId);
+                        addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                     }
                 }
             }
         }
     }
 
-    if (JArr_Count(mergedActions) > 0) {
-        JSON_ForEach(item, mergedActions) {
-            char* addr = JSON_GetText(item, "deviceAddr");
-            int dpCount = JSON_GetNumber(item, "dpCount");
-            uint32_t param = (uint32_t)JSON_GetNumber(item, "param");
-            GW_SetSceneActionForSwitch(sceneId, addr, dpCount, param);
-        }
-    }
-    JSON_Delete(mergedActions);
     return true;
 }
 
@@ -1246,7 +1202,7 @@ bool addSceneCondition(const char* sceneId, JSON* condition) {
         } else {
             char* dpAddr = JSON_GetText(condition, "dpAddr");
             int dpValue   = JSON_GetNumber(condition, "dpValue");
-            GW_SetSceneCondition(dpAddr, sceneId, 1, dpValue);
+            GW_SetSceneCondition(dpAddr, sceneId, dpValue);
             // Add this device to response list to check TIMEOUT later
             addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
         }
@@ -1266,8 +1222,7 @@ bool deleteSceneCondition(const char* sceneId, JSON* condition) {
             GW_DeleteSceneConditionIR(deviceAddr, sceneId);
         } else {
             char* dpAddr = JSON_GetText(condition, "dpAddr");
-            int dpValue  = JSON_GetNumber(condition, "dpValue");
-            GW_SetSceneCondition(dpAddr, sceneId, 0, dpValue);
+            GW_DelSceneCondition(dpAddr, sceneId);
         }
     }
     return true;
