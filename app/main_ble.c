@@ -699,6 +699,7 @@ int main( int argc,char ** argv )
     Mosq_Init(SERVICE_BLE);
     sleep(3);
     // GW_DelAllSceneAction("4001");
+    // GW_SetLightHSL("B801", "7fffaea4ffff");
     while (xRun!=0) {
         BLE_SendUartFrameLoop();
         BLE_ReceivePacket();  // Receive BLE frames from device => Push to bleFrameQueue

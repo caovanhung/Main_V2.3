@@ -164,6 +164,75 @@ void SetOnlineStateForIRDevices(const char* deviceAddr, int onlineState, const c
 }
 
 
+void DeleteDeviceFromGroups(const char* deviceId) {
+    ASSERT(deviceId);
+    char* sqlCmd = "SELECT groupAdress, devices, pageIndex FROM group_inf";
+    Sql_Query(sqlCmd, row) {
+        char* groupAddr = sqlite3_column_text(row, 0);
+        char* deviceStr = sqlite3_column_text(row, 1);
+        JSON* devices = JSON_Parse(deviceStr);
+        JSON* newDevices = JSON_CreateArray();
+        JSON_ForEach(d, devices) {
+            char* id = JSON_GetText(d, "deviceId");
+            if (!StringCompare(id, deviceId)) {
+                JArr_AddObject(newDevices, JSON_Clone(d));
+            }
+        }
+        // Save new devices if needed
+        if (JArr_Count(newDevices) == 0) {
+            // Delete group if there is no any devices in it
+            Aws_DeleteGroup(groupAddr);
+            Db_DeleteGroup(groupAddr);
+        } else if (JArr_Count(devices) != JArr_Count(newDevices)) {
+            logInfo("Update devices for group %s", groupAddr);
+            Db_SaveGroupDevices(groupAddr, newDevices);
+            Aws_SaveGroupDevices(groupAddr);
+        }
+        JSON_Delete(newDevices);
+    }
+}
+
+
+void DeleteDeviceFromScenes(const char* deviceId) {
+    ASSERT(deviceId);
+    char* sqlCmd = "SELECT sceneId, actions, conditions, pageIndex FROM scene_inf";
+    Sql_Query(sqlCmd, row) {
+        char* sceneId = sqlite3_column_text(row, 0);
+        char* actionStr = sqlite3_column_text(row, 1);
+        char* conditionStr = sqlite3_column_text(row, 2);
+        JSON* actions = JSON_Parse(actionStr);
+        JSON* conditions = JSON_Parse(conditionStr);
+        JSON* newActions = JSON_CreateArray();
+        JSON* newConditions = JSON_CreateArray();
+        JSON_ForEach(action, actions) {
+            char* id = JSON_GetText(action, "entityId");
+            if (!StringCompare(id, deviceId)) {
+                JArr_AddObject(newActions, JSON_Clone(action));
+            }
+        }
+        JSON_ForEach(condition, conditions) {
+            char* id = JSON_GetText(condition, "entityId");
+            if (!StringCompare(id, deviceId)) {
+                JArr_AddObject(newConditions, JSON_Clone(condition));
+            }
+        }
+        // Save new actions and conditions if needed
+        if (JArr_Count(newActions) == 0) {
+            // Delete scene if there is no any action in it
+            logInfo("Delete scene %s because it has no any action", sceneId);
+            Aws_DeleteScene(sceneId);
+            Db_DeleteScene(sceneId);
+        } else if (JArr_Count(actions) != JArr_Count(newActions) || JArr_Count(conditions) != JArr_Count(newConditions)) {
+            logInfo("Update actions and conditions for scene %s", sceneId);
+            Db_SaveScene(sceneId, newActions, newConditions);
+            Aws_SaveScene(sceneId);
+        }
+
+        JSON_Delete(newActions);
+    }
+}
+
+
 void on_connect(struct mosquitto *mosq, void *obj, int rc)
 {
     if(rc)
@@ -271,17 +340,6 @@ void ResponseWaiting() {
         }
 
         if (checkDone) {
-            // DeviceInfo deviceInfo;
-            // DpInfo     dpInfo;
-            // for (int d = 0; d < deviceCount; d++) {
-            //     JSON* device = JArr_GetObject(devices, d);
-            //     if (reqType == TYPE_ADD_SCENE || reqType == TYPE_UPDATE_SCENE) {
-            //         int status = JSON_GetNumber(device, "status");
-            //         if (status != 0) {
-            //             Db_RemoveSceneAction(itemId, JSON_GetText(device, "addr"));
-            //         }
-            //     }
-            // }
             if (reqType == TYPE_ADD_GROUP_LIGHT || reqType == TYPE_UPDATE_GROUP_LIGHT ||
                 reqType == TYPE_ADD_GROUP_LINK || reqType == TYPE_UPDATE_GROUP_LINK) {
                 // Save state of devices to AWS
@@ -331,6 +389,8 @@ void ResponseWaiting() {
                 if (JArr_Count(updatedDevices) > 0) {
                     JSON_SetObject(g_groupTobeUpdated, "devices", updatedDevices);
                     Aws_UpdateGroupDevices(g_groupTobeUpdated);
+                    char* groupAddr = JSON_GetText(g_groupTobeUpdated, "groupAddr");
+                    Db_SaveGroupDevices(groupAddr, updatedDevices);
                 }
                 JSON_Delete(g_groupTobeUpdated);
             } else if (reqType == TYPE_ADD_SCENE || reqType == TYPE_UPDATE_SCENE) {
@@ -421,6 +481,8 @@ void ResponseWaiting() {
                 }
                 JSON_SetObject(g_sceneTobeUpdated, "conditions", updatedConditions);
                 Aws_UpdateSceneInfo(g_sceneTobeUpdated);
+                char* sceneId = JSON_GetText(g_sceneTobeUpdated, "id");
+                Db_SaveScene(sceneId, updatedActions, updatedConditions);
                 JSON_Delete(g_sceneTobeUpdated);
             }
             // Remove this respItem from response list
@@ -789,7 +851,7 @@ void ExecuteScene() {
                     if (cond->repeat == 0) {
                         // Execute scene only 1 time
                         time_t currentEpochTime = time(NULL);
-                        if (currentEpochTime >= cond->schMinutes) {
+                        if (currentEpochTime - cond->schMinutes >= 0 && currentEpochTime - cond->schMinutes < 60) {
                             cond->timeReached = 1;
                             if (scene->type == SceneTypeOneOfConds) {
                                 if (checkScenePrecondition(scene)) {
@@ -1168,6 +1230,8 @@ int main(int argc, char ** argv)
                         if (foundDevices == 1) {
                             Db_DeleteDevice(deviceInfo.id);
                             Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
+                            DeleteDeviceFromGroups(deviceInfo.id);
+                            DeleteDeviceFromScenes(deviceInfo.id);
                         }
                         break;
                     }
@@ -1338,6 +1402,8 @@ int main(int argc, char ** argv)
                             JSON_SetText(payload, "devicePid", deviceInfo.pid);
                             sendPacketToBle(deviceInfo.gwIndex, TYPE_DEL_DEVICE, payload);
                             Db_DeleteDevice(deviceId);
+                            DeleteDeviceFromGroups(deviceId);
+                            DeleteDeviceFromScenes(deviceId);
                             JSON_SetNumber(payload, "eventType", EV_DEVICE_DELETED);
                             Db_AddDeviceHistory(payload);
                             logInfo("Delete deviceId: %s", deviceId);
@@ -1933,28 +1999,7 @@ bool Scene_GetFullInfo(JSON* packet) {
         } else if (StringCompare(actionExecutor, "ruleDisable")) {
             JSON_SetNumber(action, "dpValue", 0);
         } else if (StringCompare(actionExecutor, "deviceGroupDpIssue")) {
-            int dpId = 0, dpValue = 0;
-            JSON_ForEach(o, executorProperty) {
-                dpId = atoi(o->string);
-                dpValue = o->valueint;
-            }
-            if (dpId == 20) {
-                JSON_SetText(action, "entityAddr", JSON_GetText(action, "entityID"));
-                JSON_SetText(action, "dpAddr", JSON_GetText(action, "entityID"));
-                JSON_SetNumber(action, "dpId", 20);
-                JSON_SetNumber(action, "dpValue", dpValue);
-                // Get all devices in this group
-                JSON* devices = Db_FindDevicesInGroup(entityId);
-                JSON_ForEach(d, devices) {
-                    JSON* newAction = JArr_CreateObject(newActionsArray);
-                    JSON_SetText(newAction, "entityId", JSON_GetText(d, "deviceId"));
-                    JSON_SetText(newAction, "entityAddr", JSON_GetText(d, "deviceAddr"));
-                    JSON_SetText(newAction, "pid", JSON_GetText(d, "pid"));
-                    JSON_SetNumber(newAction, "dpId", dpId);
-                    JSON_SetNumber(newAction, "dpValue", dpValue);
-                }
-                JSON_Delete(devices);
-            }
+
         } else if (StringCompare(actionExecutor, "irHGBLE")) {
             DeviceInfo deviceInfo;
             int foundDevices = Db_FindDevice(&deviceInfo, entityId);
@@ -1973,11 +2018,23 @@ bool Scene_GetFullInfo(JSON* packet) {
                 JSON_SetText(action, "entityAddr", deviceInfo.addr);
                 JSON_SetText(action, "hcAddr", deviceInfo.hcAddr);
                 int dpId = 0, dpValue = 0;
-                JSON_ForEach(o, executorProperty) {
-                    dpId = atoi(o->string);
-                    dpValue = o->valueint;
-                    if ((dpId == 21 && StringContains(o->valuestring, "scene_")) || dpId == 24) {
-                        break;
+                if (StringCompare(deviceInfo.pid, HG_BLE_LIGHT_WHITE)) {
+                    dpId = 20;
+                } else if (StringContains(RD_BLE_LIGHT_RGB, deviceInfo.pid)) {
+                    if (JSON_HasKey(executorProperty, "21")) {
+                        char* value = JSON_GetText(executorProperty, "21");
+                        if (StringContains(value, "scene_")) {
+                            dpId = 21;
+                        } else {
+                            dpId = 20;
+                        }
+                    } else {
+                        dpId = 20;
+                    }
+                } else {
+                    JSON_ForEach(o, executorProperty) {
+                        dpId = atoi(o->string);
+                        dpValue = o->valueint;
                     }
                 }
                 DpInfo dpInfo;

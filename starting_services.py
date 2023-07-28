@@ -52,6 +52,20 @@ def getMasterIp():
             print('Timeout. Trying again')
     sock.close()
 
+def removeOldLogs(folder):
+    now = time.time()
+    cutoff = now - (14 * 86400)
+    files = os.listdir(folder)
+    file_path = os.path.join(get_file_directory(__file__), "logs/")
+    for f in files:
+        if os.path.isfile(folder + "/" + f):
+            t = os.stat(folder + "/" + f)
+            c = t.st_ctime
+
+            # delete file if older than 14 days
+            if c < cutoff:
+                os.remove(folder + "/" + f)
+
 def main():
     # Create logs folder if not exist
     logsPath = "/home/szbaijie/hc_bin/logs/"
@@ -67,6 +81,12 @@ def main():
         os.makedirs(logsPath + "cfg")
     if not os.path.exists(logsPath + "ota"):
         os.makedirs(logsPath + "ota")
+
+    removeOldLogs(logsPath + "aws")
+    removeOldLogs(logsPath + "core")
+    removeOldLogs(logsPath + "ble")
+    removeOldLogs(logsPath + "cfg")
+    removeOldLogs(logsPath + "tuya")
 
     # Check if this HC is master or slave
     f = open("app.json", "r")

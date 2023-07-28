@@ -165,6 +165,18 @@ void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex) {
     sendToServicePageIndex(SERVICE_AWS, GW_RESP_ONOFF_STATE, pageIndex, payload);
 }
 
+void Aws_DeleteGroup(const char* groupAddr) {
+    ASSERT(groupAddr);
+    char sqlCmd[100];
+    sprintf(sqlCmd, "SELECT pageIndex FROM group_inf WHERE groupAdress = '%s';", groupAddr);
+    Sql_Query(sqlCmd, row) {
+        int pageIndex = sqlite3_column_int(row, 0);
+        char payload[200];
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_UPDATE_GROUP_LIGHT, SENDER_HC_TO_CLOUD, groupAddr);
+        sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
+    }
+}
+
 void Aws_UpdateGroupValue(const char* groupAddr, int dpId, int dpValue) {
     ASSERT(groupAddr);
     DeviceInfo deviceInfo;
@@ -177,6 +189,32 @@ void Aws_UpdateGroupValue(const char* groupAddr, int dpId, int dpValue) {
     }
 }
 
+void Aws_SaveGroupDevices(const char* groupAddr) {
+    ASSERT(groupAddr);
+    char sqlCmd[100];
+    sprintf(sqlCmd, "SELECT devices, pageIndex FROM group_inf WHERE groupAdress = '%s';", groupAddr);
+    Sql_Query(sqlCmd, row) {
+        char* devices = sqlite3_column_text(row, 0);
+        int pageIndex = sqlite3_column_int(row, 1);
+        char* payload = malloc(StringLength(devices) + 200);
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"devices\":%s}}}}", TYPE_UPDATE_GROUP_LIGHT, SENDER_HC_TO_CLOUD, groupAddr, devices);
+        sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
+        free(payload);
+    }
+}
+
+void Aws_DeleteScene(const char* sceneId) {
+    ASSERT(sceneId);
+    JSON* sceneInfo = Db_FindScene(sceneId);
+    if (sceneInfo) {
+        int pageIndex = JSON_GetNumber(sceneInfo, "pageIndex");
+        char payload[200];
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_UPDATE_SCENE, SENDER_HC_TO_CLOUD, sceneId);
+        sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_SCENE, pageIndex, payload);
+    }
+    JSON_Delete(sceneInfo);
+}
+
 void Aws_EnableScene(const char* sceneId, bool state) {
     ASSERT(sceneId);
     JSON* sceneInfo = Db_FindScene(sceneId);
@@ -184,6 +222,25 @@ void Aws_EnableScene(const char* sceneId, bool state) {
         int pageIndex = JSON_GetNumber(sceneInfo, "pageIndex");
         char payload[200];
         sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%s}}}}", TYPE_UPDATE_SCENE, SENDER_HC_TO_CLOUD, sceneId, state?"true":"false");
+        sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_SCENE, pageIndex, payload);
+    }
+    JSON_Delete(sceneInfo);
+}
+
+void Aws_SaveScene(const char* sceneId) {
+    ASSERT(sceneId);
+    char sqlCmd[100];
+    sprintf(sqlCmd, "SELECT actions, conditions, pageIndex FROM scene_inf WHERE sceneId='%s';", sceneId);
+    Sql_Query(sqlCmd, row) {
+        char* actions = sqlite3_column_text(row, 0);
+        char* conditions = sqlite3_column_text(row, 1);
+        int pageIndex = sqlite3_column_int(row, 2);
+        char* payload = malloc(StringLength(actions) + StringLength(conditions) + 200);
+        if (conditions) {
+            sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"actions\":%s, \"conditions\":%s}}}}", TYPE_UPDATE_SCENE, SENDER_HC_TO_CLOUD, sceneId, actions, conditions);
+        } else {
+            sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"actions\":%s, \"conditions\":null}}}}", TYPE_UPDATE_SCENE, SENDER_HC_TO_CLOUD, sceneId, actions);
+        }
         sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_SCENE, pageIndex, payload);
     }
 }

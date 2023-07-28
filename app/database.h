@@ -124,6 +124,7 @@ typedef struct {
 
 extern Scene* g_sceneList;
 extern int g_sceneCount;
+extern sqlite3* db;
 
 #define Sql_Query(sqlCmd, row)    int rc = 0; sqlite3_stmt *row; rc = sqlite3_prepare_v2(db, sqlCmd, -1, &row, NULL); while (sqlite3_step(row) == SQLITE_ROW)
 #define Sql_Exec(sqlCmd)    { char *err_msg; if (sqlite3_exec(db, sqlCmd, 0, 0, &err_msg) != SQLITE_OK) { logError("SQL Error: %s, %s", sqlCmd, err_msg); sqlite3_free(err_msg); return 0; }}
@@ -165,6 +166,7 @@ int Db_DeleteScene(const char* sceneId);
 int Db_DeleteAllScene();
 int Db_EnableScene(const char* sceneId, int enableOrDisable);
 int Db_RemoveSceneAction(const char* sceneId, const char* deviceAddr);
+int Db_SaveScene(const char* sceneId, JSON* actions, JSON* conditions);
 
 int Db_AddDeviceHistory(JSON* packet);
 JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char* deviceId, char* dpIds, int causeType, int eventType, int limit);

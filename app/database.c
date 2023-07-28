@@ -4,8 +4,6 @@
 #include <stdlib.h>
 #include <common.h>
 
-extern sqlite3* db;
-
 bool open_database(const char *filename, sqlite3 **db)
 {
     int rc = sqlite3_open(filename, db);
@@ -492,6 +490,7 @@ int Db_LoadSceneToRam() {
                                 if (tmp->count == 2) {
                                     uint8_t value = atoi(tmp->items[1]);
                                     action->dpValues[action->dpCount] = value;
+                                    break;
                                 }
                                 List_Delete(tmp);
                             } else {
@@ -499,7 +498,10 @@ int Db_LoadSceneToRam() {
                             }
                         } else {
                             action->valueType = ValueTypeString;
+                            action->dpIds[0] = action->dpIds[action->dpCount];
+                            action->dpCount = 1;
                             StringCopy(action->valueString, o->valuestring);
+                            break;
                         }
                     }
                     action->dpCount++;
@@ -750,6 +752,23 @@ int Db_RemoveSceneAction(const char* sceneId, const char* deviceAddr) {
     }
     return 0;
 }
+
+
+int Db_SaveScene(const char* sceneId, JSON* actions, JSON* conditions) {
+    ASSERT(sceneId);
+    ASSERT(actions);
+    ASSERT(conditions);
+    char* actionStr = cJSON_PrintUnformatted(actions);
+    char* conditionStr = cJSON_PrintUnformatted(conditions);
+    char* sqlCmd = malloc(StringLength(actionStr) + StringLength(conditionStr) + 500);
+    if (JArr_Count(conditions) == 0) {
+        sprintf(sqlCmd, "UPDATE scene_inf SET actions='%s', conditions=NULL WHERE sceneId='%s'", actionStr, sceneId);
+    } else {
+        sprintf(sqlCmd, "UPDATE scene_inf SET actions='%s', conditions='%s' WHERE sceneId='%s'", actionStr, conditionStr, sceneId);
+    }
+    Sql_Exec(sqlCmd);
+}
+
 
 int Db_AddDeviceHistory(JSON* packet) {
     long long time = timeInMilliseconds();

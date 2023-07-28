@@ -1114,7 +1114,7 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         return GW_RESP_ONOFF_STATE;
     } else if (frame->opcode == 0x800E && frame->paramSize >= 1) {
         return GW_RESPONSE_SET_TTL;
-    } else if (frame->opcode == 0xE511 && frame->paramSize >= 9 && frame->param[0] == 0x02) {
+    } else if (frame->opcode == 0xE511 && frame->paramSize >= 6 && frame->param[0] == 0x02) {
         return GW_RESPONSE_IR;
     }
 

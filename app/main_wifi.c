@@ -180,20 +180,29 @@ int main( int argc,char ** argv )
             char* deviceID = JSON_GetText(payload, "deviceId");
             char* code = JSON_GetText(payload, "code");
             long long currentTime = timeInMilliseconds();
-            if((currentTime - GetAccessTokenTime)/1000/60 >= MaxTimeGetToken_Second)
-            {
-                do
-                {
-                    check_flag = refresh_token(access_token_refresh,access_token);
-                    if(!check_flag){
-                        logError("Not get access token!!!");
+            int failedCount = 0;
+            logInfo("Getting new access token");
+            if ((currentTime - GetAccessTokenTime)/1000/60 >= MaxTimeGetToken_Second) {
+                do {
+                    check_flag = get_access_token(access_token, access_token_refresh);
+                    if(!check_flag) {
+                        failedCount++;
+                        logError("Cannot get access token!!!");
+                    }
+                    if (failedCount > 3) {
+                        break;
                     }
                     sleep(1);
                 } while (!check_flag);
-                GetAccessTokenTime = timeInMilliseconds();
-                logInfo("GetAccessTokenTime = %lld", GetAccessTokenTime);
-                logInfo("refresh_token = %s", access_token);
-                logInfo("refresh_token = %s", access_token_refresh);
+
+                if (failedCount == 0) {
+                    GetAccessTokenTime = timeInMilliseconds();
+                    logInfo("GetAccessTokenTime = %lld", GetAccessTokenTime);
+                    logInfo("refresh_token = %s", access_token);
+                    logInfo("refresh_token = %s", access_token_refresh);
+                } else {
+                    GetAccessTokenTime += 60000;
+                }
             }
 
             switch(type_action_t)
