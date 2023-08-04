@@ -197,11 +197,11 @@ void BLE_ReceivePacket() {
         }
         StringCopy(givenStr, (char *)Hex2String(rcv_uart_buff, len_uart));
         enqueue(g_bleFrameQueue, givenStr);
-        if (!StringContains(givenStr, "82048201")) {
+        // if (!StringContains(givenStr, "82048201")) {
             // Don't print log for getting device state actively
             printInfo("\n\r");
             logInfo("Received from UART2: %s", givenStr);
-        }
+        // }
     }
 }
 
@@ -278,9 +278,9 @@ void Ble_ProcessPacket()
                             JSON_SetText(packet, "deviceAddr", str);
                             JSON_SetText(packet, "dpAddr", str);
                             JSON_SetNumber(packet, "dpValue", bleFrames[i].param[3 + d]);
-                            g_printLog = false;
+                            // g_printLog = false;
                             sendPacketTo(SERVICE_CORE, frameType, packet);
-                            g_printLog = true;
+                            // g_printLog = true;
                             JSON_Delete(packet);
                         }
                     } else if (bleFrames[i].paramSize > 2) {
@@ -289,7 +289,7 @@ void Ble_ProcessPacket()
                         JSON_SetText(packet, "hcAddr", g_hcAddr);
                         uint16_t opcode = bleFrames[i].param[0];
                         opcode = (opcode << 8) | bleFrames[i].param[1];
-                        uint8_t dpValue = bleFrames[i].param[2]? 1 : 0;
+                        uint8_t dpValue = bleFrames[i].param[2];
                         JSON_SetNumber(packet, "opcode", opcode);
                         JSON_SetText(packet, "deviceAddr", tmp->address_element);
                         JSON_SetText(packet, "dpAddr", tmp->address_element);
@@ -341,6 +341,22 @@ void Ble_ProcessPacket()
                     }
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
+                    break;
+                }
+                case GW_RESPONSE_RGB_COLOR: {
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    char color[14];
+                    sprintf(color, "%02x%02x%02x%02x%02x%02x", bleFrames[i].param[3], bleFrames[i].param[2], bleFrames[i].param[5], bleFrames[i].param[4], bleFrames[i].param[7], bleFrames[i].param[6]);
+                    // color[0] = bleFrames[i].param[3];
+                    // color[1] = bleFrames[i].param[2];
+                    // color[2] = bleFrames[i].param[5];
+                    // color[3] = bleFrames[i].param[4];
+                    // color[4] = bleFrames[i].param[7];
+                    // color[5] = bleFrames[i].param[6];
+                    JSON_SetText(packet, "color", color);
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
                     break;
                 }
                 case GW_RESPONSE_SMOKE_SENSOR: {
@@ -403,7 +419,7 @@ void Ble_ProcessPacket()
                         JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]);
                     } else {
                         JSON_SetNumber(packet, "dpId", TYPE_DPID_DOOR_SENSOR_DETECT);
-                        JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]? 0 : 1);
+                        JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]);
                     }
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     JSON_Delete(packet);
@@ -752,51 +768,54 @@ int main( int argc,char ** argv )
                     cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
                     int lightness = -1, colorTemperature = -1;
                     int irCommandType = 0, irBrandId = 0, irRemoteId = 0, irTemp = 0, irMode = 0, irFan = 0, irSwing = 1;
+                    bool sendCmdDirectlyFromApp = false;
                     JSON_ForEach(o, dictDPs) {
                         int dpId = JSON_GetNumber(o, "id");
-                        dpAddr = JSON_GetText(o, "addr");
-                        int dpValue = JSON_GetNumber(o, "value");
-                        if (StringContains(HG_BLE_SWITCH, pid)) {
-                            GW_HgSwitchOnOff(dpAddr, dpValue);
-                        } else if (StringContains(HG_BLE_CURTAIN, pid) || dpId == 20) {
-                            GW_CtrlLightOnOff(dpAddr, dpValue);
-                        } else if (dpId == 24) {
-                            char* valueString = JSON_GetText(o, "valueString");
-                            GW_SetLightHSL(dpAddr, valueString);
-                        } else if (dpId == 21 && dpValue >= 0) {
-                            GW_SetRGBLightBlinkMode(dpAddr, dpValue);
-                        } else if (dpId == 22) {
-                            lightness = dpValue;
-                            // GW_SetLightness(dpAddr, dpValue);
-                        } else if (dpId == 23) {
-                            colorTemperature = dpValue;
-                            // GW_SetLightColor(dpAddr, dpValue);
-                        } else if (dpId == 3) {
-                            irCommandType = dpValue;
-                            logInfo("[TYPE_CTR_DEVICE] CommandType = %d", irCommandType);
-                        } else if (dpId == 1) {
-                            irBrandId = dpValue;
-                            logInfo("[TYPE_CTR_DEVICE] BrandId = %d", irBrandId);
-                        } else if (dpId == 2) {
-                            irRemoteId = dpValue;
-                            logInfo("[TYPE_CTR_DEVICE] RemoteId = %d", irRemoteId);
-                        } else if (dpId == 103) {
-                            irTemp = dpValue;
-                            logInfo("[TYPE_CTR_DEVICE] TempOrParam = %d", irTemp);
-                        } else if (dpId == 102) {
-                            irMode = dpValue;
-                            logInfo("[TYPE_CTR_DEVICE] Mode = %d", irMode);
-                        } else if (dpId == 104) {
-                            irFan = dpValue;
-                            logInfo("[TYPE_CTR_DEVICE] Fan = %d", irFan);
-                        } else if (dpId == 105) {
-                            irSwing = dpValue;
-                            logInfo("[TYPE_CTR_DEVICE] Swing = %d", irSwing);
-                        } else if (dpId == 106 || dpId == 101) { //add condition dpId == 101 for CTL IR_TV
+                        if (dpId == 106) {   // dpId == 106 for sending BLE commands from app
                             char* command = JSON_GetText(o, "valueString");
-                            if (StringCompare(pid, HG_BLE_IR)) {
-                                GW_ControlIRCmd(command);
-                            } else {
+                            GW_ControlIRCmd(command);
+                            sendCmdDirectlyFromApp = true;
+                        } else {
+                            dpAddr = JSON_GetText(o, "addr");
+                            int dpValue = JSON_GetNumber(o, "value");
+                            if (StringContains(HG_BLE_SWITCH, pid)) {
+                                GW_HgSwitchOnOff(dpAddr, dpValue);
+                            } else if (StringContains(HG_BLE_CURTAIN, pid) || dpId == 20) {
+                                GW_CtrlLightOnOff(dpAddr, dpValue);
+                            } else if (dpId == 24) {
+                                char* valueString = JSON_GetText(o, "valueString");
+                                GW_SetLightHSL(dpAddr, valueString);
+                            } else if (dpId == 21 && dpValue >= 0) {
+                                GW_SetRGBLightBlinkMode(dpAddr, dpValue);
+                            } else if (dpId == 22) {
+                                lightness = dpValue;
+                                // GW_SetLightness(dpAddr, dpValue);
+                            } else if (dpId == 23) {
+                                colorTemperature = dpValue;
+                                // GW_SetLightColor(dpAddr, dpValue);
+                            } else if (dpId == 3) {
+                                irCommandType = dpValue;
+                                logInfo("[TYPE_CTR_DEVICE] CommandType = %d", irCommandType);
+                            } else if (dpId == 1) {
+                                irBrandId = dpValue;
+                                logInfo("[TYPE_CTR_DEVICE] BrandId = %d", irBrandId);
+                            } else if (dpId == 2) {
+                                irRemoteId = dpValue;
+                                logInfo("[TYPE_CTR_DEVICE] RemoteId = %d", irRemoteId);
+                            } else if (dpId == 103) {
+                                irTemp = dpValue;
+                                logInfo("[TYPE_CTR_DEVICE] TempOrParam = %d", irTemp);
+                            } else if (dpId == 102) {
+                                irMode = dpValue;
+                                logInfo("[TYPE_CTR_DEVICE] Mode = %d", irMode);
+                            } else if (dpId == 104) {
+                                irFan = dpValue;
+                                logInfo("[TYPE_CTR_DEVICE] Fan = %d", irFan);
+                            } else if (dpId == 105) {
+                                irSwing = dpValue;
+                                logInfo("[TYPE_CTR_DEVICE] Swing = %d", irSwing);
+                            } else if (dpId == 101) {   // dpId == 101 for CTL IR_TV
+                                char* command = JSON_GetText(o, "valueString");
                                 irTemp = atoi(command);
                                 logInfo("[TYPE_CTR_DEVICE] irTemp = %d", irTemp);
                             }
@@ -805,7 +824,7 @@ int main( int argc,char ** argv )
                     if (lightness >= 0 && colorTemperature >= 0) {
                         GW_SetLightnessTemperature(dpAddr, lightness, colorTemperature);
                     }
-                    if (irCommandType > 0 && irBrandId > 0 && irRemoteId > 0) {
+                    if (irCommandType > 0 && irBrandId > 0 && irRemoteId > 0 && sendCmdDirectlyFromApp == false) {
                         GW_ControlIR(dpAddr, irCommandType, irBrandId, irRemoteId, irTemp, irMode, irFan, irSwing);
                     }
                     break;
@@ -827,7 +846,7 @@ int main( int argc,char ** argv )
                         } else if (dpId == 24) {
                             char* valueString = JSON_GetText(o, "valueString");
                             GW_SetLightHSL(dpAddr, valueString);
-                        } else if (dpId == 21) {
+                        } else if (StringContains(RD_BLE_LIGHT_RGB, pid) && dpId == 21) {
                             GW_SetRGBLightBlinkMode(dpAddr, dpValue);
                         } else if (dpId == 22) {
                             GW_SetLightness(dpAddr, dpValue);
@@ -972,7 +991,8 @@ int main( int argc,char ** argv )
                     // int gwIndex = JSON_GetNumber(payload, "gwIndex");
                     if (deviceAddr && !StringCompare(pid, HG_BLE_IR_TV) &&
                                       !StringCompare(pid, HG_BLE_IR_FAN) &&
-                                      !StringCompare(pid, HG_BLE_IR_AC)) {
+                                      !StringCompare(pid, HG_BLE_IR_AC) &&
+                                      !StringCompare(pid, HG_BLE_IR_REMOTE)) {
                         GW_DeleteDevice(deviceAddr);
                         logInfo("Deleted deviceId: %s, address: %s", deviceId, deviceAddr);
                     }

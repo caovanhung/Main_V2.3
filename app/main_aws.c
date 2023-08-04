@@ -933,7 +933,11 @@ void Mosq_ProcessMessage() {
                     }
                     int dpId = JSON_GetNumber(payload, "dpId");
                     sprintf(str, "%d", dpId);
-                    JSON_SetNumber(dictDPs, str, JSON_GetNumber(payload, "dpValue"));
+                    if (dpId == 24) {
+                        JSON_SetText(dictDPs, str, JSON_GetText(payload, "dpValue"));
+                    } else {
+                        JSON_SetNumber(dictDPs, str, JSON_GetNumber(payload, "dpValue"));
+                    }
                 }
                 break;
             }
@@ -1077,17 +1081,6 @@ int main( int argc,char ** argv ) {
                     provider = JSON_GetNumber(reported, "provider");
                 }
                 switch(reqType) {
-                    // case TYPE_ADD_GW: {
-                    //     JSON* gw = JSON_GetObject(reported, "gateWay");
-                    //     JSON_ForEach(o, gw) {
-                    //         if (cJSON_IsObject(o)) {
-                    //             JSON_SetText(o, "address1", JSON_GetText(o, "gateway1"));
-                    //             JSON_SetText(o, "address2", JSON_GetText(o, "gateway2"));
-                    //             sendPacketTo(SERVICE_CORE, reqType, o);
-                    //         }
-                    //     }
-                    //     break;
-                    // }
                     case TYPE_ADD_DEVICE:
                     case TYPE_CTR_DEVICE:
                     case TYPE_DEL_DEVICE:

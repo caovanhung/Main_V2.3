@@ -70,7 +70,7 @@ bool addNewDevice(JSON* packet) {
         JSON_SetText(packet, KEY_PID, pid);
         JSON_SetText(packet, "devicePid", pid);
         Db_AddDevice(packet);
-        bool addressIncrement = StringContains(HG_BLE_SWITCH, pid)? true : false;
+        bool addressIncrement = StringContains(HG_BLE_SWITCH, pid) || StringContains(HG_BLE_CURTAIN, pid)? true : false;
         // Calculate addresses of dps for Homegy switch
         char dpAddrStr[5];
         StringCopy(dpAddrStr, deviceAddr);
@@ -90,7 +90,8 @@ bool addNewDevice(JSON* packet) {
 
         if (StringCompare(pid, HG_BLE_IR_AC) ||
             StringCompare(pid, HG_BLE_IR_TV) ||
-            StringCompare(pid, HG_BLE_IR_FAN)) {
+            StringCompare(pid, HG_BLE_IR_FAN) ||
+            StringCompare(pid, HG_BLE_IR_REMOTE)) {
             Db_AddDp(deviceId, 3, deviceAddr, pageIndex);
             JSON* dictDPs = JSON_GetObject(packet, "dictDPs");
             JSON_ForEach(dp, dictDPs) {
@@ -230,6 +231,7 @@ void DeleteDeviceFromScenes(const char* deviceId) {
 
         JSON_Delete(newActions);
     }
+    Db_LoadSceneToRam();
 }
 
 
@@ -807,6 +809,17 @@ void ExecuteScene() {
                                     JSON_SetNumber(packet, "dpValue", g_sceneList[s].conditions[0].dpValue);
                                 }
                                 sendPacketToBle(-1, TYPE_CTR_SCENE, packet);
+                                if (runningAction->dpValues[0] == 0) {
+                                    // Disable scene
+                                    Db_EnableScene(runningAction->entityId, 0);
+                                    Aws_EnableScene(runningAction->entityId, 0);
+                                    g_sceneList[s].isEnable = 0;
+                                } else if (runningAction->dpValues[0] == 1) {
+                                    // Enable scene
+                                    Db_EnableScene(runningAction->entityId, 1);
+                                    Aws_EnableScene(runningAction->entityId, 1);
+                                    g_sceneList[s].isEnable = 1;
+                                }
                                 JSON_Delete(packet);
                             }
                             break;
@@ -980,7 +993,7 @@ int main(int argc, char ** argv)
         Mosq_ProcessLoop();
         ResponseWaiting();
         ExecuteScene();
-        GetDeviceStatusInterval();
+        // GetDeviceStatusInterval();
 
         size_queue = get_sizeQueue(queue_received);
         if (size_queue > 0) {
@@ -1012,25 +1025,46 @@ int main(int argc, char ** argv)
                 switch (reqType) {
                     case GW_RESPONSE_LIGHT_RD_CONTROL: {
                         char* deviceAddr = JSON_GetText(payload, "deviceAddr");
-                        int dpId = 22;
-                        uint16_t value = 0;
-                        if (JSON_HasKey(payload, "lightness")) {
-                            dpId = 22;
-                            value = JSON_GetNumber(payload, "lightness");
-                        } else {
-                            dpId = 23;
-                            value = JSON_GetNumber(payload, "color");
-                        }
 
+                        for (int dpId = 22; dpId <= 23; dpId++) {
+                            uint16_t value = 0xFFFF;
+                            if (dpId == 22 && JSON_HasKey(payload, "lightness")) {
+                                value = JSON_GetNumber(payload, "lightness");
+                            }
+                            if (dpId == 23 && JSON_HasKey(payload, "color")) {
+                                value = JSON_GetNumber(payload, "color");
+                            }
+
+                            if (value != 0xFFFF) {
+                                DpInfo dpInfo;
+                                DeviceInfo deviceInfo;
+                                int foundDps = Db_FindDpByAddrAndDpId(&dpInfo, deviceAddr, dpId);
+                                if (foundDps == 1) {
+                                    int foundDevices = Db_FindDevice(&deviceInfo, dpInfo.deviceId);
+                                    if (foundDevices == 1) {
+                                        Db_SaveDpValue(dpInfo.deviceId, dpId, value);
+                                        Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
+                                        Aws_SaveDpValue(dpInfo.deviceId, dpId, value, dpInfo.pageIndex);
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                    case GW_RESPONSE_RGB_COLOR: {
+                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                        char* hcAddr = JSON_GetText(payload, "hcAddr");
+                        char* color = JSON_GetText(payload, "color");
+                        int dpId = 24;
                         DpInfo dpInfo;
                         DeviceInfo deviceInfo;
                         int foundDps = Db_FindDpByAddrAndDpId(&dpInfo, deviceAddr, dpId);
                         if (foundDps == 1) {
                             int foundDevices = Db_FindDevice(&deviceInfo, dpInfo.deviceId);
                             if (foundDevices == 1) {
-                                Db_SaveDpValue(dpInfo.deviceId, dpId, value);
+                                Db_SaveDpValueString(dpInfo.deviceId, dpId, color);
                                 Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
-                                Aws_SaveDpValue(dpInfo.deviceId, dpId, value, dpInfo.pageIndex);
+                                Aws_SaveDpValueString(dpInfo.deviceId, dpId, color, dpInfo.pageIndex);
                             }
                         }
                         break;
@@ -1159,10 +1193,13 @@ int main(int argc, char ** argv)
                             // Command learning response
                             char* respCmd = JSON_GetText(payload, "respCmd");
                             char sql[500];
-                            sprintf(sql, "SELECT deviceId FROM devices_inf WHERE unicast='%s' AND pid='%s'", deviceAddr, HG_BLE_IR);
+                            sprintf(sql, "SELECT deviceId, pid FROM devices_inf WHERE unicast='%s'", deviceAddr, HG_BLE_IR);
                             Sql_Query(sql, row) {
                                 char* deviceId = sqlite3_column_text(row, 0);
-                                Aws_ResponseLearningIR(deviceId, respCmd);
+                                char* pid = sqlite3_column_text(row, 1);
+                                if (!StringCompare(pid, HG_BLE_IR_AC) && !StringCompare(pid, HG_BLE_IR_TV) && !StringCompare(pid, HG_BLE_IR_FAN) && !StringCompare(pid, HG_BLE_IR_REMOTE)) {
+                                    Aws_ResponseLearningIR(deviceId, respCmd);
+                                }
                             }
                         }
                         break;

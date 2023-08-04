@@ -900,6 +900,7 @@ bool GW_CtrlLightOnOff(const char *deviceAddr, uint8_t onoff) {
 
 bool GW_SetLightness(const char *deviceAddr, int lightness) {
     ASSERT(deviceAddr);
+    logInfo("GW_SetLightness: deviceAddr = %s, color = %d", deviceAddr, lightness);
     lightness = lightness * 0xFFFF / 1000;   // value of lightness is in range 0 - 1000, so we need to convert to range 0 - 0xFFFF
     uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00, 0x00, 0x00,  0xff,0xff,  0x82,0x4c, 0x00,0x00};
     long int dpAddrHex = strtol(deviceAddr, NULL, 16);
@@ -914,6 +915,7 @@ bool GW_SetLightness(const char *deviceAddr, int lightness) {
 
 bool GW_SetLightColor(const char *deviceAddr, int color) {
     ASSERT(deviceAddr);
+    logInfo("GW_SetLightColor: deviceAddr = %s, color = %d", deviceAddr, color);
     color = 800 + (20000 - 800) * color / 1000;
     uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00, 0x00, 0x00,  0xff,0xff,  0x82,0x64, 0x00,0x00};
     long int dpAddrHex = strtol(deviceAddr, NULL, 16);
@@ -1080,6 +1082,9 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     } else if (frame->opcode == 0x8260 && frame->paramSize >= 7) {
         // Response of lightness and temperature of light
         return GW_RESPONSE_LIGHT_RD_CONTROL;
+    } else if (frame->opcode == 0x8278 && frame->paramSize >= 8) {
+        // Response of lightness and temperature of light
+        return GW_RESPONSE_RGB_COLOR;
     } else if(frame->opcode == 0x5208 && frame->paramSize >= 3 && frame->param[0] == 0x01) {
         // Smoke sensor
         return GW_RESPONSE_SMOKE_SENSOR;
@@ -1096,6 +1101,9 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
         // Door sensor hanging detect
         return GW_RESPONSE_SENSOR_DOOR_ALARM;
     } else if(frame->opcode == 0x5205 && frame->paramSize >= 2 && frame->param[0] == 0x00) {
+        // PIR sensor human detect
+        return GW_RESPONSE_SENSOR_PIR_DETECT;
+    } else if(frame->opcode == 0x5205 && frame->paramSize >= 2 && frame->param[0] == 0x01) {
         // PIR sensor human detect
         return GW_RESPONSE_SENSOR_PIR_DETECT;
     } else if(frame->opcode == 0x5204 && frame->paramSize >= 3 && frame->param[0] == 0x00) {

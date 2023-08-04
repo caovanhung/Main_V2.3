@@ -66,10 +66,10 @@
 #define TYPE_DEL_SCENE_LC               (7U)
 #define TYPE_CTR_SCENE_LC               (8U)
 #define TYPE_UPDATE_DEVICE              (9U)
-#define TYPE_ADD_GROUP_LIGHT           (12U)
-#define TYPE_DEL_GROUP_LIGHT           (13U)
+#define TYPE_ADD_GROUP_LIGHT            (12U)
+#define TYPE_DEL_GROUP_LIGHT            (13U)
 #define TYPE_CTR_GROUP_NORMAL           (14U)
-#define TYPE_UPDATE_GROUP_LIGHT        (15U)
+#define TYPE_UPDATE_GROUP_LIGHT         (15U)
 //SWITCH
 #define TYPE_ADD_GROUP_LINK             (16U)
 #define TYPE_UPDATE_GROUP_LINK          (17U)
@@ -110,6 +110,7 @@
 #define GW_RESPONSE_SENSOR_DOOR_ALARM    (59U)
 #define GW_RESPONSE_GROUP                (60U)
 #define GW_RESPONSE_LIGHT_RD_CONTROL     (61U)
+#define GW_RESPONSE_RGB_COLOR            (86U)
 
 #define GW_RESPONSE_SENSOR_ENVIRONMENT_TEMPER   ( 62U )
 #define GW_RESPONSE_SENSOR_ENVIRONMENT_HUMIDITY ( 63U )
@@ -306,6 +307,7 @@
 #define HG_BLE_IR_TV            "BLEHGAA0302"
 #define HG_BLE_IR_FAN           "BLEHGAA0303"
 #define HG_BLE_IR_AC            "BLEHGAA0304"
+#define HG_BLE_IR_REMOTE        "BLEHGAA0305"
 #define HG_BLE_IR_FULL          "BLEHGAA0301,BLEHGAA0302,BLEHGAA0303,BLEHGAA0304"
 
 #define HG_BLE_LIGHT_WHITE      "BLEHGAA0201"

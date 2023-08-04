@@ -165,6 +165,14 @@ void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex) {
     sendToServicePageIndex(SERVICE_AWS, GW_RESP_ONOFF_STATE, pageIndex, payload);
 }
 
+void Aws_SaveDpValueString(const char* deviceId, int dpId, const char* value, int pageIndex) {
+    ASSERT(deviceId);
+    ASSERT(value);
+    char payload[200];
+    sprintf(payload,"{\"deviceId\":\"%s\", \"state\":2, \"dpId\":%d, \"dpValue\":\"%s\"}", deviceId, dpId, value);
+    sendToServicePageIndex(SERVICE_AWS, GW_RESP_ONOFF_STATE, pageIndex, payload);
+}
+
 void Aws_DeleteGroup(const char* groupAddr) {
     ASSERT(groupAddr);
     char sqlCmd[100];
@@ -172,7 +180,7 @@ void Aws_DeleteGroup(const char* groupAddr) {
     Sql_Query(sqlCmd, row) {
         int pageIndex = sqlite3_column_int(row, 0);
         char payload[200];
-        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_UPDATE_GROUP_LIGHT, SENDER_HC_TO_CLOUD, groupAddr);
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_DEL_GROUP_LIGHT, SENDER_HC_TO_CLOUD, groupAddr);
         sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
     }
 }
@@ -292,7 +300,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
     DeviceInfo deviceInfo;
     int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
     if (foundDevices == 1) {
-        if (StringCompare(deviceInfo.pid, HG_BLE_IR_AC) || StringCompare(deviceInfo.pid, HG_BLE_IR_TV) || StringCompare(deviceInfo.pid, HG_BLE_IR_FAN)) {
+        if (StringCompare(deviceInfo.pid, HG_BLE_IR_AC) || StringCompare(deviceInfo.pid, HG_BLE_IR_TV) || StringCompare(deviceInfo.pid, HG_BLE_IR_FAN) || StringCompare(deviceInfo.pid, HG_BLE_IR_REMOTE)) {
             Ble_AddExtraDpsToIrDevices(deviceId, dictDPs);
         }
         JSON* p = JSON_CreateObject();
@@ -308,30 +316,37 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
                 }
                 List_Delete(tmp);
             }
-            DpInfo dpInfo;
-            int dpFound = Db_FindDp(&dpInfo, deviceId, dpId);
-            if (dpFound) {
+            if (dpId == 106) {
                 JSON* dp = JSON_CreateObject();
                 JSON_SetNumber(dp, "id", dpId);
-                JSON_SetText(dp, "addr", dpInfo.addr);
-                JSON_SetNumber(dp, "value", o->valueint);
                 JSON_SetText(dp, "valueString", o->valuestring);
                 cJSON_AddItemToArray(newDictDps, dp);
-                // Aws_SaveDpValue(deviceId, dpId, o->valueint, dpInfo.pageIndex);
-                if (causeId) {
-                    JSON* history = JSON_CreateObject();
-                    JSON_SetText(history, "deviceId", deviceId);
-                    JSON_SetNumber(history, "dpId", dpId);
-                    JSON_SetNumber(history, "dpValue", o->valueint);
-                    JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
-                    if (StringLength(causeId) > 10) {
-                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
-                    } else {
-                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
+            } else {
+                DpInfo dpInfo;
+                int dpFound = Db_FindDp(&dpInfo, deviceId, dpId);
+                if (dpFound) {
+                    JSON* dp = JSON_CreateObject();
+                    JSON_SetNumber(dp, "id", dpId);
+                    JSON_SetText(dp, "addr", dpInfo.addr);
+                    JSON_SetNumber(dp, "value", o->valueint);
+                    JSON_SetText(dp, "valueString", o->valuestring);
+                    cJSON_AddItemToArray(newDictDps, dp);
+                    // Aws_SaveDpValue(deviceId, dpId, o->valueint, dpInfo.pageIndex);
+                    if (causeId) {
+                        JSON* history = JSON_CreateObject();
+                        JSON_SetText(history, "deviceId", deviceId);
+                        JSON_SetNumber(history, "dpId", dpId);
+                        JSON_SetNumber(history, "dpValue", o->valueint);
+                        JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                        if (StringLength(causeId) > 10) {
+                            JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
+                        } else {
+                            JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
+                        }
+                        JSON_SetText(history, "causeId", causeId);
+                        Db_AddDeviceHistory(history);
+                        JSON_Delete(history);
                     }
-                    JSON_SetText(history, "causeId", causeId);
-                    Db_AddDeviceHistory(history);
-                    JSON_Delete(history);
                 }
             }
         }

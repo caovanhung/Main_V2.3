@@ -489,7 +489,9 @@ int Db_LoadSceneToRam() {
                                 List* tmp = String_Split(o->valuestring, "_");
                                 if (tmp->count == 2) {
                                     uint8_t value = atoi(tmp->items[1]);
-                                    action->dpValues[action->dpCount] = value;
+                                    action->dpIds[0] = 21;
+                                    action->dpValues[0] = value;
+                                    action->dpCount = 1;
                                     break;
                                 }
                                 List_Delete(tmp);
