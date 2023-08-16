@@ -52,6 +52,8 @@ bool Scene_GetFullInfo(JSON* packet);
 void SyncDevicesState();
 void GetDeviceStatusForScene(Scene* scene);
 void GetDeviceStatusForGroup(const char* deviceId, int dpId);
+void DeleteDeviceFromGroups(const char* deviceId);
+void DeleteDeviceFromScenes(const char* deviceId);
 
 bool addNewDevice(JSON* packet) {
     char* deviceStr = JSON_GetText(packet, "devices");
@@ -77,10 +79,13 @@ bool addNewDevice(JSON* packet) {
         uint8_t dpAddrMsb = strtol(&dpAddrStr[2], NULL, 16);
         dpAddrStr[2] = 0;
         uint16_t dpAddrLsb = strtol(dpAddrStr, NULL, 16);
+        uint16_t tmp = dpAddrMsb;
+        tmp = (tmp << 8) + dpAddrLsb;
 
         JSON_ForEach(dp, dictDPs) {
             int dpId = atoi(dp->string);
-            sprintf(dpAddrStr, "%02X%02d", dpAddrLsb + dpId - 1, dpAddrMsb);
+            uint16_t increasedAddr = tmp + dpId - 1;
+            sprintf(dpAddrStr, "%02X%02d", increasedAddr & 0x00FF, increasedAddr >> 8);
             if (addressIncrement) {
                 Db_AddDp(deviceId, dpId, dpAddrStr, pageIndex);
             } else {
@@ -184,6 +189,7 @@ void DeleteDeviceFromGroups(const char* deviceId) {
             // Delete group if there is no any devices in it
             Aws_DeleteGroup(groupAddr);
             Db_DeleteGroup(groupAddr);
+            DeleteDeviceFromScenes(groupAddr);
         } else if (JArr_Count(devices) != JArr_Count(newDevices)) {
             logInfo("Update devices for group %s", groupAddr);
             Db_SaveGroupDevices(groupAddr, newDevices);
@@ -223,6 +229,7 @@ void DeleteDeviceFromScenes(const char* deviceId) {
             logInfo("Delete scene %s because it has no any action", sceneId);
             Aws_DeleteScene(sceneId);
             Db_DeleteScene(sceneId);
+            DeleteDeviceFromScenes(sceneId);
         } else if (JArr_Count(actions) != JArr_Count(newActions) || JArr_Count(conditions) != JArr_Count(newConditions)) {
             logInfo("Update actions and conditions for scene %s", sceneId);
             Db_SaveScene(sceneId, newActions, newConditions);
@@ -698,7 +705,7 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                         (scene->conditions[c].valueType == ValueTypeString && StringCompare(scene->conditions[c].dpValueStr, dpValueStr))) {
                         if (scene->type == SceneTypeOneOfConds) {
                             if (checkScenePrecondition(scene)) {
-                                printInfo("      Satisfied. current value=%.0f, expect=%.0f", dpValue, scene->conditions[i].dpValue);
+                                printInfo("      Satisfied. current value=%.0f, expect=%.0f", dpValue, scene->conditions[c].dpValue);
                                 sendSceneRunEventToUser(scene, c);
                                 markSceneToRun(scene, NULL);
                                 break;
@@ -993,7 +1000,7 @@ int main(int argc, char ** argv)
         Mosq_ProcessLoop();
         ResponseWaiting();
         ExecuteScene();
-        // GetDeviceStatusInterval();
+        GetDeviceStatusInterval();
 
         size_queue = get_sizeQueue(queue_received);
         if (size_queue > 0) {
@@ -1013,10 +1020,10 @@ int main(int argc, char ** argv)
                 logInfo("Received message: %s", recvMsg);
             } else {
                 uint16_t opcode = JSON_HasKey(payload, "opcode")? JSON_GetNumber(payload, "opcode") : 0;
-                if (opcode != 0x8201) {
+                // if (opcode != 0x8201) {
                     printInfo("\n\r");
                     logInfo("Received message: %s", recvMsg);
-                }
+                // }
             }
             if (payload == NULL) {
                 logError("Payload is NULL");
@@ -1084,9 +1091,9 @@ int main(int argc, char ** argv)
                                 if (StringContains(HG_BLE_IR_FULL, deviceInfo.pid)) {
                                     SetOnlineStateForIRDevices(deviceInfo.addr, STATE_ONLINE, hcAddr, false);
                                 }
-                                if (opcode != 0x8201 || oldDpValue != dpValue || deviceInfo.state == STATE_OFFLINE) {
+                                // if (opcode != 0x8201 || oldDpValue != dpValue || deviceInfo.state == STATE_OFFLINE) {
                                     Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
-                                }
+                                // }
                                 Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
                                 Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
                                 JSON_SetText(payload, "deviceId", dpInfo.deviceId);
@@ -1571,6 +1578,7 @@ int main(int argc, char ** argv)
                                 logInfo("Deleted HC scene %s", sceneId);
                             }
                             Db_DeleteScene(sceneId);    // Delete scene from database
+                            DeleteDeviceFromScenes(sceneId);
                         }
                         JSON_Delete(sceneInfo);
                         break;
@@ -1743,6 +1751,7 @@ int main(int argc, char ** argv)
                         sendPacketToBle(-1, reqType, payload);
                         // Delete group information from database
                         Db_DeleteGroup(groupAddr);
+                        DeleteDeviceFromScenes(groupAddr);
                         break;
                     }
                     case TYPE_UPDATE_GROUP_LIGHT: {

@@ -353,7 +353,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
         sendPacketToBle(deviceInfo.gwIndex, TYPE_CTR_DEVICE, p);
         JSON_Delete(p);
     } else {
-        printf("Device %s is not found in the database\n", deviceId);
+        printInfo("Device %s is not found in the database\n", deviceId);
     }
 }
 

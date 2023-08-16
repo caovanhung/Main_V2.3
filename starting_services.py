@@ -2,6 +2,7 @@ import socket
 import sys
 import json
 import os
+import time
 
 def getIpAddress():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -53,10 +54,10 @@ def getMasterIp():
     sock.close()
 
 def removeOldLogs(folder):
+    print ("Removing logs file in folder " + folder)
     now = time.time()
     cutoff = now - (14 * 86400)
     files = os.listdir(folder)
-    file_path = os.path.join(get_file_directory(__file__), "logs/")
     for f in files:
         if os.path.isfile(folder + "/" + f):
             t = os.stat(folder + "/" + f)
@@ -101,6 +102,7 @@ def main():
             os.system("systemctl restart hg_cfg")
             os.system("systemctl restart hg_ble")
             os.system("systemctl restart hg_core")
+            time.sleep(1)
             os.system("systemctl restart hg_aws")
             os.system("systemctl restart hg_wifi")
             listenCommands()

@@ -794,6 +794,7 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
     JSON* histories = JSON_CreateObject();
     JSON_SetNumber(histories, "type", TYPE_GET_DEVICE_HISTORY);
     JSON_SetNumber(histories, "sender", SENDER_HC_TO_CLOUD);
+    JSON_SetText(histories, "deviceId", deviceId);
     char sqlCmd[500];
     char dpIdCondition[50] = "", causeTypeCondition[50] = "", eventTypeCondition[50] = "";
     if (dpIds && strlen(dpIds) > 0) {
@@ -814,7 +815,6 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
         JSON_SetNumber(r, "causeType",  sqlite3_column_int(row, 2));
         JSON_SetText  (r, "causeId",    sqlite3_column_text(row, 3));
         JSON_SetNumber(r, "eventType", sqlite3_column_int(row, 4));
-        JSON_SetText  (r, KEY_DEVICE_ID,   sqlite3_column_text(row, 5));
         JSON_SetNumber(r, KEY_DP_ID,       sqlite3_column_int(row, 6));
         JSON_SetText  (r, "dpValue",    sqlite3_column_text(row, 7));
     }

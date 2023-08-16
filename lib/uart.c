@@ -262,10 +262,10 @@ bool UART_Send(int fd, char *send_buf,int data_len)
         for (int i = 0; i < data_len; i++) {
             sprintf(&tmp[i*3], "%02X ", send_buf[i]);
         }
-        if (data_len != 13 || send_buf[10] != 0x82 || send_buf[11] != 0x01 || send_buf[12] != 0x01) {
+        // if (data_len != 13 || send_buf[10] != 0x82 || send_buf[11] != 0x01 || send_buf[12] != 0x01) {
             printInfo(" ");
             logInfo("Sent to UART%d: %s", g_uartSendingIdx, tmp);
-        }
+        // }
         return true;
     } else {
         tcflush(fd,TCOFLUSH);

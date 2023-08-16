@@ -70,7 +70,7 @@ char* Aws_GetTopic(AwsPageType pageType, int pageIndex, AwsTopicType topicType) 
 }
 
 JSON* Aws_GetShadow(const char* thingName, const char* shadowName) {
-    char result[50000];
+    char result[100000];
     char request[500];
     char url[200];
     sprintf(url, "https://a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", thingName, shadowName);
@@ -82,6 +82,7 @@ JSON* Aws_GetShadow(const char* thingName, const char* shadowName) {
     while (fgets(result, sizeof(result), fp) != NULL);
     fclose(fp);
     if (result) {
+        // printf(result);
         JSON* obj = JSON_Parse(result);
         if (obj && JSON_HasKey(obj, "state")) {
             JSON_RemoveKey(obj, "metadata");
@@ -125,6 +126,7 @@ void Aws_SyncDatabase() {
                         JSON_SetText(device, "deviceId", d->string);
                         JSON_SetNumber(device, "pageIndex", pageIndex);
                         JArr_AddObject(syncingDevices, device);
+                        printf("deviceId: %s\n", d->string);
                     }
                 }
             }

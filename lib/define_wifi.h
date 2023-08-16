@@ -10,7 +10,7 @@
 #define MQTT_MOSQUITTO_CIENT_ID                 "WIFI"
 
 #define CTR_DEVICE  "POST"
-#define CTR_SCENE   "PUT"
+#define CTR_SCENE   "POST"
 
 #define MaxNumberRetry   (6U)
 #define MaxTimeGetToken_Second   (119U)

@@ -1,3 +1,4 @@
+#include "helper.h"
 #include "wifi_process.h"
 bool check_internet = true;
 char *Client_ID = "cw5kmsw8ttn7v98eqegj";
@@ -311,9 +312,9 @@ bool send_commands(char *access_token,char*type_action, char *input, const char 
     char message[response_size] = {'\0'};
     sprintf(message, "%s %s HTTP/1.1\r\nhost: %s\r\nclient_id: %s\r\nsign: %s\r\nt: %lld\r\nsign_method: HMAC-SHA256\r\naccess_token: %s\r\nContent-Type: application/json\r\nContent-Length: %ld\r\n\r\n%s", type_action,input,Region,Client_ID, sign, timeInMilliseconds(), access_token, strlen(body), body);
     char cloud_rep[response_size] = {'\0'};
-    printf("[send_commands] message = %s\n", message);
+    printInfo("[send_commands] message = %s\n", message);
     call_API(message, cloud_rep);
-    printf("[RESP] %s\n", cloud_rep);
+    printInfo("[RESP] %s\n", cloud_rep);
     char *tmp = strstr(cloud_rep, "\"success\":");
     char result[10] = {'\0'};
     if (tmp != NULL){

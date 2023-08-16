@@ -177,12 +177,10 @@ int main( int argc,char ** argv )
             JSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
 
             int value = 0;
-            char* deviceID = JSON_GetText(payload, "deviceId");
-            char* code = JSON_GetText(payload, "code");
             long long currentTime = timeInMilliseconds();
             int failedCount = 0;
-            logInfo("Getting new access token");
             if ((currentTime - GetAccessTokenTime)/1000/60 >= MaxTimeGetToken_Second) {
+                logInfo("Getting new access token");
                 do {
                     check_flag = get_access_token(access_token, access_token_refresh);
                     if(!check_flag) {
@@ -209,6 +207,8 @@ int main( int argc,char ** argv )
             {
                 case TYPE_CTR_DEVICE:
                 {
+                    char* deviceID = JSON_GetText(payload, "deviceId");
+                    char* code = JSON_GetText(payload, "code");
                     memset(body,'\0',1000);
                     memset(message,'\0',MAX_SIZE_ELEMENT_QUEUE);
                     sprintf(body, "{\"commands\": %s}", code);
@@ -236,6 +236,8 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_CTR_GROUP_NORMAL:
                 {
+                    char* deviceID = JSON_GetText(payload, "deviceId");
+                    char* code = JSON_GetText(payload, "code");
                     memset(body,'\0',1000);
                     memset(message,'\0',MAX_SIZE_ELEMENT_QUEUE);
                     sprintf(body, "{\"functions\": %s}", code);
@@ -266,28 +268,31 @@ int main( int argc,char ** argv )
                 {
                     logInfo("TYPE_CTR_SCENE_HC");
                     int state = JSON_GetNumber(payload, "state");
+                    char* sceneId = JSON_GetText(payload, "sceneId");
                     if(!strlen(access_token)){
                         get_access_token(access_token,access_token_refresh);
                         break;
                     }
                     memset(body,'\0',1000);
                     memset(message,'\0',1000);
+                    char* method = "PUT";
                     if (state == 1) {
-                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/enable", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
+                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/enable", g_homeId, sceneId);
                     } else if(state == 0) {
-                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/disable", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
+                        sprintf(message, "/v1.0/homes/%s/automations/%s/actions/disable", g_homeId, sceneId);
                     } else{
-                        sprintf(message, "/v1.0/homes/%s/scenes/%s/trigger", g_homeId, json_object_get_string(json_object_get_object(json_object(object),KEY_DICT_DPS),KEY_ID_SCENE));
+                        sprintf(message, "/v1.0/homes/%s/scenes/%s/trigger", g_homeId, sceneId);
+                        method = "POST";
                     }
-                    check_flag = send_commands(access_token,CTR_SCENE,message, "\0");
+                    check_flag = send_commands(access_token, method, message, "{}");
                     if(!check_flag){
                         retry = 0;
                         do
                         {
-                            check_flag = send_commands(access_token,CTR_SCENE,message, "\0");
+                            check_flag = send_commands(access_token, method, message, "{}");
                             retry++;
                             if (retry == 3) {
-                                 get_access_token(access_token,access_token_refresh);
+                                 get_access_token(access_token, access_token_refresh);
                             }
                         } while (!check_flag && retry < MaxNumberRetry);
                     }
