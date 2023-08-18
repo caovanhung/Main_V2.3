@@ -389,7 +389,18 @@ int main(int argc, char ** argv) {
     LED_ON;
     Mosq_Init();
     sleep(1);
-    LED_OFF;
+
+    // Check if HC is master or slave
+    FILE* f = fopen("app.json", "r");
+    char buff[1000];
+    fread(buff, sizeof(char), 1000, f);
+    fclose(f);
+    JSON* setting = JSON_Parse(buff);
+    int isMaster = JSON_GetNumber(setting, "isMaster");
+    printf("isMaster: %d\n", isMaster);
+    if (isMaster) {
+        LED_OFF;
+    }
 
     while (1) {
         Mosq_ProcessLoop();

@@ -636,11 +636,9 @@ void GetIpAddressLoop() {
                     Mosq_Init(clientId);
                 }
                 // Update new IP address to AWS
-                // char msg[200];
-                // sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"0A00\":{\"ipLocal\":\"%s\"}}, \"sender\":11}}}", g_ipAddress);
-                // char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
-                // mqttCloudPublish(topic, msg);
-                // free(topic);
+                char msg[200];
+                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\"}}, \"sender\":11}}}", g_hcAddr, g_ipAddress);
+                sendToService(SERVICE_AWS, 255, msg);
             }
         }
         fclose(fp);

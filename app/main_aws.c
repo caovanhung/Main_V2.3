@@ -998,6 +998,12 @@ void Mosq_ProcessMessage() {
                 free(topic);
                 break;
             }
+            case 255: {
+                char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
+                sendPacketToCloud(topic, payload);
+                free(topic);
+                break;
+            }
         }
         JSON_Delete(recvPacket);
         JSON_Delete(payload);
