@@ -48,6 +48,13 @@ typedef enum {
     MODE_WIFI_CONFIG
 } running_mode_t;
 
+typedef enum {
+    WIFI_RESCAN,
+    WIFI_CHECK_EXIST,
+    WIFI_CONNECT,
+    WIFI_CHECK_STATUS
+} WifiConnectingState;
+
 const char* SERVICE_NAME = SERVICE_CFG;
 uint8_t     SERVICE_ID   = SERVICE_ID_CFG;
 bool g_printLog = true;
@@ -72,6 +79,7 @@ static struct Queue* g_logQueues[SERVICES_NUMBER];
 static char* g_serviceName[SERVICES_NUMBER] = {"aws", "core", "ble", "tuya", "cfg"};
 
 bool CheckWifiConnection(const char* ssid);
+bool CheckSSIDExist(const char* ssid);
 
 void on_connect(struct mosquitto *mosq, void *obj, int rc) {
     if(rc) {
@@ -93,11 +101,12 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
         }
         return;
     }
-    logInfo("Received from topic: %s", msg->topic);
-    logInfo("Payload: %s", msg->payload);
 
     JSON* recvMsg = JSON_Parse(msg->payload);
     if (StringCompare(msg->topic, "MANAGER_SERVICES/Setting/Wifi")) {
+        logInfo("Received from topic: %s", msg->topic);
+        logInfo("Payload: %s", msg->payload);
+
         int type = JSON_GetNumber(recvMsg, "type");
         if (type == TYPE_CONFIG_WIFI || type == TYPE_CONFIG_WIFI_GW) {
             JSON* wifiInfo = JSON_GetObject(recvMsg, "wifi_info");
@@ -136,10 +145,10 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
     } else {
         JSON* payload = JSON_GetText(recvMsg, "Payload");
         if (StringCompare(payload, "AWS_CONNECTED")) {
-            logInfo("AWS_CONNECTED");
+            // logInfo("AWS_CONNECTED");
             LED_ON;
         } else if (StringCompare(payload, "AWS_DISCONNECTED")) {
-            logInfo("AWS_DISCONNECTED");
+            // logInfo("AWS_DISCONNECTED");
             LED_OFF;
         } else if (StringCompare(payload, "LED_ON")) {
             LED_ON;
@@ -205,37 +214,61 @@ void LedProcessLoop() {
 
 void ConnectWifiLoop() {
     static uint8_t state = 0;
-    static long long tick = 0;
+    static long long int tick = 0;
     static uint8_t count = 0;
     static uint8_t failedCount = 0, reconnectCount = 0;
 
     switch (state) {
-    case 0:
+    case WIFI_RESCAN:
         if (g_wifiSSID[0] != 0) {
             PlayAudio("wifi_connecting");
-            logInfo("Rescan available networks: nmcli d wifi rescan");
+            logInfo("Rescan available networks: nmcli c delete %s", g_wifiSSID);
+
+            // g_wifiConnectDone = TRUE;
+            // g_wifiSSID[0] = 0;
+            // g_wifiIsConnected = true;
+            // break;
+
             char str[400];
             sprintf(str, "nmcli c delete %s", g_wifiSSID);
             system(str);
+            logInfo("Rescan available networks: nmcli d wifi rescan");
             system("nmcli d wifi rescan");
             tick = timeInMilliseconds();
             failedCount = 0;
-            state = 1;
+            state = WIFI_CHECK_EXIST;
         }
         break;
-    case 1:
-        // Wait 500ms for re-scanning
-        if (timeInMilliseconds() - tick > 500) {
-            char str[400];
+    case WIFI_CHECK_EXIST:
+        // Wait 3000ms for re-scanning
+        if (timeInMilliseconds() - tick > 3000) {
             tick = timeInMilliseconds();
-            logInfo("Run command: nmcli d wifi connect \"%s\" password \"%s\" ifname wlan0", g_wifiSSID, g_wifiPASS);
-            sprintf(str, "nmcli d wifi connect \"%s\" password \"%s\" ifname wlan0", g_wifiSSID, g_wifiPASS);
-            LED_OFF;
-            system(str);
-            state = 2;
+            if (CheckSSIDExist(g_wifiSSID)) {
+                failedCount = 0;
+                state = WIFI_CONNECT;
+            } else {
+                state = 0;
+                if (failedCount == 0) {
+                    failedCount = 1;
+                } else {
+                    // Cannot found the ssid, exit the connecting procedure
+                    g_wifiSSID[0] = 0;
+                    failedCount = 0;
+                    g_wifiConnectDone = TRUE;
+                }
+            }
         }
         break;
-    case 2:
+    case WIFI_CONNECT: {
+        char str[400];
+        logInfo("Run command: nmcli d wifi connect \"%s\" password \"%s\" ifname wlan0", g_wifiSSID, g_wifiPASS);
+        sprintf(str, "nmcli d wifi connect \"%s\" password \"%s\" ifname wlan0", g_wifiSSID, g_wifiPASS);
+        LED_OFF;
+        system(str);
+        state = WIFI_CHECK_STATUS;
+        break;
+    }
+    case WIFI_CHECK_STATUS:
         // Check connection status every 1 second
         if (timeInMilliseconds() - tick > 1000) {
             tick = timeInMilliseconds();
@@ -293,6 +326,7 @@ void MainLoop() {
                     // system("rfkill unblock wlan");
                     system("nmcli r wifi on");
                     g_createApFile = popen("create_ap -n wlan0 hc2023", "r");
+                    PlayAudio("config_mode_active");
                 }
             } else {
                 count = 0;
@@ -322,7 +356,7 @@ void MainLoop() {
                         // char* message = "{\"type\":102}";
                         // mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
                         // Send message to AWS service to configure gateway
-                        sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
+                        // sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
                         // char* payload = cJSON_PrintUnformatted(g_gatewayInfo);
                         // mosquitto_publish(mosq, NULL, MOSQ_TOPIC_DEVICE_BLE, strlen(payload), payload, 0, false);
                         // logInfo("Sent to service AWS: (%s): (%s)", MOSQ_TOPIC_CONTROL_LOCAL, payload);
@@ -398,6 +432,9 @@ int main(int argc, char ** argv) {
     JSON* setting = JSON_Parse(buff);
     int isMaster = JSON_GetNumber(setting, "isMaster");
     printf("isMaster: %d\n", isMaster);
+    char str[100];
+    sprintf(str, "isMaster: %d", isMaster);
+    enqueue(g_logQueues[SERVICE_ID_CFG], str);
     if (isMaster) {
         LED_OFF;
     }
@@ -431,6 +468,29 @@ bool CheckWifiConnection(const char* ssid) {
         logInfo("CONNECTED");
     } else {
         logInfo("NOT CONNECTED");
+    }
+    pclose(fp);
+    return ret;
+}
+
+bool CheckSSIDExist(const char* ssid) {
+    bool ret = false;
+    char path[1035];
+    logInfo("Checking ssid '%s' is exist or not", ssid);
+    FILE* fp = popen("nmcli dev wifi list", "r");
+    while (fgets(path, sizeof(path), fp) != NULL) {
+        logInfo("%s", path);
+        if (strstr(path, ssid)) {
+            ret = true;
+            break;
+        }
+    }
+    if (ret) {
+        logInfo("SSID %s is found");
+        PlayAudio("wifi_found");
+    } else {
+        logInfo("SSID %s is not found");
+        PlayAudio("wifi_not_found");
     }
     pclose(fp);
     return ret;

@@ -221,7 +221,7 @@ void BLE_SendToGateway(int gwIndex) {
         }
         case 3: {
             // Wait 1000ms before sending next frame
-            int timeout = 500;
+            int timeout = 1000;
             if (sentFrame[gwIndex].respType == GW_RESPONSE_GROUP || sentFrame[gwIndex].respType == GW_RESPONSE_ADD_SCENE) {
                 timeout = GW_SENDING_TIMEOUT_MIN;
             }

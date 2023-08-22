@@ -32,9 +32,9 @@
 #define KEY_SETTING             "setting"
 
 
-#define SENDER_APP_VIA_LOCAL        2
+#define SENDER_APP_VIA_LOCAL       2
 #define SENDER_APP_TO_CLOUD        1
-#define SENDER_HC_VIA_LOCAL         10
+#define SENDER_HC_VIA_LOCAL        10
 #define SENDER_HC_TO_CLOUD         11
 
 #define TYPE_HOME_ID                        (48U)
@@ -86,6 +86,9 @@
 #define TYPE_REALTIME_STATUS_FB         (31U)
 #define TYPE_GET_SCENES_OF_DEVICE       (33U)
 #define TYPE_GET_GROUPS_OF_DEVICE       (34U)
+#define TYPE_SYNC_DEVICE_STATUS         (36U)
+#define TYPE_OTA_HC                     (37U)
+#define TYPE_OTA_GATEWAY                (38U)
 
 #define TYPE_RESET_DATABASE             (44U)
 #define TYPE_GET_NUM_OF_PAGE            (45U)

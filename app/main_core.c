@@ -1091,11 +1091,12 @@ int main(int argc, char ** argv)
                                 if (StringContains(HG_BLE_IR_FULL, deviceInfo.pid)) {
                                     SetOnlineStateForIRDevices(deviceInfo.addr, STATE_ONLINE, hcAddr, false);
                                 }
-                                // if (opcode != 0x8201 || oldDpValue != dpValue || deviceInfo.state == STATE_OFFLINE) {
+                                if (opcode != 0x8201 || oldDpValue != dpValue || deviceInfo.state == STATE_OFFLINE) {
                                     Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
-                                // }
+                                }
                                 Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
                                 Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
+                                Db_SaveOfflineCountForDevice(dpInfo.deviceId, 0);
                                 JSON_SetText(payload, "deviceId", dpInfo.deviceId);
                                 JSON_SetNumber(payload, "dpId", dpInfo.id);
                                 JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);

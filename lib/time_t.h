@@ -11,7 +11,7 @@ int fm(int date, int month, int year);
 int get_year_today(struct tm tm);
 int get_mon_today(struct tm tm);
 int get_day_today(struct tm tm);
-int get_hour_today(struct tm tm);
+int get_hour_today();
 int get_min_today(struct tm tm);
 int get_sec_today(struct tm tm);
 int day_of_week(int date, int month, int year);

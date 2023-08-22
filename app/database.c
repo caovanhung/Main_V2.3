@@ -874,12 +874,12 @@ bool creat_table_database(sqlite3 **db)
         printf("DELETE SCENE_INF is error!\n");
         return false;
     }
-    usleep(100);
-    check = sql_creat_table(db, "DROP TABLE IF EXISTS DEVICE_HISTORIES;CREATE TABLE DEVICE_HISTORIES(id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER, causeType INTEGER, causeId TEXT, eventType INTEGER, deviceId TEXT, dpId INTEGER, dpValue TEXT); CREATE INDEX device_histories_time_device_id ON DEVICE_HISTORIES(time, deviceId);");
-    if(check != 0)
-    {
-        printf("DELETE SCENE_INF is error!\n");
-        return false;
-    }
+    // usleep(100);
+    // check = sql_creat_table(db, "DROP TABLE IF EXISTS DEVICE_HISTORIES;CREATE TABLE DEVICE_HISTORIES(id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER, causeType INTEGER, causeId TEXT, eventType INTEGER, deviceId TEXT, dpId INTEGER, dpValue TEXT); CREATE INDEX device_histories_time_device_id ON DEVICE_HISTORIES(time, deviceId);");
+    // if(check != 0)
+    // {
+    //     printf("DELETE SCENE_INF is error!\n");
+    //     return false;
+    // }
     return true;
 }

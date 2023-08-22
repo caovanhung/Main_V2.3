@@ -99,10 +99,13 @@ def main():
             isMaster = appConfig["isMaster"]
         print("isMaster:", isMaster)
         if (isMaster):
+            time.sleep(2)
             os.system("systemctl restart hg_cfg")
-            os.system("systemctl restart hg_ble")
-            os.system("systemctl restart hg_core")
             time.sleep(1)
+            os.system("systemctl restart hg_ble")
+            time.sleep(1)
+            os.system("systemctl restart hg_core")
+            time.sleep(15)
             os.system("systemctl restart hg_aws")
             os.system("systemctl restart hg_wifi")
             listenCommands()

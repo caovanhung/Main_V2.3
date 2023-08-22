@@ -40,9 +40,13 @@ int get_day_today(struct tm tm)
     return tm.tm_mday;
 }
 
-int get_hour_today(struct tm tm)
+int get_hour_today()
 {
-    return tm.tm_hour;
+    time_t rawtime;
+    struct tm *info;
+    time( &rawtime );
+    info = localtime( &rawtime );
+    return info->tm_hour;
 }
 
 int get_min_today(struct tm tm)

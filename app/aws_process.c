@@ -202,7 +202,10 @@ void Aws_SyncDatabase() {
             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, syncingScenes);
         }
         JSON_Delete(syncingScenes);
-        PlayAudio("ready");
+        int currentHour = get_hour_today();
+        if (currentHour >= 6 && currentHour < 21) {
+            PlayAudio("ready");
+        }
     }
 }
 

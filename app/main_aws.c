@@ -1051,7 +1051,10 @@ int main( int argc,char ** argv ) {
     getHcInformation();
     Aws_Init();
     Mosq_Init();
-    PlayAudio("server_connecting");
+    int currentHour = get_hour_today();
+    if (currentHour >= 6 && currentHour < 21) {
+        PlayAudio("server_connecting");
+    }
     Aws_SyncDatabase();
     int size_queue = 0;
     bool check_flag = false;
