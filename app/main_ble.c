@@ -747,6 +747,8 @@ int main( int argc,char ** argv )
             switch (reqType) {
                 case TYPE_ADD_GW: {
                     provison_inf PRV;
+                    char* message = "{\"step\":3, \"message\":\"Đang cấu hình bộ trung tâm\"}";
+                    mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
                     PlayAudio("configuring_gateway");
                     sendToService(SERVICE_CFG, 0, "LED_FAST_FLASH");
                     ble_getInfoProvison(&PRV, payload);
@@ -754,6 +756,8 @@ int main( int argc,char ** argv )
                     sleep(1);
                     GW_ConfigGateway(1, &PRV);
                     sendToService(SERVICE_CFG, 0, "LED_ON");
+                    char* message2 = "{\"step\":4, \"message\":\"cấu hình bộ trung tâm thành công, đang khởi động lại thiết bị\"}";
+                    mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message2), message, 0, false);
                     PlayAudio("gateway_end_restarting");
                     PlayAudio("device_restart_warning");
                     sleep(1);

@@ -432,7 +432,7 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
                         enqueue(queue_received_aws, aws_buff);
                     }
                 } else {
-                    char* p = "{\"state\": {\"reported\": {\"type\": 24,\"sender\":11,\"msg\": \"PONG\"}}}";
+                    char* p = "{\"type\": 24,\"sender\":11,\"msg\": \"PONG\"}";
                     mqttCloudPublish(topic, p);
                 }
             }

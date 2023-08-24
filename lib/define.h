@@ -87,8 +87,8 @@
 #define TYPE_GET_SCENES_OF_DEVICE       (33U)
 #define TYPE_GET_GROUPS_OF_DEVICE       (34U)
 #define TYPE_SYNC_DEVICE_STATUS         (36U)
-#define TYPE_OTA_HC                     (37U)
-#define TYPE_OTA_GATEWAY                (38U)
+#define TYPE_OTA_GATEWAY                (37U)
+#define TYPE_OTA_HC                     (38U)
 
 #define TYPE_RESET_DATABASE             (44U)
 #define TYPE_GET_NUM_OF_PAGE            (45U)
@@ -479,7 +479,8 @@
 #define MOSQ_TOPIC_CONTROL_LOCAL            "APPLICATION_SERVICES/Mosq/Control"
 #define MOSQ_TOPIC_MANAGER_SETTING          "MANAGER_SERVICES/Setting/Wifi"
 #define MOSQ_TOPIC_MANAGER                  "MANAGER_SERVICES/ServieceManager/#"
-
+#define MQTT_LOCAL_REQS_TOPIC               "MANAGER_SERVICES/Setting/Wifi"
+#define MQTT_LOCAL_RESP_TOPIC               "MANAGER_SERVICES/SETTING/RESP"
 
 
 #define MOSQ_TOPIC_AWS                      "APPLICATION_SERVICES/AWS/#"

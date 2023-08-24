@@ -86,7 +86,7 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc) {
         logError("Error with result code: %d", rc);
         exit(-1);
     }
-    mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, 0);
+    mosquitto_subscribe(mosq, NULL, MQTT_LOCAL_REQS_TOPIC, 0);
     // mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_CONTROL_LOCAL, 0);
     mosquitto_subscribe(mosq, NULL, "CFG/#", 0);
     mosquitto_subscribe(mosq, NULL, "LOG_REPORT/#", 0);
@@ -103,7 +103,7 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
     }
 
     JSON* recvMsg = JSON_Parse(msg->payload);
-    if (StringCompare(msg->topic, "MANAGER_SERVICES/Setting/Wifi")) {
+    if (StringCompare(msg->topic, MQTT_LOCAL_REQS_TOPIC)) {
         logInfo("Received from topic: %s", msg->topic);
         logInfo("Payload: %s", msg->payload);
 
@@ -147,9 +147,11 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
         if (StringCompare(payload, "AWS_CONNECTED")) {
             // logInfo("AWS_CONNECTED");
             LED_ON;
+            g_connectedTime = 0;
         } else if (StringCompare(payload, "AWS_DISCONNECTED")) {
             // logInfo("AWS_DISCONNECTED");
             LED_OFF;
+            g_connectedTime = timeInMilliseconds();
         } else if (StringCompare(payload, "LED_ON")) {
             LED_ON;
         } else if (StringCompare(payload, "LED_OFF")) {
@@ -221,13 +223,10 @@ void ConnectWifiLoop() {
     switch (state) {
     case WIFI_RESCAN:
         if (g_wifiSSID[0] != 0) {
+            char* message = "{\"step\":1, \"message\":\"Đang cấu wifi, vui lòng đợi\"}";
+            mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
             PlayAudio("wifi_connecting");
             logInfo("Rescan available networks: nmcli c delete %s", g_wifiSSID);
-
-            // g_wifiConnectDone = TRUE;
-            // g_wifiSSID[0] = 0;
-            // g_wifiIsConnected = true;
-            // break;
 
             char str[400];
             sprintf(str, "nmcli c delete %s", g_wifiSSID);
@@ -255,6 +254,8 @@ void ConnectWifiLoop() {
                     g_wifiSSID[0] = 0;
                     failedCount = 0;
                     g_wifiConnectDone = TRUE;
+                    char* message = "{\"step\":5, \"message\":\"Không tìm thấy mạng wifi yêu cầu\"}";
+                    mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
                 }
             }
         }
@@ -278,6 +279,8 @@ void ConnectWifiLoop() {
                 reconnectCount = 0;
                 state = 0;
                 g_wifiConnectDone = TRUE;
+                char* message = "{\"step\":2, \"message\":\"Cấu hình wifi thành công\"}";
+                mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
             } else {
                 failedCount++;
                 LED_ON;
@@ -352,15 +355,8 @@ void MainLoop() {
                         char* hcAddr = JSON_GetText(g_gatewayInfo, "gateway1");
                         fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\",\"isMaster\":%d,\"hcAddr\":\"%s\"}", g_accountId, g_homeId, isMaster, hcAddr);
                         fclose(f);
-
-                        // char* message = "{\"type\":102}";
-                        // mosquitto_publish(mosq, NULL, MOSQ_TOPIC_MANAGER_SETTING, strlen(message), message, 0, false);
-                        // Send message to AWS service to configure gateway
-                        // sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
-                        // char* payload = cJSON_PrintUnformatted(g_gatewayInfo);
-                        // mosquitto_publish(mosq, NULL, MOSQ_TOPIC_DEVICE_BLE, strlen(payload), payload, 0, false);
-                        // logInfo("Sent to service AWS: (%s): (%s)", MOSQ_TOPIC_CONTROL_LOCAL, payload);
-                        // free(payload);
+                        // Send message to BLE service to configure gateway
+                        sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
                     }
                 } else {
                     LED_OFF;
@@ -414,6 +410,17 @@ void WriteLogLoop() {
     }
 }
 
+void AutoResetNetwork() {
+    if (g_connectedTime > 0 &&(timeInMilliseconds() - g_connectedTime > 600000)) {
+        g_connectedTime = timeInMilliseconds();
+
+        // Disable and re-enable network card
+        logInfo("Reset the wifi interface");
+        system("nmcli r wifi off");
+        system("nmcli r wifi on");
+    }
+}
+
 int main(int argc, char ** argv) {
     for (int i = 0; i < SERVICES_NUMBER; i++) {
         g_logQueues[i] = newQueue(LOG_QUEUE_SIZE);
@@ -438,6 +445,7 @@ int main(int argc, char ** argv) {
     if (isMaster) {
         LED_OFF;
     }
+    g_connectedTime = timeInMilliseconds();
 
     while (1) {
         Mosq_ProcessLoop();
@@ -467,6 +475,8 @@ bool CheckWifiConnection(const char* ssid) {
         g_wifiIsConnected = true;
         logInfo("CONNECTED");
     } else {
+        char* message = "{\"step\":6, \"message\":\"Kết nối wifi thất bại\"}";
+        mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
         logInfo("NOT CONNECTED");
     }
     pclose(fp);
