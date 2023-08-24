@@ -688,7 +688,7 @@ void checkSceneCondition(Scene* scene) {
 }
 
 
-// Check if there are scenes need to be executed if status of a device is changed
+// Check if there are scenes needed to be executed if status of a device is changed
 void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const char* dpValueStr, bool syncRelatedDevices) {
     printInfo("checkSceneForDevice: %s.%d", deviceId, dpId);
     // Find all scenes that this device is in conditions
@@ -720,7 +720,7 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                     DpInfo dpInfo;
                     int foundDps = Db_FindDp(&dpInfo, scene->conditions[c].entityId, scene->conditions[c].dpId);
                     if (foundDps == 1 && scene->conditions[c].valueType == ValueTypeDouble) {
-                        if(dpInfo.value == scene->conditions[c].dpValue){
+                        if(dpInfo.value == scene->conditions[c].dpValue) {
                             // Save history for this local scene
                             JSON* history = JSON_CreateObject();
                             JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_DEVICE);
@@ -729,6 +729,19 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                             Db_AddDeviceHistory(history);
                             JSON_Delete(history);
                             GetDeviceStatusForScene(scene);
+
+                            // Update status of devices in this scene to AWS
+                            for (int act = 0; act < scene->actionCount; act++) {
+                                if (scene->actions[act].actionType == EntityDevice) {
+                                    DeviceInfo deviceInfo;
+                                    int foundDevices = Db_FindDevice(&deviceInfo, scene->actions[act].entityId);
+                                    if (foundDevices == 1) {
+                                        for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
+                                            Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
+                                        }
+                                    }
+                                }
+                            }
                             break;
                         }
                     }
@@ -1445,7 +1458,14 @@ int main(int argc, char ** argv)
                             JSON_SetNumber(payload, "gwIndex", deviceInfo.gwIndex);
                             JSON_SetText(payload, "deviceAddr", deviceInfo.addr);
                             JSON_SetText(payload, "devicePid", deviceInfo.pid);
-                            sendPacketToBle(deviceInfo.gwIndex, TYPE_DEL_DEVICE, payload);
+                            if (StringCompare(pid, HG_BLE_IR_AC) ||
+                                StringCompare(pid, HG_BLE_IR_TV) ||
+                                StringCompare(pid, HG_BLE_IR_FAN) ||
+                                StringCompare(pid, HG_BLE_IR_REMOTE)) {
+
+                            } else {
+                                sendPacketToBle(deviceInfo.gwIndex, TYPE_DEL_DEVICE, payload);
+                            }
                             Db_DeleteDevice(deviceId);
                             DeleteDeviceFromGroups(deviceId);
                             DeleteDeviceFromScenes(deviceId);
