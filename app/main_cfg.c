@@ -78,6 +78,8 @@ static JSON* g_gatewayInfo;
 static struct Queue* g_logQueues[SERVICES_NUMBER];
 static char* g_serviceName[SERVICES_NUMBER] = {"aws", "core", "ble", "tuya", "cfg"};
 
+static long long int g_connectedTime = 0;
+
 bool CheckWifiConnection(const char* ssid);
 bool CheckSSIDExist(const char* ssid);
 

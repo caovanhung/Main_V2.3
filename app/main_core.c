@@ -493,6 +493,29 @@ void ResponseWaiting() {
                 char* sceneId = JSON_GetText(g_sceneTobeUpdated, "id");
                 Db_SaveScene(sceneId, updatedActions, updatedConditions);
                 JSON_Delete(g_sceneTobeUpdated);
+            } else if (reqType == TYPE_CTR_DEVICE) {
+                for (int d = 0; d < deviceCount; d++) {
+                    JSON* device = JArr_GetObject(devices, d);
+                    char* deviceId = JSON_GetText(device, "deviceId");
+                    char* causeId = JSON_GetText(device, "causeId");
+                    int status = JSON_GetNumber(device, "status");
+                    if (status != 0) {
+                        // Save event to history
+                        JSON* history = JSON_CreateObject();
+                        JSON_SetNumber(history, "eventType", EV_CTR_DEVICE_FAILED);
+                        if (StringLength(causeId) > 20) {
+                            sendNotiToUser("Thiết bị không phản hồi", false);
+                            JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
+                            JSON_SetText(history, "causeId", causeId);
+                        } else {
+                            JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
+                            JSON_SetText(history, "causeId", causeId);
+                        }
+                        JSON_SetText(history, "deviceId", deviceId);
+                        Db_AddDeviceHistory(history);
+                        JSON_Delete(history);
+                    }
+                }
             }
             // Remove this respItem from response list
             JArr_RemoveIndex(g_checkRespList, i);
@@ -1128,6 +1151,9 @@ int main(int argc, char ** argv)
                                         Db_AddDeviceHistory(payload);
                                     }
                                     GetDeviceStatusForGroup(dpInfo.deviceId, dpInfo.id);
+                                    if (opcode == 0x8202) {
+                                        updateDeviceRespStatus(TYPE_CTR_DEVICE, dpInfo.deviceId, dpInfo.deviceId, 0);
+                                    }
                                 }
                             }
                         }
@@ -1346,6 +1372,10 @@ int main(int argc, char ** argv)
                         char* senderId = JSON_GetText(payload, "senderId");
                         JSON* dictDPs = JSON_GetObject(payload, "dictDPs");
                         Ble_ControlDeviceJSON(deviceId, dictDPs, senderId);
+                        JSON* addedDevice = addDeviceToRespList(reqType, deviceId, deviceId);
+                        if (addedDevice) {
+                            JSON_SetText(addedDevice, "causeId", senderId);
+                        }
                         break;
                     }
                     case TYPE_CTR_GROUP_NORMAL: {
@@ -1458,10 +1488,10 @@ int main(int argc, char ** argv)
                             JSON_SetNumber(payload, "gwIndex", deviceInfo.gwIndex);
                             JSON_SetText(payload, "deviceAddr", deviceInfo.addr);
                             JSON_SetText(payload, "devicePid", deviceInfo.pid);
-                            if (StringCompare(pid, HG_BLE_IR_AC) ||
-                                StringCompare(pid, HG_BLE_IR_TV) ||
-                                StringCompare(pid, HG_BLE_IR_FAN) ||
-                                StringCompare(pid, HG_BLE_IR_REMOTE)) {
+                            if (StringCompare(deviceInfo.pid, HG_BLE_IR_AC) ||
+                                StringCompare(deviceInfo.pid, HG_BLE_IR_TV) ||
+                                StringCompare(deviceInfo.pid, HG_BLE_IR_FAN) ||
+                                StringCompare(deviceInfo.pid, HG_BLE_IR_REMOTE)) {
 
                             } else {
                                 sendPacketToBle(deviceInfo.gwIndex, TYPE_DEL_DEVICE, payload);

@@ -600,7 +600,8 @@ typedef enum {
     EV_LOCK_DEVICE = 6,
     EV_GROUP_CHANGED = 7,
     EV_RUN_SCENE = 8,
-    EV_ONOFF_SCENE = 9
+    EV_ONOFF_SCENE = 9,
+    EV_CTR_DEVICE_FAILED = 10,
 } HistoryEventType;
 
 // Event history cause type
