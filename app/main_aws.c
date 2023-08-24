@@ -1188,6 +1188,11 @@ int main( int argc,char ** argv ) {
                             sprintf(cmd, "python3 /usr/bin/uploadFile.pyc %s %s", fileName, g_homeId);
                             logInfo("Uploading file %s to S3", fileName);
                             system(cmd);
+                            char* topic = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_PUB);
+                            char str[200];
+                            sprintf(str, "{\"sender\":11, \"type\": %d, \"message\": \"DONE\"}", TYPE_GET_LOG);
+                            mqttCloudPublish(topic, str);
+                            free(topic);
                         }
                         break;
                 }
