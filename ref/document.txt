@@ -222,3 +222,17 @@ Tính năng IR:
         systemctl status serveo.service
     SSH vào board bằng lệnh sau:
         ssh -J serveo.net root@homegy_jhskfhallas7624923
+
+
+
+# Danh sách bản tin điều khiển từ App mobile:
+1. Bản tin get log từ thiết bị:
+    {
+        "state": {
+            "reported": {
+                "sender": 1,
+                "type": 39,
+                "fileName": "log_core_24-08-2023.txt"
+            }
+        }
+    }

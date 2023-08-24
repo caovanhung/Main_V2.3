@@ -89,6 +89,7 @@
 #define TYPE_SYNC_DEVICE_STATUS         (36U)
 #define TYPE_OTA_GATEWAY                (37U)
 #define TYPE_OTA_HC                     (38U)
+#define TYPE_GET_LOG                    (39U)
 
 #define TYPE_RESET_DATABASE             (44U)
 #define TYPE_GET_NUM_OF_PAGE            (45U)

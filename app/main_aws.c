@@ -65,6 +65,7 @@
 const char* SERVICE_NAME = SERVICE_AWS;
 uint8_t SERVICE_ID = SERVICE_ID_AWS;
 bool g_printLog = true;
+extern char* g_homeId;
 
 FILE *fptr;
 int rc;
@@ -1178,6 +1179,16 @@ int main( int argc,char ** argv ) {
                     case TYPE_GET_GROUPS_OF_DEVICE:
                     case TYPE_GET_SCENES_OF_DEVICE:
                         sendPacketTo(SERVICE_CORE, reqType, recvPacket);
+                        break;
+                    case TYPE_GET_LOG:
+                        logInfo("TYPE_GET_LOG");
+                        if (JSON_HasKey(reported, "fileName")) {
+                            char cmd[200];
+                            char* fileName = JSON_GetText(reported, "fileName");
+                            sprintf(cmd, "python3 /usr/bin/uploadFile.pyc %s %s", fileName, g_homeId);
+                            logInfo("Uploading file %s to S3", fileName);
+                            system(cmd);
+                        }
                         break;
                 }
             }

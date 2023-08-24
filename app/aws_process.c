@@ -3,7 +3,7 @@
 #include "helper.h"
 #include "aws_mosquitto.h"
 
-static char* g_homeId;
+char* g_homeId;
 static char* g_thingId;
 
 void getHcInformation() {
