@@ -86,7 +86,7 @@
 #define TYPE_REALTIME_STATUS_FB         (31U)
 #define TYPE_GET_SCENES_OF_DEVICE       (33U)
 #define TYPE_GET_GROUPS_OF_DEVICE       (34U)
-#define TYPE_SYNC_DEVICE_STATUS         (36U)
+#define TYPE_SYNC_DEVICE_STATUS         (35U)
 #define TYPE_OTA_GATEWAY                (37U)
 #define TYPE_OTA_HC                     (38U)
 #define TYPE_GET_LOG                    (39U)
@@ -142,6 +142,7 @@
 #define GW_RESPONSE_SET_TTL                             (83U)
 #define GW_RESPONSE_IR                                  (84U)
 #define CAM_HANET_RESPONSE                              (85U)
+#define GW_RESPONSE_LOCK_KIDS                           (87U)
 
 #define GW_RESPONSE_NOTIFI                              ( 111U)
 #define KEY_MESSAGE                                     "message"

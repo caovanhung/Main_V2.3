@@ -434,7 +434,7 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
                     }
                 } else {
                     char* p = "{\"type\": 24,\"sender\":11,\"msg\": \"PONG\"}";
-                    mqttCloudPublish(topic, p);
+                    publishToTopicAndProcessIncomingMessage(&mqttContext, topic, 0, p);
                 }
             }
         }
@@ -1178,6 +1178,7 @@ int main( int argc,char ** argv ) {
                     case TYPE_GET_DEVICE_HISTORY:
                     case TYPE_GET_GROUPS_OF_DEVICE:
                     case TYPE_GET_SCENES_OF_DEVICE:
+                    case TYPE_SYNC_DEVICE_STATUS:
                         sendPacketTo(SERVICE_CORE, reqType, recvPacket);
                         break;
                     case TYPE_GET_LOG:

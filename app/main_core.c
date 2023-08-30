@@ -950,6 +950,7 @@ void GetDeviceStatusForScene(Scene* scene) {
                 JSON* item = JArr_CreateObject(devicesArray);
                 JSON_SetText(item, "addr", deviceInfo.addr);
                 JSON_SetText(item, "hcAddr", deviceInfo.hcAddr);
+                JSON_SetNumber(item, "gwIndex", deviceInfo.gwIndex);
             }
         }
     }
@@ -978,6 +979,7 @@ void GetDeviceStatusForGroup(const char* deviceId, int dpId) {
                 JSON* item = JArr_CreateObject(devicesArray);
                 JSON_SetText(item, "addr", deviceInfo.addr);
                 JSON_SetText(item, "hcAddr", deviceInfo.hcAddr);
+                JSON_SetNumber(item, "gwIndex", deviceInfo.gwIndex);
             }
         }
         JSON_Delete(groupDevices);
@@ -996,15 +998,17 @@ void GetDeviceStatusInterval() {
         char sqlCmd[500];
         char pid[1000];
         sprintf(pid, "%s,%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN, HG_BLE_IR);
-        sprintf(sqlCmd, "SELECT unicast, g.hcAddr FROM devices_inf d JOIN gateway g ON d.gwIndex = g.id \
+        sprintf(sqlCmd, "SELECT unicast, g.hcAddr, d.gwIndex FROM devices_inf d JOIN gateway g ON d.gwIndex = g.id \
                         WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NULL OR %lld - d.last_updated > 50000) AND d.deviceKey IS NOT NULL", pid, oldTick);
         JSON* devicesArray = cJSON_CreateArray();
         Sql_Query(sqlCmd, row) {
             char* addr = sqlite3_column_text(row, 0);
             char* hcAddr = sqlite3_column_text(row, 1);
+            int gwIndex = sqlite3_column_int(row, 2);
             JSON* item = JArr_CreateObject(devicesArray);
             JSON_SetText(item, "addr", addr);
             JSON_SetText(item, "hcAddr", hcAddr);
+            JSON_SetNumber(item, "gwIndex", gwIndex);
         }
         if (JArr_Count(devicesArray) > 0) {
             sendPacketToBle(-1, TYPE_GET_ONOFF_STATE, devicesArray);
@@ -1324,6 +1328,17 @@ int main(int argc, char ** argv)
                         updateDeviceRespStatus(GW_RESPONSE_SET_TTL, "0", deviceAddr, 0);
                         break;
                     }
+                    case GW_RESPONSE_LOCK_KIDS: {
+                        char* hcAddr = JSON_GetText(payload, "hcAddr");
+                        char* dpAddr = JSON_GetText(payload, "dpAddr");
+                        int lockValue = JSON_GetNumber(payload, "lockValue");
+                        DpInfo dpInfo;
+                        int foundDps = Db_FindDpByAddr(&dpInfo, dpAddr, hcAddr);
+                        if (foundDps == 1) {
+                            Aws_UpdateLockKids(dpInfo.deviceId, dpInfo.id, lockValue);
+                        }
+                        break;
+                    }
                     case TYPE_SYNC_DEVICE_STATE: {
                         SyncDevicesState();
                         break;
@@ -1372,10 +1387,10 @@ int main(int argc, char ** argv)
                         char* senderId = JSON_GetText(payload, "senderId");
                         JSON* dictDPs = JSON_GetObject(payload, "dictDPs");
                         Ble_ControlDeviceJSON(deviceId, dictDPs, senderId);
-                        JSON* addedDevice = addDeviceToRespList(reqType, deviceId, deviceId);
-                        if (addedDevice) {
-                            JSON_SetText(addedDevice, "causeId", senderId);
-                        }
+                        // JSON* addedDevice = addDeviceToRespList(reqType, deviceId, deviceId);
+                        // if (addedDevice) {
+                        //     JSON_SetText(addedDevice, "causeId", senderId);
+                        // }
                         break;
                     }
                     case TYPE_CTR_GROUP_NORMAL: {
@@ -1527,7 +1542,7 @@ int main(int argc, char ** argv)
                                 if (gatewayId >= 0) {
                                     // Send packet to BLE to save device information in to gateway
                                     JSON_SetNumber(d, "gatewayId", gatewayId);
-                                    printf("ok: %s\n", cJSON_PrintUnformatted(d));
+                                    // printf("ok: %s\n", cJSON_PrintUnformatted(d));
                                     sendPacketToBle(gatewayId, TYPE_ADD_DEVICE, d);
                                 } else {
                                     logError("Gateway %s is not found", gatewayAddr);
@@ -1978,6 +1993,7 @@ int main(int argc, char ** argv)
                         int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
                         if (foundDevices == 1) {
                             JSON_SetText(payload, "deviceAddr", deviceInfo.addr);
+                            JSON_SetNumber(payload, "gwIndex", deviceInfo.gwIndex);
                             JSON* lock = JSON_GetObject(payload, "lock");
                             JSON_ForEach(l, lock) {
                                 JSON_SetNumber(payload, "value", l->valueint - 2);
@@ -1993,6 +2009,7 @@ int main(int argc, char ** argv)
                         int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
                         if (foundDevices == 1) {
                             JSON_SetText(payload, "deviceAddr", deviceInfo.addr);
+                            JSON_SetNumber(payload, "gwIndex", deviceInfo.gwIndex);
                             sendPacketToBle(deviceInfo.gwIndex, reqType, payload);
                         }
                         break;
@@ -2018,6 +2035,7 @@ int main(int argc, char ** argv)
                         int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
                         if (foundDevices == 1) {
                             JSON_SetText(payload, "deviceAddr", deviceInfo.addr);
+                            JSON_SetNumber(payload, "gwIndex", deviceInfo.gwIndex);
                             sendPacketToBle(deviceInfo.gwIndex, reqType, payload);
                         }
                         break;
@@ -2029,7 +2047,32 @@ int main(int argc, char ** argv)
                         int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
                         if (foundDevices == 1) {
                             JSON_SetText(payload, "deviceAddr", deviceInfo.addr);
+                            JSON_SetNumber(payload, "gwIndex", deviceInfo.gwIndex);
                             sendPacketToBle(deviceInfo.gwIndex, reqType, payload);
+                        }
+                        break;
+                    }
+                    case TYPE_SYNC_DEVICE_STATUS: {
+                        logInfo("TYPE_SYNC_DEVICE_STATUS");
+                        // Sync all status of devices to aws
+                        char* cmd = "SELECT d.deviceId, dpId, dpValue, d.state, d.pid, d.pageIndex FROM devices_inf d JOIN devices dp ON d.deviceId=dp.deviceId WHERE dpId != 21 AND dpId != 106";
+                        Sql_Query(cmd, row) {
+                            char* deviceId = sqlite3_column_text(row, 0);
+                            int dpId = sqlite3_column_int(row, 1);
+                            int value = sqlite3_column_int(row, 2);
+                            int state = sqlite3_column_int(row, 3);
+                            char* pid = sqlite3_column_text(row, 4);
+                            int pageIndex = sqlite3_column_int(row, 5);
+
+                            if (StringCompare(pid, HG_BLE_SWITCH) || StringCompare(pid, HG_BLE_LIGHT_WHITE) ||
+                                StringCompare(pid, RD_BLE_SENSOR_TEMP) || StringCompare(pid, RD_BLE_SENSOR_SMOKE) ||
+                                StringCompare(pid, RD_BLE_SENSOR_MOTION) || StringCompare(pid, RD_BLE_SENSOR_DOOR) ||
+                                StringCompare(pid, RD_BLE_LIGHT_RGB)) {
+
+                                char payload[200];
+                                sprintf(payload,"{\"deviceId\":\"%s\", \"state\":%d, \"dpId\":%d, \"dpValue\":%d}", deviceId, state, dpId, value);
+                                sendToServicePageIndex(SERVICE_AWS, GW_RESP_ONOFF_STATE, pageIndex, payload);
+                            }
                         }
                         break;
                     }
@@ -2104,6 +2147,7 @@ bool Scene_GetFullInfo(JSON* packet) {
                 JSON_SetText(action, "pid", deviceInfo.pid);
                 JSON_SetText(action, "entityAddr", deviceInfo.addr);
                 JSON_SetText(action, "hcAddr", deviceInfo.hcAddr);
+                JSON_SetNumber(action, "gwIndex", deviceInfo.gwIndex);
                 Ble_AddExtraDpsToIrDevices(entityId, executorProperty);
                 JSON_SetNumber(action, "commandIndex", i++);
             }
@@ -2114,6 +2158,7 @@ bool Scene_GetFullInfo(JSON* packet) {
                 JSON_SetText(action, "pid", deviceInfo.pid);
                 JSON_SetText(action, "entityAddr", deviceInfo.addr);
                 JSON_SetText(action, "hcAddr", deviceInfo.hcAddr);
+                JSON_SetNumber(action, "gwIndex", deviceInfo.gwIndex);
                 int dpId = 0, dpValue = 0;
                 if (StringCompare(deviceInfo.pid, HG_BLE_LIGHT_WHITE)) {
                     dpId = 20;
@@ -2163,6 +2208,7 @@ bool Scene_GetFullInfo(JSON* packet) {
                     JSON_SetText(condition, "hcAddr", deviceInfo.hcAddr);
                     JSON_SetText(condition, "pid", deviceInfo.pid);
                     JSON_SetText(condition, "entityAddr", deviceInfo.addr);
+                    JSON_SetNumber(condition, "gwIndex", deviceInfo.gwIndex);
                     JSON_SetNumber(condition, "dpId", dpId);
                     if (foundDps == 1) {
                         JSON_SetText(condition, "dpAddr", dpInfo.addr);

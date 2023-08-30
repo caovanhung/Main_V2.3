@@ -31,6 +31,7 @@ void Aws_SaveGroupDevices(const char* groupAddr);
 void Aws_DeleteScene(const char* sceneId);
 void Aws_EnableScene(const char* sceneId, bool state);
 void Aws_SaveScene(const char* sceneId);
+void Aws_UpdateLockKids(const char* deviceId, int dpId, int lockValue);
 void Aws_ResponseLearningIR(const char* deviceId, const char* respCmd);
 /***************************************************************************************/
 

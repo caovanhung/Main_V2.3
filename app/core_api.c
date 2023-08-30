@@ -253,6 +253,18 @@ void Aws_SaveScene(const char* sceneId) {
     }
 }
 
+void Aws_UpdateLockKids(const char* deviceId, int dpId, int lockValue) {
+    ASSERT(deviceId);
+    DeviceInfo deviceInfo;
+    int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
+    if (foundDevices == 1) {
+        int pageIndex = deviceInfo.pageIndex;
+        char payload[200];
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"lock\":{\"%d\":%d}}}}}", TYPE_UPDATE_DEVICE, SENDER_HC_TO_CLOUD, deviceId, dpId, lockValue);
+        sendToServicePageIndex(SERVICE_AWS, GW_RESP_ONLINE_STATE, pageIndex, payload);
+    }
+}
+
 void Aws_ResponseLearningIR(const char* deviceId, const char* respCmd) {
     ASSERT(deviceId);
     ASSERT(respCmd);
@@ -305,6 +317,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
         }
         JSON* p = JSON_CreateObject();
         JSON_SetText(p, "pid", deviceInfo.pid);
+        JSON_SetNumber(p, "gwIndex", deviceInfo.gwIndex);
         JSON* newDictDps = JSON_AddArray(p, "dictDPs");
         JSON_ForEach(o, dictDPs) {
             int dpId = atoi(o->string);
@@ -415,6 +428,7 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
 
         JSON* p = JSON_CreateObject();
         JSON_SetText(p, "pid", deviceInfo.pid);
+        JSON_SetNumber(p, "gwIndex", deviceInfo.gwIndex);
         JSON* newDictDps = JSON_AddArray(p, "dictDPs");
         JSON_ForEach(o, dictDPs) {
             int dpId = atoi(o->string);
