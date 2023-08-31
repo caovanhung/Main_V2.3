@@ -413,13 +413,18 @@ void WriteLogLoop() {
 }
 
 void AutoResetNetwork() {
-    if (g_connectedTime > 0 &&(timeInMilliseconds() - g_connectedTime > 600000)) {
-        g_connectedTime = timeInMilliseconds();
+    static long long tick = 0;
+    if (timeInMilliseconds() - tick > 60000) {
+        tick = timeInMilliseconds();
 
-        // Disable and re-enable network card
-        logInfo("Reset the wifi interface");
-        system("nmcli r wifi off");
-        system("nmcli r wifi on");
+        char ipAddress[100];
+        ExecCommand("hostname -I", ipAddress);
+        if (!ipAddress || StringLength(ipAddress) == 0 || !StringContains(ipAddress, "192")) {
+            // Disable and re-enable network card
+            logInfo("Reset the wifi interface: %s", ipAddress);
+            system("nmcli r wifi off");
+            system("nmcli r wifi on");
+        }
     }
 }
 
@@ -455,6 +460,7 @@ int main(int argc, char ** argv) {
         ConnectWifiLoop();
         LedProcessLoop();
         WriteLogLoop();
+        AutoResetNetwork();
         usleep(1000);
     }
     return 0;

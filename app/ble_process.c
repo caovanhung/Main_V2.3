@@ -76,7 +76,7 @@ UartSendingFrame* sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, 
         }
     }
     int emptyIndex = lastestIndex == UART_SENDING_FRAME_SIZE - 1? 0 : lastestIndex + 1;
-    printInfo("emptyIndex: %d", emptyIndex);
+    // printInfo("emptyIndex: %d", emptyIndex);
     g_uartSendingFrames[emptyIndex].respType = 0xff;
     g_uartSendingFrames[emptyIndex].gwIndex = gwIndex;
     g_uartSendingFrames[emptyIndex].addr = addr;

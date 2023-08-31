@@ -621,7 +621,7 @@ void checkResponseLoop() {
 
 void GetIpAddressLoop() {
     static long long tick = 0;
-    if (timeInMilliseconds() - tick > 10000) {
+    if (timeInMilliseconds() - tick > 30000) {
         tick = timeInMilliseconds();
         char address[50];
         FILE* fp = popen("python3 getIp.py", "r");
@@ -639,7 +639,7 @@ void GetIpAddressLoop() {
                 }
                 // Update new IP address to AWS
                 char msg[200];
-                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\"}}, \"sender\":11}}}", g_hcAddr, g_ipAddress);
+                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\", \"hcVersion\":\"%s\"}}, \"sender\":11}}}", g_hcAddr, g_ipAddress, HC_VERSION);
                 sendToService(SERVICE_AWS, 255, msg);
             }
         }

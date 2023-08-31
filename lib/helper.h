@@ -31,5 +31,6 @@ List* String_Split(const char* str, const char* delim);
 // char* JSON_GetFirstObjectName(JSON* obj);
 
 void PlayAudio(const char* audioName);
+void ExecCommand(const char* command, char* output);
 
 #endif   /* HELPER_H */

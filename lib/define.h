@@ -4,6 +4,8 @@
 
 #include "time_t.h"
 
+#define HC_VERSION      "001"
+
 #define TRUE    1
 #define FALSE   0
 

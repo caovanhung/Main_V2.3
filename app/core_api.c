@@ -197,6 +197,18 @@ void Aws_UpdateGroupValue(const char* groupAddr, int dpId, int dpValue) {
     }
 }
 
+void Aws_UpdateGroupValueString(const char* groupAddr, int dpId, const char* dpValue) {
+    ASSERT(groupAddr);
+    DeviceInfo deviceInfo;
+    int foundDevices = Db_FindDevice(&deviceInfo, groupAddr);
+    if (foundDevices == 1) {
+        int pageIndex = deviceInfo.pageIndex;
+        char payload[200];
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"dictDPs\":{\"%d\":\"%s\"}}}}}", TYPE_CTR_GROUP_NORMAL, SENDER_HC_TO_CLOUD, groupAddr, dpId, dpValue);
+        sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_GROUP, pageIndex, payload);
+    }
+}
+
 void Aws_SaveGroupDevices(const char* groupAddr) {
     ASSERT(groupAddr);
     char sqlCmd[100];
@@ -344,7 +356,9 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
                     JSON_SetNumber(dp, "value", o->valueint);
                     JSON_SetText(dp, "valueString", o->valuestring);
                     cJSON_AddItemToArray(newDictDps, dp);
-                    // Aws_SaveDpValue(deviceId, dpId, o->valueint, dpInfo.pageIndex);
+                    if (dpId == 21) {
+                        Aws_SaveDpValueString(deviceId, dpId, o->valuestring, dpInfo.pageIndex);
+                    }
                     if (causeId) {
                         JSON* history = JSON_CreateObject();
                         JSON_SetText(history, "deviceId", deviceId);
@@ -410,7 +424,11 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
         JSON_ForEach(dp, dictDPs) {
             int dpId = atoi(dp->string);
             int dpValue = dp->valueint;
-            Aws_UpdateGroupValue(groupAddr, dpId, dpValue);
+            if (dpId != 21) {
+                Aws_UpdateGroupValue(groupAddr, dpId, dpValue);
+            } else {
+                Aws_UpdateGroupValueString(groupAddr, dpId, dp->valuestring);
+            }
         }
 
         // Update status of devices in this group to AWS and local database
@@ -419,8 +437,12 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
             JSON_ForEach(dp, dictDPs) {
                 if (cJSON_IsNumber(dp) || cJSON_IsBool(dp)) {
                     int dpId = atoi(dp->string);
-                    Aws_SaveDpValue(JSON_GetText(d, "deviceId"), dpId, dp->valueint, JSON_GetNumber(d, "pageIndex"));
-                    Db_SaveDpValue(JSON_GetText(d, "deviceId"), dpId, dp->valueint);
+                    if (dpId != 21) {
+                        Aws_SaveDpValue(JSON_GetText(d, "deviceId"), dpId, dp->valueint, JSON_GetNumber(d, "pageIndex"));
+                        Db_SaveDpValue(JSON_GetText(d, "deviceId"), dpId, dp->valueint);
+                    } else {
+                        Aws_SaveDpValueString(JSON_GetText(d, "deviceId"), dpId, dp->valuestring, JSON_GetNumber(d, "pageIndex"));
+                    }
                 }
             }
         }

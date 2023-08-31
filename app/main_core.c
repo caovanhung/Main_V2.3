@@ -760,7 +760,19 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                                     int foundDevices = Db_FindDevice(&deviceInfo, scene->actions[act].entityId);
                                     if (foundDevices == 1) {
                                         for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
-                                            Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
+                                            if (scene->actions[act].dpIds[dp] != 21 && scene->actions[act].dpIds[dp] != 106) {
+                                                Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
+                                                Db_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp]);
+                                                JSON* history = JSON_CreateObject();
+                                                JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                                                JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
+                                                JSON_SetText(history, "causeId", scene->id);
+                                                JSON_SetText(history, "deviceId", deviceInfo.id);
+                                                JSON_SetNumber(history, "dpId", scene->actions[act].dpIds[dp]);
+                                                JSON_SetNumber(history, "dpValue", scene->actions[act].dpValues[dp]);
+                                                Db_AddDeviceHistory(history);
+                                                JSON_Delete(history);
+                                            }
                                         }
                                     }
                                 }
@@ -993,13 +1005,13 @@ void GetDeviceStatusForGroup(const char* deviceId, int dpId) {
 void GetDeviceStatusInterval() {
     static long long int oldTick = 0;
 
-    if (timeInMilliseconds() - oldTick > 60000) {
+    if (timeInMilliseconds() - oldTick > 120000) {
         oldTick = timeInMilliseconds();
         char sqlCmd[500];
         char pid[1000];
         sprintf(pid, "%s,%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN, HG_BLE_IR);
         sprintf(sqlCmd, "SELECT unicast, g.hcAddr, d.gwIndex FROM devices_inf d JOIN gateway g ON d.gwIndex = g.id \
-                        WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NULL OR %lld - d.last_updated > 50000) AND d.deviceKey IS NOT NULL", pid, oldTick);
+                        WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NULL OR %lld - d.last_updated > 100000) AND d.deviceKey IS NOT NULL", pid, oldTick);
         JSON* devicesArray = cJSON_CreateArray();
         Sql_Query(sqlCmd, row) {
             char* addr = sqlite3_column_text(row, 0);

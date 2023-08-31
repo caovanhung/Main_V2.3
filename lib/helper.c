@@ -189,4 +189,9 @@ void PlayAudio(const char* audioName) {
     system(str);
 }
 
-
+void ExecCommand(const char* command, char* output) {
+    FILE* fp = popen(command, "r");
+    if (output) {
+        while (fgets(output, sizeof(output), fp) != NULL);
+    }
+}

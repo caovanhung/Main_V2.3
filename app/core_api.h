@@ -27,6 +27,7 @@ void Aws_SaveDpValue(const char* deviceId, int dpId, int value, int pageIndex);
 void Aws_SaveDpValueString(const char* deviceId, int dpId, const char* value, int pageIndex);
 void Aws_DeleteGroup(const char* groupAddr);
 void Aws_UpdateGroupValue(const char* groupAddr, int dpId, int dpValue);
+void Aws_UpdateGroupValueString(const char* groupAddr, int dpId, const char* dpValue);
 void Aws_SaveGroupDevices(const char* groupAddr);
 void Aws_DeleteScene(const char* sceneId);
 void Aws_EnableScene(const char* sceneId, bool state);
