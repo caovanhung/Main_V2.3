@@ -184,14 +184,17 @@ List* String_Split(const char* str, const char* delim) {
 
 
 void PlayAudio(const char* audioName) {
-    char str[100];
-    sprintf(str, "aplay /home/szbaijie/audio/%s.wav", audioName);
-    system(str);
+    if (audioName) {
+        char str[100];
+        sprintf(str, "aplay /home/szbaijie/audio/%s.wav", audioName);
+        system(str);
+    }
 }
 
 void ExecCommand(const char* command, char* output) {
     FILE* fp = popen(command, "r");
     if (output) {
-        while (fgets(output, sizeof(output), fp) != NULL);
+        while (fgets(output, StringLength(output), fp) != NULL);
     }
+    fclose(fp);
 }

@@ -472,7 +472,7 @@ bool CheckWifiConnection(const char* ssid) {
     char path[1035];
     logInfo("Checking wifi connection: %s", ssid);
     FILE* fp = popen("nmcli c show --active", "r");
-    while (fgets(path, sizeof(path), fp) != NULL) {
+    while (fgets(path, StringLength(path), fp) != NULL) {
         printf("%s", path);
         if (strstr(path, ssid)) {
             ret = true;
@@ -496,7 +496,7 @@ bool CheckSSIDExist(const char* ssid) {
     char path[1035];
     logInfo("Checking ssid '%s' is exist or not", ssid);
     FILE* fp = popen("nmcli dev wifi list", "r");
-    while (fgets(path, sizeof(path), fp) != NULL) {
+    while (fgets(path, StringLength(path), fp) != NULL) {
         logInfo("%s", path);
         if (strstr(path, ssid)) {
             ret = true;

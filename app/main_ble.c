@@ -625,7 +625,7 @@ void GetIpAddressLoop() {
         tick = timeInMilliseconds();
         char address[50];
         FILE* fp = popen("python3 getIp.py", "r");
-        while (fgets(address, sizeof(address), fp) != NULL);
+        while (fgets(address, StringLength(address), fp) != NULL);
         if (address) {
             if (StringCompare(address, g_ipAddress) == false) {
                 StringCopy(g_ipAddress, address);
