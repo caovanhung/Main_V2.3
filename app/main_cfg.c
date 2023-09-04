@@ -419,6 +419,7 @@ void AutoResetNetwork() {
 
         char ipAddress[100];
         ExecCommand("hostname -I", ipAddress);
+        logInfo("IP Address: %s", ipAddress);
         if (!ipAddress || StringLength(ipAddress) == 0 || !StringContains(ipAddress, "192")) {
             // Disable and re-enable network card
             logInfo("Reset the wifi interface: %s", ipAddress);
@@ -460,7 +461,7 @@ int main(int argc, char ** argv) {
         ConnectWifiLoop();
         LedProcessLoop();
         WriteLogLoop();
-        AutoResetNetwork();
+        // AutoResetNetwork();
         usleep(1000);
     }
     return 0;
