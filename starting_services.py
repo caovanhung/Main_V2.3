@@ -68,6 +68,7 @@ def removeOldLogs(folder):
                 os.remove(folder + "/" + f)
 
 def main():
+    os.system("nmcli r wifi on")
     # Create logs folder if not exist
     logsPath = "/home/szbaijie/hc_bin/logs/"
     if not os.path.exists(logsPath + "aws"):

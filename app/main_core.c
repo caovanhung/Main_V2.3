@@ -51,7 +51,7 @@ bool sendInfoSceneFromDatabase();
 bool Scene_GetFullInfo(JSON* packet);
 void SyncDevicesState();
 void GetDeviceStatusForScene(Scene* scene);
-void GetDeviceStatusForGroup(const char* deviceId, int dpId);
+void GetDeviceStatusForGroup(const char* deviceId, int dpId, double dpValue);
 void DeleteDeviceFromGroups(const char* deviceId);
 void DeleteDeviceFromScenes(const char* deviceId);
 
@@ -763,6 +763,7 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                                             if (scene->actions[act].dpIds[dp] != 21 && scene->actions[act].dpIds[dp] != 106) {
                                                 Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
                                                 Db_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp]);
+                                                checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
                                                 JSON* history = JSON_CreateObject();
                                                 JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
                                                 JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
@@ -976,26 +977,50 @@ void GetDeviceStatusForScene(Scene* scene) {
  * Tìm tất cả các nhóm mà 1 hạt công tắc nằm trong đó, sau đó gửi lệnh để get trạng thái mới nhất của tất
  * cả thiết bị trong nhóm đó. Hàm này được gọi khi có 1 hạt công tắc thay đổi trạng thái được gửi về từ thiết bị
  */
-void GetDeviceStatusForGroup(const char* deviceId, int dpId) {
+void GetDeviceStatusForGroup(const char* deviceId, int dpId, double dpValue) {
     ASSERT(deviceId);
+    logInfo("Process group link for device: %s.%d = %.0f", deviceId, dpId, dpValue);
+    JSON* foundGroups = cJSON_CreateArray();
     JSON* devicesArray = cJSON_CreateArray();
     char sqlCommand[200];
-    sprintf(sqlCommand, "SELECT * FROM group_inf WHERE isLight = 0 AND devices LIKE '%%%s|%d%%'", deviceId, dpId);
+    // Find all groups that contain this deviceId and dpId
+    sprintf(sqlCommand, "SELECT groupAdress, name, devices FROM group_inf WHERE isLight = 0");
     Sql_Query(sqlCommand, row) {
-        char* devices = sqlite3_column_text(row, 5);
-        JSON* groupDevices = parseGroupLinkDevices(devices);
-        JSON_ForEach(d, groupDevices) {
-            DeviceInfo deviceInfo;
-            int foundDevices = Db_FindDevice(&deviceInfo, JSON_GetText(d, "deviceId"));
-            if (foundDevices == 1 && !JArr_FindByText(devicesArray, NULL, deviceInfo.addr)) {
-                JSON* item = JArr_CreateObject(devicesArray);
-                JSON_SetText(item, "addr", deviceInfo.addr);
-                JSON_SetText(item, "hcAddr", deviceInfo.hcAddr);
-                JSON_SetNumber(item, "gwIndex", deviceInfo.gwIndex);
+        char* groupAddr = sqlite3_column_text(row, 0);
+        char* groupName = sqlite3_column_text(row, 1);
+        char* devicesStr = sqlite3_column_text(row, 2);
+        JSON* devices = JSON_Parse(devicesStr);
+        JSON_ForEach(d, devices) {
+            if (StringCompare(JSON_GetText(d, "deviceId"), deviceId) && JSON_GetNumber(d, "dpId") == dpId) {
+                logInfo("found Group: (%s, %s) %s", groupAddr, groupName, devicesStr);
+                JArr_AddObject(foundGroups, JSON_Clone(devices));
             }
         }
-        JSON_Delete(groupDevices);
+        JSON_Delete(devices);
     }
+
+    // Process for all devices that linked to this element
+    JSON_ForEach(g, foundGroups) {
+        JSON_ForEach(d, g) {
+            char* dId = JSON_GetText(d, "deviceId");
+            int dp = JSON_GetNumber(d, "dpId");
+            DeviceInfo deviceInfo;
+            int foundDevices = Db_FindDevice(&deviceInfo, dId);
+            if (foundDevices == 1) {
+                Db_SaveDpValue(dId, dp, dpValue);
+                Aws_SaveDpValue(dId, dp, dpValue, deviceInfo.pageIndex);
+                checkSceneForDevice(dId, dp, dpValue, NULL, true);
+
+                if (!JArr_FindByText(devicesArray, NULL, deviceInfo.addr)) {
+                    JSON* item = JArr_CreateObject(devicesArray);
+                    JSON_SetText(item, "addr", deviceInfo.addr);
+                    JSON_SetText(item, "hcAddr", deviceInfo.hcAddr);
+                    JSON_SetNumber(item, "gwIndex", deviceInfo.gwIndex);
+                }
+            }
+        }
+    }
+    JSON_Delete(foundGroups);
     if (JArr_Count(devicesArray) > 0) {
         sendPacketToBle(-1, TYPE_GET_ONOFF_STATE, devicesArray);
     }
@@ -1166,7 +1191,7 @@ int main(int argc, char ** argv)
                                         JSON_SetNumber(payload, "causeType", EV_CAUSE_TYPE_DEVICE);
                                         Db_AddDeviceHistory(payload);
                                     }
-                                    GetDeviceStatusForGroup(dpInfo.deviceId, dpInfo.id);
+                                    GetDeviceStatusForGroup(dpInfo.deviceId, dpInfo.id, dpValue);
                                     if (opcode == 0x8202) {
                                         updateDeviceRespStatus(TYPE_CTR_DEVICE, dpInfo.deviceId, dpInfo.deviceId, 0);
                                     }

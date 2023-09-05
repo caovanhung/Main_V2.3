@@ -228,15 +228,15 @@ void ConnectWifiLoop() {
             char* message = "{\"step\":1, \"message\":\"Đang cấu wifi, vui lòng đợi\"}";
             mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
             PlayAudio("wifi_connecting");
-            logInfo("Rescan available networks: nmcli c delete %s", g_wifiSSID);
+            // logInfo("Rescan available networks: nmcli c delete %s", g_wifiSSID);
 
-            char str[400];
-            sprintf(str, "nmcli c delete %s", g_wifiSSID);
-            system(str);
+            // char str[400];
+            // sprintf(str, "nmcli c delete %s", g_wifiSSID);
+            // system(str);
             logInfo("Rescan available networks: nmcli d wifi rescan");
             system("nmcli d wifi rescan");
             tick = timeInMilliseconds();
-            failedCount = 0;
+            // failedCount = 0;
             state = WIFI_CHECK_EXIST;
         }
         break;
@@ -359,6 +359,9 @@ void MainLoop() {
                         fclose(f);
                         // Send message to BLE service to configure gateway
                         sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
+                    } else {
+                        PlayAudio("restarting");
+                        system("reboot");
                     }
                 } else {
                     LED_OFF;
@@ -473,7 +476,7 @@ bool CheckWifiConnection(const char* ssid) {
     char path[1035];
     logInfo("Checking wifi connection: %s", ssid);
     FILE* fp = popen("nmcli c show --active", "r");
-    while (fgets(path, StringLength(path), fp) != NULL) {
+    while (fgets(path, sizeof(path), fp) != NULL) {
         printf("%s", path);
         if (strstr(path, ssid)) {
             ret = true;
@@ -497,7 +500,7 @@ bool CheckSSIDExist(const char* ssid) {
     char path[1035];
     logInfo("Checking ssid '%s' is exist or not", ssid);
     FILE* fp = popen("nmcli dev wifi list", "r");
-    while (fgets(path, StringLength(path), fp) != NULL) {
+    while (fgets(path, sizeof(path), fp) != NULL) {
         logInfo("%s", path);
         if (strstr(path, ssid)) {
             ret = true;
@@ -505,10 +508,10 @@ bool CheckSSIDExist(const char* ssid) {
         }
     }
     if (ret) {
-        logInfo("SSID %s is found");
+        logInfo("SSID %s is found", ssid);
         PlayAudio("wifi_found");
     } else {
-        logInfo("SSID %s is not found");
+        logInfo("SSID %s is not found", ssid);
         PlayAudio("wifi_not_found");
     }
     pclose(fp);

@@ -621,11 +621,17 @@ void checkResponseLoop() {
 
 void GetIpAddressLoop() {
     static long long tick = 0;
+    static int count = 0;
     if (timeInMilliseconds() - tick > 30000) {
         tick = timeInMilliseconds();
+        if (count == 0) {
+            count = 1;
+            return;
+        }
+
         char address[50];
         FILE* fp = popen("python3 getIp.py", "r");
-        while (fgets(address, StringLength(address), fp) != NULL);
+        while (fgets(address, sizeof(address), fp) != NULL);
         if (address) {
             if (StringCompare(address, g_ipAddress) == false) {
                 StringCopy(g_ipAddress, address);

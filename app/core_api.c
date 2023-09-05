@@ -229,7 +229,7 @@ void Aws_DeleteScene(const char* sceneId) {
     if (sceneInfo) {
         int pageIndex = JSON_GetNumber(sceneInfo, "pageIndex");
         char payload[200];
-        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_UPDATE_SCENE, SENDER_HC_TO_CLOUD, sceneId);
+        sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": null}}}", TYPE_DEL_SCENE, SENDER_HC_TO_CLOUD, sceneId);
         sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_SCENE, pageIndex, payload);
     }
     JSON_Delete(sceneInfo);
