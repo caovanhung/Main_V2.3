@@ -108,22 +108,8 @@ if (downloadfile(folder, zipFile)):
         print("\nExecute: sudo systemctl daemon-reload");
         os.system("sudo systemctl daemon-reload")
 
-        # Enable services
-        print("\nEnabling services...")
-        for service in g_serviceNames:
-            serviceName = g_serviceNames[service]
-            cmd = f"sudo systemctl enable {serviceName}"
-            print("Execute: " + cmd);
-            os.system(cmd)
-
-        # Start services
-        print("\nStarting services...")
-        for service in g_serviceNames:
-            serviceName = g_serviceNames[service]
-            cmd = f"sudo systemctl start {serviceName}"
-            print("Execute: " + cmd);
-            os.system(cmd)
-
-        print("\nSUCCESS")
+        # Reboot system
+        print("\nRebooting system");
+        os.system("reboot")
     else:
         print("FAILED")

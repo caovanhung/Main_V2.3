@@ -224,6 +224,11 @@ Tính năng IR:
         ssh -J serveo.net root@homegy_jhskfhallas7624923
 
 
+# Quy trình OTA HC
+    + Force update:
+        - Mỗi khi khởi động, HC sẽ lấy thông tin version mới từ trường hcforce của showdow: $aws/things/agency2022/Setting và so sánh với version của code hiện tại được define ở HC_VERSION trong file define.h. Nếu version hiện tại nhỏ hơn version mới thì tiến hành update. Version được đánh theo số ví dụ 1, 2, 12, 13,...
+        - Firmware của HC gồm 5 file HG_AWS, HG_CORE, HG_BLE, HG_WIFI, HG_CFG được nén thành file zip và đặt tên là hc_bin_17.zip, trong đó 17 là version của HC. File zip này phải được đặt ở S3 tại đường dẫn: S3/Buckets/otable/hc_bin_17.zip. Lưu ý version trong tên file .zip phải trùng với macro HC_VERSION trong file define.h, nếu không HC sẽ liên tục check thấy có version mới mỗi lần khởi động lại
+
 
 # Danh sách bản tin điều khiển từ App mobile:
 1. Bản tin get log từ thiết bị:

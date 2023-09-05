@@ -5,8 +5,8 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <string.h>     // string function definitions
-#include <fcntl.h>  // File control definitions
-#include <errno.h>  // Error number definitions
+#include <fcntl.h>      // File control definitions
+#include <errno.h>      // Error number definitions
 #include <termios.h>    // POSIX terminal control definitionss
 #include <sys/time.h>   // time calls
 #include <sys/un.h>

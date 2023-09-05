@@ -108,7 +108,7 @@ void updateSubAckStatus( MQTTPacketInfo_t * pPacketInfo );
 int Aws_PublishMessage(const char* pTopic, const char* pMessage);
 
 
-int GetCurrentVersion() {
+void GetThingId() {
     // Get thingId
     FILE* f = fopen("app.json", "r");
     char buff[1000];
@@ -122,14 +122,6 @@ int GetCurrentVersion() {
         }
         JSON_Delete(setting);
     }
-
-    f = fopen("version", "r");
-    if (f) {
-        fread(buff, sizeof(char), 10, f);
-        fclose(f);
-        return atoi(buff);
-    }
-    return 0;
 }
 
 void SaveCurrentVersion(int version) {
@@ -741,20 +733,18 @@ void CheckNewVersion() {
         JSON* hcforce = JSON_GetObject(setting, "hcforce");
         if (hcforce) {
             int newVersion = JSON_GetNumber(hcforce, "version");
-            int currentVersion = GetCurrentVersion();
+            int currentVersion = HC_VERSION;
             printf("currentVersion: %d, newVersion: %d\n", currentVersion, newVersion);
             if (currentVersion < newVersion) {
                 // Update to new version
                 char cmd[100];
                 char result[1000];
-                sprintf(cmd, "python3 /usr/bin/ota.pyc %d\n", newVersion);
+                sprintf(cmd, "python3 /usr/bin/ota.py %d\n", newVersion);
                 printf("Executing command: %s", cmd);
                 FILE* fp = popen(cmd, "r");
                 while (fgets(result, sizeof(result), fp) != NULL);
                 fclose(fp);
                 if (StringContains(result, "SUCCESS")) {
-                    // Save current version to app.json file and aws
-                    SaveCurrentVersion(newVersion);
                     printf("Upgraded to version %d\n", newVersion);
                 } else {
                     printf("[ERROR] Error to update to new version\n");
@@ -766,7 +756,7 @@ void CheckNewVersion() {
 
 
 int main( int argc,char ** argv ) {
-    int currentVersion = GetCurrentVersion();
+    GetThingId();
     Aws_Init();
     Mosq_Init();
     CheckNewVersion();

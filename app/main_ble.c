@@ -639,7 +639,7 @@ void GetIpAddressLoop() {
                 }
                 // Update new IP address to AWS
                 char msg[200];
-                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\", \"hcVersion\":\"%s\"}}, \"sender\":11}}}", g_hcAddr, g_ipAddress, HC_VERSION);
+                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\", \"hcVersion\":%d}}, \"sender\":11}}}", g_hcAddr, g_ipAddress, HC_VERSION);
                 sendToService(SERVICE_AWS, 255, msg);
             }
         }
