@@ -224,6 +224,13 @@ Tính năng IR:
         ssh -J serveo.net root@homegy_jhskfhallas7624923
 
 
+# Chỉnh sửa crontab để reset thiết bị hằng ngày và check network
+    File crontabs được lưu ở /var/spool/cron/crontabs/root. Thêm 2 dòng sau vào cuối file trên
+        0 3 * * * sudo shutdown -r
+        * * * * * /usr/bin/python3 /home/szbaijie/hc_bin/check_network.py
+
+# Compile python to binary .pyc: python3 -m compileall .
+
 # Quy trình OTA HC
     + Force update:
         - Mỗi khi khởi động, HC sẽ lấy thông tin version mới từ trường hcforce của showdow: $aws/things/agency2022/Setting và so sánh với version của code hiện tại được define ở HC_VERSION trong file define.h. Nếu version hiện tại nhỏ hơn version mới thì tiến hành update. Version được đánh theo số ví dụ 1, 2, 12, 13,...

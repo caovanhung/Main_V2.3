@@ -108,8 +108,6 @@ if (downloadfile(folder, zipFile)):
         print("\nExecute: sudo systemctl daemon-reload");
         os.system("sudo systemctl daemon-reload")
 
-        # Reboot system
-        print("\nRebooting system");
-        os.system("reboot")
+        print("\nSUCCESS")
     else:
         print("FAILED")

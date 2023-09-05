@@ -1355,6 +1355,14 @@ int main(int argc, char ** argv)
                         if (foundDevices == 1) {
                             Db_DeleteDevice(deviceInfo.id);
                             Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
+                            if (StringCompare(deviceInfo.pid, HG_BLE_IR)) {
+                                // Remove TV, AC, FAN, Remote
+                                char sqlCmd[100];
+                                sprintf(sqlCmd, "DELETE FROM devices_inf WHERE unicast = '%s'", deviceAddr);
+                                Sql_Exec(sqlCmd);
+                                sprintf(sqlCmd, "DELETE FROM devices WHERE address = '%s'", deviceAddr);
+                                Sql_Exec(sqlCmd);
+                            }
                             DeleteDeviceFromGroups(deviceInfo.id);
                             DeleteDeviceFromScenes(deviceInfo.id);
                         }
