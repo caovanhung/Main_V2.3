@@ -55,6 +55,7 @@ char g_ipAddress[100];
 char g_hcAddr[10];
 char g_masterIP[100];
 char g_mosqIP[100];
+char g_wifiName[100];
 
 extern int g_gatewayFds[GATEWAY_NUM];
 char rcv_uart_buff[MAXLINE];
@@ -651,24 +652,22 @@ void GetIpAddressLoop() {
         }
         fclose(fp);
 
-        // // Check connected wifi name
-        // char wifiName[100];
-        // fp = popen("iw wlan0 info | grep -Po '(?<=ssid ).*'", "r");
-        // while (fgets(wifiName, sizeof(wifiName), fp) != NULL);
-        // if (wifiName && StringLength(wifiName) > 1) {
-        //     wifiName[StringLength(wifiName) - 1] = 0;
-        //     if (StringCompare(wifiName, g_wifiName) == false) {
-        //         StringCopy(g_wifiName, wifiName);
-        //         logInfo("New connected wifi name: %s", g_wifiName);
-        //         // Update new wifi name to AWS
-        //         char msg[200];
-        //         sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"0A00\":{\"nameWifi\":\"%s\"}}, \"sender\":11}}}", g_wifiName);
-        //         char* topic = Aws_GetTopic(PAGE_MAIN, 1, TOPIC_UPD_PUB);
-        //         mqttCloudPublish(topic, msg);
-        //         free(topic);
-        //     }
-        // }
-        // fclose(fp);
+        // Check connected wifi name
+        char wifiName[100];
+        fp = popen("iw wlan0 info | grep -Po '(?<=ssid ).*'", "r");
+        while (fgets(wifiName, sizeof(wifiName), fp) != NULL);
+        if (wifiName && StringLength(wifiName) > 1) {
+            wifiName[StringLength(wifiName) - 1] = 0;
+            if (StringCompare(wifiName, g_wifiName) == false) {
+                StringCopy(g_wifiName, wifiName);
+                logInfo("New connected wifi name: %s", g_wifiName);
+                // Update new wifi name to AWS
+                char msg[200];
+                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"nameWifi\":\"%s\"}}, \"sender\":11}}}", g_hcAddr, g_wifiName);
+                sendToService(SERVICE_AWS, 255, msg);
+            }
+        }
+        fclose(fp);
     }
 }
 
@@ -1019,8 +1018,9 @@ int main( int argc,char ** argv )
                     bool ret = addSceneActions(sceneId, actions);
                     if (ret && JSON_HasKey(payload, "conditions")) {
                         JSON* conditions = JSON_GetObject(payload, "conditions");
-                        JSON* condition = JArr_GetObject(conditions, 0);
-                        ret = addSceneCondition(sceneId, condition);
+                        JSON_ForEach(c, conditions) {
+                            addSceneCondition(sceneId, c);
+                        }
                     }
                     break;
                 }
@@ -1032,8 +1032,9 @@ int main( int argc,char ** argv )
                     bool ret = deleteSceneActions(sceneId, actions);
                     if (ret && JSON_HasKey(payload, "conditions")) {
                         JSON* conditions = JSON_GetObject(payload, "conditions");
-                        JSON* condition = JArr_GetObject(conditions, 0);
-                        ret = deleteSceneCondition(sceneId, condition);
+                        JSON_ForEach(c, conditions) {
+                            deleteSceneCondition(sceneId, c);
+                        }
                     }
                     break;
                 }
@@ -1048,13 +1049,17 @@ int main( int argc,char ** argv )
                     if (JArr_Count(actionsNeedAdd) > 0) {
                         addSceneActions(sceneId, actionsNeedAdd);
                     }
-                    if (JSON_HasKey(payload, "conditionNeedRemove")) {
-                        JSON* conditionNeedRemove = JSON_GetObject(payload, "conditionNeedRemove");
-                        deleteSceneCondition(sceneId, conditionNeedRemove);
+                    if (JSON_HasKey(payload, "conditionsNeedRemove")) {
+                        JSON* conditionsNeedRemove = JSON_GetObject(payload, "conditionsNeedRemove");
+                        JSON_ForEach(c, conditionsNeedRemove) {
+                            deleteSceneCondition(sceneId, c);
+                        }
                     }
-                    if (JSON_HasKey(payload, "conditionNeedAdd")) {
-                        JSON* conditionNeedAdd = JSON_GetObject(payload, "conditionNeedAdd");
-                        addSceneCondition(sceneId, conditionNeedAdd);
+                    if (JSON_HasKey(payload, "conditionsNeedAdd")) {
+                        JSON* conditionsNeedAdd = JSON_GetObject(payload, "conditionsNeedAdd");
+                        JSON_ForEach(c, conditionsNeedAdd) {
+                            addSceneCondition(sceneId, c);
+                        }
                     }
                     break;
                 }

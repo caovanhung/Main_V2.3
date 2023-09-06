@@ -1,0 +1,12 @@
+[Unit]
+Description=Homegy Homekit Service
+After=rc-local.service  hg_aws.service
+
+[Service]
+User=root
+WorkingDirectory=/home/szbaijie/hc_bin
+ExecStart=/home/szbaijie/hc_bin/homekit
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

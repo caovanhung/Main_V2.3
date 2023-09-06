@@ -76,7 +76,6 @@ TransportInterface_t transport;
 NetworkContext_t networkContext;
 OpensslParams_t opensslParams;
 const char g_ipAddress[50];
-const char g_wifiName[100];
 
 static bool g_awsIsConnected = false;
 static bool g_mosqIsConnected = false;

@@ -65,6 +65,7 @@ TransportInterface_t transport;
 NetworkContext_t networkContext;
 OpensslParams_t opensslParams;
 const char g_thingId[100];
+const char g_hcAddr[10] = {0};
 
 static bool g_awsIsConnected = false;
 static bool g_mosqIsConnected = false;
@@ -117,9 +118,13 @@ void GetThingId() {
         fclose(f);
         JSON* setting = JSON_Parse(buff);
         char* thingId = JSON_GetText(setting, "thingId");
+        char* hcAddr = JSON_GetText(setting, "hcAddr");
         if (thingId) {
             StringCopy(g_thingId, thingId);
         }
+        // if (hcAddr) {
+        //     StringCopy(g_hcAddr, hcAddr);
+        // }
         JSON_Delete(setting);
     }
 }
@@ -656,18 +661,19 @@ void Aws_Init() {
     returnStatus = initializeMqtt( &mqttContext, &networkContext );
 
     // Initialize the subscribe list
-    g_awsSubscriptionCount = 2;
+    g_awsSubscriptionCount = 1;
     g_awsSubscriptionList = malloc(sizeof(MQTTSubscribeInfo_t) * g_awsSubscriptionCount);
 
-    g_awsSubscriptionList[0].qos = MQTTQoS0;
-    g_awsSubscriptionList[0].pTopicFilter = AWS_TOPIC_SETTING;
-    g_awsSubscriptionList[0].topicFilterLength = strlen(g_awsSubscriptionList[0].pTopicFilter);
+    // g_awsSubscriptionList[0].qos = MQTTQoS0;
+    // g_awsSubscriptionList[0].pTopicFilter = AWS_TOPIC_SETTING;
+    // g_awsSubscriptionList[0].topicFilterLength = strlen(g_awsSubscriptionList[0].pTopicFilter);
 
     char* notifyTopic = malloc(200);
     sprintf(notifyTopic, AWS_TOPIC_NOTIFY, g_thingId);
-    g_awsSubscriptionList[1].qos = MQTTQoS0;
-    g_awsSubscriptionList[1].pTopicFilter = notifyTopic;
-    g_awsSubscriptionList[1].topicFilterLength = strlen(g_awsSubscriptionList[1].pTopicFilter);
+    g_awsSubscriptionList[0].qos = MQTTQoS0;
+    g_awsSubscriptionList[0].pTopicFilter = notifyTopic;
+    g_awsSubscriptionList[0].topicFilterLength = strlen(g_awsSubscriptionList[0].pTopicFilter);
+    logInfo("Aws Topics to subscribe: %s", g_awsSubscriptionList[0].pTopicFilter);
 }
 
 void Aws_ProcessLoop() {
@@ -727,28 +733,66 @@ void Mosq_ProcessLoop() {
     }
 }
 
-void CheckNewVersion() {
+void CheckNewForceVersion() {
     JSON* setting = Aws_GetShadow("agency2022", "Setting");
     if (setting) {
-        JSON* hcforce = JSON_GetObject(setting, "hcforce");
+        JSON* hcforce = JSON_GetObject(setting, "hcVersion");
         if (hcforce) {
-            int newVersion = JSON_GetNumber(hcforce, "version");
+            int newVersion = JSON_GetNumber(hcforce, "forceVersion");
             int currentVersion = HC_VERSION;
-            printf("currentVersion: %d, newVersion: %d\n", currentVersion, newVersion);
+            logInfo("currentVersion: %d, newVersion: %d\n", currentVersion, newVersion);
             if (currentVersion < newVersion) {
                 // Update to new version
+                PlayAudio("version_updating");
                 char cmd[100];
                 char result[1000];
-                sprintf(cmd, "python3 /usr/bin/ota.py %d\n", newVersion);
-                printf("Executing command: %s", cmd);
+                sprintf(cmd, "python3 /usr/bin/ota.pyc %d\n", newVersion);
+                logInfo("Executing command: %s", cmd);
                 FILE* fp = popen(cmd, "r");
                 while (fgets(result, sizeof(result), fp) != NULL);
                 fclose(fp);
                 if (StringContains(result, "SUCCESS")) {
-                    printf("Upgraded to version %d\n", newVersion);
+                    logInfo("Upgraded to version %d\n", newVersion);
+                    PlayAudio("update_success");
+                    system("reboot");
                 } else {
-                    printf("[ERROR] Error to update to new version\n");
+                    logInfo("[ERROR] Error to update to new version\n");
+                    PlayAudio("update_error");
                 }
+            }
+        }
+    }
+}
+
+void CheckNewVersion() {
+    JSON* setting = Aws_GetShadow("agency2022", "Setting");
+    if (setting) {
+        JSON* hcforce = JSON_GetObject(setting, "hcVersion");
+        if (hcforce) {
+            int newVersion = JSON_GetNumber(hcforce, "lastestVersion");
+            int currentVersion = HC_VERSION;
+            logInfo("currentVersion: %d, newVersion: %d\n", currentVersion, newVersion);
+            if (currentVersion < newVersion) {
+                // Update to new version
+                PlayAudio("version_updating");
+                char cmd[100];
+                char result[1000];
+                sprintf(cmd, "python3 /usr/bin/ota.pyc %d\n", newVersion);
+                logInfo("Executing command: %s", cmd);
+                FILE* fp = popen(cmd, "r");
+                while (fgets(result, sizeof(result), fp) != NULL);
+                fclose(fp);
+                if (StringContains(result, "SUCCESS")) {
+                    logInfo("Upgraded to version %d\n", newVersion);
+                    PlayAudio("update_success");
+                    system("reboot");
+                } else {
+                    logInfo("[ERROR] Error to update to new version\n");
+                    PlayAudio("update_error");
+                }
+            } else {
+                logInfo("There is no new version to upgrade");
+                PlayAudio("no_new_version");
             }
         }
     }
@@ -756,13 +800,45 @@ void CheckNewVersion() {
 
 
 int main( int argc,char ** argv ) {
+    queue_received_aws = newQueue(QUEUE_SIZE);
+
     GetThingId();
     Aws_Init();
     Mosq_Init();
-    CheckNewVersion();
+    CheckNewForceVersion();
     while (1) {
         Aws_ProcessLoop();
         // Mosq_ProcessLoop();
+
+        int size_queue = get_sizeQueue(queue_received_aws);
+        if (size_queue > 0) {
+            char* recvMsg = (char *)dequeue(queue_received_aws);
+            JSON* recvPacket = JSON_Parse(recvMsg);
+            free(recvMsg);
+            if (recvPacket) {
+                JSON* state = JSON_GetObject(recvPacket, "state");
+                JSON* reported = JSON_GetObject(state, "reported");
+                int reqType = JSON_GetNumber(reported, "type");
+                int sender = JSON_GetNumber(reported, "sender");
+                if (sender == 0) {
+                    sender = JSON_GetNumber(recvPacket, "sender");
+                }
+                if (reqType == 0) {
+                    reqType = JSON_GetNumber(recvPacket, "type");
+                }
+                if (sender != SENDER_APP_VIA_LOCAL && sender != SENDER_APP_TO_CLOUD) {
+                    continue;
+                }
+                switch(reqType) {
+                    case TYPE_OTA_HC: {
+                        logInfo("TYPE_OTA_HC");
+                        PlayAudio("version_checking");
+                        CheckNewVersion();
+                        break;
+                    }
+                }
+            }
+        }
 
         usleep(100);
     }

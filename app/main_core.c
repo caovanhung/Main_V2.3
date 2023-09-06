@@ -1737,14 +1737,14 @@ int main(int argc, char ** argv)
 
                                 // Find all conditions that are need to be removed and added
                                 JSON* newConditionsArray = JSON_GetObject(newScene, "conditions");
-                                JSON* conditionNeedRemove = NULL;
-                                JSON* conditionNeedAdd = NULL;
+                                JSON* conditionsNeedRemove = JSON_CreateArray();
+                                JSON* conditionsNeedAdd = JSON_CreateArray();
                                 JSON_ForEach(newCondition, newConditionsArray) {
                                     int state = JSON_GetNumber(newCondition, "state");
                                     if (state == -3) {
-                                        conditionNeedRemove = JSON_Clone(newCondition);
+                                        JArr_AddObject(conditionsNeedRemove, JSON_Clone(newCondition));
                                     } else if (state == -2) {
-                                        conditionNeedAdd = JSON_Clone(newCondition);
+                                        JArr_AddObject(conditionsNeedAdd, JSON_Clone(newCondition));
                                     }
                                 }
 
@@ -1753,8 +1753,8 @@ int main(int argc, char ** argv)
                                 JSON_SetText(packet, "sceneId", sceneId);
                                 JSON_SetObject(packet, "actionsNeedRemove", actionsNeedRemove);
                                 JSON_SetObject(packet, "actionsNeedAdd", actionsNeedAdd);
-                                JSON_SetObject(packet, "conditionNeedRemove", conditionNeedRemove);
-                                JSON_SetObject(packet, "conditionNeedAdd", conditionNeedAdd);
+                                JSON_SetObject(packet, "conditionsNeedRemove", conditionsNeedRemove);
+                                JSON_SetObject(packet, "conditionsNeedAdd", conditionsNeedAdd);
                                 // printf("packet: %s\n", cJSON_PrintUnformatted(packet));
                                 sendPacketToBle(-1, reqType, packet);
 
@@ -1783,25 +1783,25 @@ int main(int argc, char ** argv)
                                         JSON_SetText(addedDevice, "deviceId", deviceId);
                                     }
                                 }
-                                if (conditionNeedAdd) {
+                                JSON_ForEach(condition, conditionsNeedAdd) {
                                     char* sceneId = JSON_GetText(payload, "id");
-                                    char* dpAddr = JSON_GetText(conditionNeedAdd, "entityAddr");
-                                    if (JSON_HasKey(conditionNeedAdd, "dpAddr")) {
-                                        dpAddr = JSON_GetText(conditionNeedAdd, "dpAddr");
+                                    char* dpAddr = JSON_GetText(condition, "entityAddr");
+                                    if (JSON_HasKey(condition, "dpAddr")) {
+                                        dpAddr = JSON_GetText(condition, "dpAddr");
                                     }
-                                    char* deviceId = JSON_GetText(conditionNeedAdd, "entityId");
+                                    char* deviceId = JSON_GetText(condition, "entityId");
                                     JSON* addedDevice = addDeviceToRespList(TYPE_ADD_SCENE, sceneId, dpAddr);
                                     if (addedDevice) {
                                         JSON_SetText(addedDevice, "deviceId", deviceId);
                                     }
                                 }
-                                if (conditionNeedRemove) {
+                                JSON_ForEach(condition, conditionsNeedRemove) {
                                     char* sceneId = JSON_GetText(payload, "id");
-                                    char* dpAddr = JSON_GetText(conditionNeedRemove, "entityAddr");
-                                    if (JSON_HasKey(conditionNeedRemove, "dpAddr")) {
-                                        dpAddr = JSON_GetText(conditionNeedRemove, "dpAddr");
+                                    char* dpAddr = JSON_GetText(condition, "entityAddr");
+                                    if (JSON_HasKey(condition, "dpAddr")) {
+                                        dpAddr = JSON_GetText(condition, "dpAddr");
                                     }
-                                    char* deviceId = JSON_GetText(conditionNeedRemove, "entityId");
+                                    char* deviceId = JSON_GetText(condition, "entityId");
                                     JSON* addedDevice = addDeviceToRespList(TYPE_ADD_SCENE, sceneId, dpAddr);
                                     if (addedDevice) {
                                         JSON_SetText(addedDevice, "deviceId", deviceId);

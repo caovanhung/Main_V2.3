@@ -134,9 +134,13 @@ func GetDeviceList() {
 }
 
 func OnSwitchRemoteUpdate(v bool) {
-    for i, sw := range(g_hgSwitches) {
-        if sw.OnOff != int(sw.hkObj.Switch.On.Value()) {
-            sw.OnOff = int(sw.hkObj.Switch.On.Value())
+    for _, sw := range(g_hgSwitches) {
+        actualOnOff := 0
+        if sw.hkObj.Switch.On.Value() {
+            actualOnOff = 1
+        }
+        if sw.OnOff != actualOnOff {
+            sw.OnOff = actualOnOff
             // TurnSwitchOnOff(sw.Id, sw.DpId, sw.OnOff)
             break
         }
