@@ -41,14 +41,16 @@ type AccountInfo struct {
     } `json:"state"`
 }
 
-type Device struct {
-    Id   string
-    Name string
-    Pid  string
+type HGSwitch struct {
+    Id    string
+    DpId  int
+    OnOff int
+    Name  string
+    hkObj *accessory.Switch
 }
 
 var appConfig AppConfig
-var g_devices []Device
+var g_hgSwitches []HGSwitch
 
 func GetHomeInformation() bool {
     // Get home information
@@ -97,28 +99,60 @@ func GetDeviceList() {
             if (reflect.ValueOf(v).Kind() == reflect.Map) {
                 deviceObj := v.(map[string]interface{})
                 deviceInfo := deviceObj["devices"]
-                pid := strings.Split(deviceInfo.(string), "|")[1]
-                // log.Println(k, pid)
-                g_devices = append(g_devices, Device{Id: k, Pid: pid, Name: deviceObj["name"].(string)})
+                items := strings.Split(deviceInfo.(string), "|")
+                if len(items) == 6 {
+                    pid := items[1]
+                    if strings.Contains(PID_HG_SWITCH, pid) {
+                        dictDps := deviceObj["dictDPs"].(map[string]interface{})
+                        dictNames := deviceObj["dictName"].(map[string]interface{})
+                        for dp, dpValue := range dictDps {
+                            if dpInt, err := strconv.Atoi(dp); err == nil {
+                                dpValueInt := -1
+                                if dpValueFloat, ok := dpValue.(float64); ok {
+                                    dpValueInt = int(dpValueFloat)
+                                } else if dpValueBool, ok := dpValue.(bool); ok {
+                                    if dpValueBool == true {
+                                        dpValueInt = 1
+                                    } else {
+                                        dpValueInt = 0
+                                    }
+                                }
+
+                                if dpValueInt >= 0 {
+                                    dpName := dictNames[dp].(string)
+                                    deviceName := deviceObj["name"].(string)
+                                    d := HGSwitch{Id: k, Name: deviceName + "_" + dpName, DpId: dpInt, OnOff: dpValueInt}
+                                    g_hgSwitches = append(g_hgSwitches, d)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 func OnSwitchRemoteUpdate(v bool) {
-
+    for i, sw := range(g_hgSwitches) {
+        if sw.OnOff != int(sw.hkObj.Switch.On.Value()) {
+            sw.OnOff = int(sw.hkObj.Switch.On.Value())
+            // TurnSwitchOnOff(sw.Id, sw.DpId, sw.OnOff)
+            break
+        }
+    }
 }
 
 func main() {
-    var switchs []*accessory.Switch
+    // var switchs []*accessory.Switch
     var accessories []*accessory.A
 
     GetHomeInformation()
     GetDeviceList()
 
     // Print device list
-    for i, d := range(g_devices) {
-        log.Printf("%d: %s - %s - %s\n", i + 1, d.Id, d.Pid, d.Name)
+    for i, d := range(g_hgSwitches) {
+        log.Printf("%d: %s.%d=%d - %s\n", i + 1, d.Id, d.DpId, d.OnOff, d.Name)
     }
 
     // Store the data in the "./db" directory.
@@ -127,13 +161,11 @@ func main() {
     hc := accessory.NewBridge(accessory.Info{Name: "HC Homegy",})
 
     // Create switchs
-    for _, d := range(g_devices) {
-        if strings.Contains(PID_HG_SWITCH, d.Pid) {
-            sw := accessory.NewSwitch(accessory.Info{Name: d.Name,})
-            sw.Switch.On.OnValueRemoteUpdate(OnSwitchRemoteUpdate)
-            switchs = append(switchs, sw)
-            accessories = append(accessories, sw.A)
-        }
+    for i, d := range(g_hgSwitches) {
+        sw := accessory.NewSwitch(accessory.Info{Name: d.Name,})
+        g_hgSwitches[i].hkObj = sw
+        sw.Switch.On.OnValueRemoteUpdate(OnSwitchRemoteUpdate)
+        accessories = append(accessories, sw.A)
     }
     
     // Create CCT light

@@ -994,6 +994,16 @@ void GetDeviceStatusForGroup(const char* deviceId, int dpId, double dpValue) {
             if (StringCompare(JSON_GetText(d, "deviceId"), deviceId) && JSON_GetNumber(d, "dpId") == dpId) {
                 logInfo("found Group: (%s, %s) %s", groupAddr, groupName, devicesStr);
                 JArr_AddObject(foundGroups, JSON_Clone(devices));
+                // Save history for group link
+                JSON* history = JSON_CreateObject();
+                JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                JSON_SetNumber(history, "causeType", 0);
+                JSON_SetText(history, "causeId", deviceId);
+                JSON_SetText(history, "deviceId", groupAddr);
+                JSON_SetNumber(history, "dpId", 0);
+                JSON_SetNumber(history, "dpValue", dpValue);
+                Db_AddDeviceHistory(history);
+                JSON_Delete(history);
             }
         }
         JSON_Delete(devices);
@@ -1357,11 +1367,17 @@ int main(int argc, char ** argv)
                             Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
                             if (StringCompare(deviceInfo.pid, HG_BLE_IR)) {
                                 // Remove TV, AC, FAN, Remote
-                                char sqlCmd[100];
-                                sprintf(sqlCmd, "DELETE FROM devices_inf WHERE unicast = '%s'", deviceAddr);
-                                Sql_Exec(sqlCmd);
-                                sprintf(sqlCmd, "DELETE FROM devices WHERE address = '%s'", deviceAddr);
-                                Sql_Exec(sqlCmd);
+                                char sqlCmd[200];
+                                sprintf(sqlCmd, "SELECT * FROM devices_inf d JOIN gateway g ON g.id = d.gwIndex WHERE Unicast = '%s' AND g.hcAddr = '%s';", deviceAddr, hcAddr);
+                                Sql_Query(sqlCmd, row) {
+                                    char* deviceId = sqlite3_column_text(row, 0);
+                                    int pageIndex = sqlite3_column_int(row, 15);
+                                    sprintf(sqlCmd, "DELETE FROM devices_inf WHERE unicast = '%s'", deviceAddr);
+                                    Sql_Exec(sqlCmd);
+                                    sprintf(sqlCmd, "DELETE FROM devices WHERE address = '%s'", deviceAddr);
+                                    Sql_Exec(sqlCmd);
+                                    Aws_DeleteDevice(deviceId, pageIndex);
+                                }
                             }
                             DeleteDeviceFromGroups(deviceInfo.id);
                             DeleteDeviceFromScenes(deviceInfo.id);
@@ -1493,6 +1509,7 @@ int main(int argc, char ** argv)
                                             if (foundDevices == 1) {
                                                 for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
                                                     Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
+                                                    checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
                                                 }
                                             }
                                         }
