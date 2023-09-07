@@ -408,39 +408,52 @@ void ResponseWaiting() {
                 JSON* updatedActions = JSON_CreateArray();
                 JSON_ForEach(action, newActions) {
                     int state = JSON_HasKey(action, "state")? JSON_GetNumber(action, "state") : -2;
+                    char* entityId = JSON_GetText(action, "entityId");
+                    JSON* executorProperty = JSON_GetObject(action, "executorProperty");
+                    int dpId = 0;
+                    if (JArr_Count(executorProperty) == 1) {
+                        JSON_ForEach(o, executorProperty) {
+                            dpId = atoi(o->string);
+                            dpId = dpId <= 4? dpId : 0;
+                        }
+                    }
                     if (state == 0) {
                         JSON* updatedAction = JSON_Clone(action);
                         JArr_AddObject(updatedActions, updatedAction);
                     } else if (state == -2) {
-                        char* entityId = JSON_GetText(action, "entityId");
                         // Find status of this device
                         for (int d = 0; d < deviceCount; d++) {
                             JSON* device = JArr_GetObject(devices, d);
                             char* deviceId = JSON_GetText(device, "deviceId");
+                            int respDpId = JSON_GetNumber(device, "dpId");
                             if (StringCompare(entityId, deviceId)) {
-                                JSON* updatedAction = JSON_Clone(action);
-                                int status = JSON_GetNumber(device, "status");
-                                status = status == -2? -1 : status;
-                                JSON_SetNumber(updatedAction, "state", status);
-                                JArr_AddObject(updatedActions, updatedAction);
-                                break;
+                                if (dpId == 0 || dpId == respDpId) {
+                                    JSON* updatedAction = JSON_Clone(action);
+                                    int status = JSON_GetNumber(device, "status");
+                                    status = status == -2? -1 : status;
+                                    JSON_SetNumber(updatedAction, "state", status);
+                                    JArr_AddObject(updatedActions, updatedAction);
+                                    break;
+                                }
                             }
                         }
                     } else if (state == -3) {
-                        char* entityId = JSON_GetText(action, "entityId");
                         // Find status of this device and remove it if this device is deleted successfully
                         for (int d = 0; d < deviceCount; d++) {
                             JSON* device = JArr_GetObject(devices, d);
                             char* respDeviceId = JSON_GetText(device, "deviceId");
+                            int respDpId = JSON_GetNumber(device, "dpId");
                             if (StringCompare(entityId, respDeviceId)) {
-                                int status = JSON_GetNumber(device, "status");
-                                if (status != 0) {
-                                    status = status == -2? -1 : status;
-                                    JSON* updatedAction = JSON_Clone(action);
-                                    JSON_SetNumber(updatedAction, "state", status);
-                                    JArr_AddObject(updatedActions, updatedAction);
+                                if (dpId == 0 || dpId == respDpId) {
+                                    int status = JSON_GetNumber(device, "status");
+                                    if (status != 0) {
+                                        status = status == -2? -1 : status;
+                                        JSON* updatedAction = JSON_Clone(action);
+                                        JSON_SetNumber(updatedAction, "state", status);
+                                        JArr_AddObject(updatedActions, updatedAction);
+                                    }
+                                    break;
                                 }
-                                break;
                             }
                         }
                     }
@@ -451,39 +464,46 @@ void ResponseWaiting() {
                 JSON* updatedConditions = JSON_CreateArray();
                 JSON_ForEach(condition, newConditions) {
                     int state = JSON_HasKey(condition, "state")? JSON_GetNumber(condition, "state") : -2;
+                    char* entityId = JSON_GetText(condition, "entityId");
+                    int dpId = JSON_GetNumber(condition, "subDeviceId");
+                    dpId = dpId <= 4? dpId : 0;
                     if (state == 0) {
                         JSON* updatedCondition = JSON_Clone(condition);
                         JArr_AddObject(updatedConditions, updatedCondition);
                     } else if (state == -2) {
-                        char* entityId = JSON_GetText(condition, "entityId");
                         // Find status of this device
                         for (int d = 0; d < deviceCount; d++) {
                             JSON* device = JArr_GetObject(devices, d);
                             char* deviceId = JSON_GetText(device, "deviceId");
+                            int respDpId = JSON_GetNumber(device, "dpId");
                             if (StringCompare(entityId, deviceId)) {
-                                JSON* updatedCondition = JSON_Clone(condition);
-                                int status = JSON_GetNumber(device, "status");
-                                status = status == -2? -1 : status;
-                                JSON_SetNumber(updatedCondition, "state", status);
-                                JArr_AddObject(updatedConditions, updatedCondition);
-                                break;
+                                if (dpId == 0 || dpId == respDpId) {
+                                    JSON* updatedCondition = JSON_Clone(condition);
+                                    int status = JSON_GetNumber(device, "status");
+                                    status = status == -2? -1 : status;
+                                    JSON_SetNumber(updatedCondition, "state", status);
+                                    JArr_AddObject(updatedConditions, updatedCondition);
+                                    break;
+                                }
                             }
                         }
                     } else if (state == -3) {
-                        char* entityId = JSON_GetText(condition, "entityId");
                         // Find status of this device and remove it if this device is deleted successfully
                         for (int d = 0; d < deviceCount; d++) {
                             JSON* device = JArr_GetObject(devices, d);
                             char* respDeviceId = JSON_GetText(device, "deviceId");
+                            int respDpId = JSON_GetNumber(device, "dpId");
                             if (StringCompare(entityId, respDeviceId)) {
-                                int status = JSON_GetNumber(device, "status");
-                                if (status != 0) {
-                                    status = status == -2? -1 : status;
-                                    JSON* updatedCondition = JSON_Clone(condition);
-                                    JSON_SetNumber(updatedCondition, "state", status);
-                                    JArr_AddObject(updatedConditions, updatedCondition);
+                                if (dpId == 0 || dpId == respDpId) {
+                                    int status = JSON_GetNumber(device, "status");
+                                    if (status != 0) {
+                                        status = status == -2? -1 : status;
+                                        JSON* updatedCondition = JSON_Clone(condition);
+                                        JSON_SetNumber(updatedCondition, "state", status);
+                                        JArr_AddObject(updatedConditions, updatedCondition);
+                                    }
+                                    break;
                                 }
-                                break;
                             }
                         }
                     }
@@ -1666,13 +1686,17 @@ int main(int argc, char ** argv)
                                 if (JSON_HasKey(action, "pid")) {
                                     char* sceneId = JSON_GetText(payload, "id");
                                     char* dpAddr = JSON_GetText(action, "entityAddr");
+                                    int dpId = 0;
                                     if (JSON_HasKey(action, "dpAddr")) {
                                         dpAddr = JSON_GetText(action, "dpAddr");
+                                        dpId = JSON_GetNumber(action, "dpId");
                                     }
                                     char* deviceId = JSON_GetText(action, "entityId");
                                     JSON* addedDevice = addDeviceToRespList(reqType, sceneId, dpAddr);
                                     if (addedDevice) {
                                         JSON_SetText(addedDevice, "deviceId", deviceId);
+                                        JSON_SetText(addedDevice, "entityType", "action");
+                                        JSON_SetNumber(addedDevice, "dpId", dpId);
                                     }
                                 }
                             }
@@ -1681,13 +1705,17 @@ int main(int argc, char ** argv)
                                 if (JSON_HasKey(condition, "pid")) {
                                     char* sceneId = JSON_GetText(payload, "id");
                                     char* dpAddr = JSON_GetText(condition, "entityAddr");
+                                    int dpId = 0;
                                     if (JSON_HasKey(condition, "dpAddr")) {
                                         dpAddr = JSON_GetText(condition, "dpAddr");
+                                        dpId = JSON_GetNumber(condition, "dpId");
                                     }
                                     char* deviceId = JSON_GetText(condition, "entityId");
                                     JSON* addedDevice = addDeviceToRespList(reqType, sceneId, dpAddr);
                                     if (addedDevice) {
                                         JSON_SetText(addedDevice, "deviceId", deviceId);
+                                        JSON_SetText(addedDevice, "entityType", "condition");
+                                        JSON_SetNumber(addedDevice, "dpId", dpId);
                                     }
                                 }
                             }
@@ -1762,49 +1790,65 @@ int main(int argc, char ** argv)
                                 JSON_ForEach(action, actionsNeedAdd) {
                                     char* sceneId = JSON_GetText(payload, "id");
                                     char* dpAddr = JSON_GetText(action, "entityAddr");
+                                    int dpId = 0;
                                     if (JSON_HasKey(action, "dpAddr")) {
                                         dpAddr = JSON_GetText(action, "dpAddr");
+                                        dpId = JSON_GetNumber(action, "dpId");
                                     }
                                     char* deviceId = JSON_GetText(action, "entityId");
                                     JSON* addedDevice = addDeviceToRespList(TYPE_ADD_SCENE, sceneId, dpAddr);
                                     if (addedDevice) {
                                         JSON_SetText(addedDevice, "deviceId", deviceId);
+                                        JSON_SetText(addedDevice, "entityType", "action");
+                                        JSON_SetNumber(addedDevice, "dpId", dpId);
                                     }
                                 }
                                 JSON_ForEach(action, actionsNeedRemove) {
                                     char* sceneId = JSON_GetText(payload, "id");
                                     char* dpAddr = JSON_GetText(action, "entityAddr");
+                                    int dpId = 0;
                                     if (JSON_HasKey(action, "dpAddr")) {
                                         dpAddr = JSON_GetText(action, "dpAddr");
+                                        dpId = JSON_GetNumber(action, "dpId");
                                     }
                                     char* deviceId = JSON_GetText(action, "entityId");
                                     JSON* addedDevice = addDeviceToRespList(TYPE_ADD_SCENE, sceneId, dpAddr);
                                     if (addedDevice) {
                                         JSON_SetText(addedDevice, "deviceId", deviceId);
+                                        JSON_SetText(addedDevice, "entityType", "action");
+                                        JSON_SetNumber(addedDevice, "dpId", dpId);
                                     }
                                 }
                                 JSON_ForEach(condition, conditionsNeedAdd) {
                                     char* sceneId = JSON_GetText(payload, "id");
                                     char* dpAddr = JSON_GetText(condition, "entityAddr");
+                                    int dpId = 0;
                                     if (JSON_HasKey(condition, "dpAddr")) {
                                         dpAddr = JSON_GetText(condition, "dpAddr");
+                                        dpId = JSON_GetNumber(condition, "dpId");
                                     }
                                     char* deviceId = JSON_GetText(condition, "entityId");
                                     JSON* addedDevice = addDeviceToRespList(TYPE_ADD_SCENE, sceneId, dpAddr);
                                     if (addedDevice) {
                                         JSON_SetText(addedDevice, "deviceId", deviceId);
+                                        JSON_SetText(addedDevice, "entityType", "condition");
+                                        JSON_SetNumber(addedDevice, "dpId", dpId);
                                     }
                                 }
                                 JSON_ForEach(condition, conditionsNeedRemove) {
                                     char* sceneId = JSON_GetText(payload, "id");
                                     char* dpAddr = JSON_GetText(condition, "entityAddr");
+                                    int dpId = 0;
                                     if (JSON_HasKey(condition, "dpAddr")) {
                                         dpAddr = JSON_GetText(condition, "dpAddr");
+                                        dpId = JSON_GetNumber(condition, "dpId");
                                     }
                                     char* deviceId = JSON_GetText(condition, "entityId");
                                     JSON* addedDevice = addDeviceToRespList(TYPE_ADD_SCENE, sceneId, dpAddr);
                                     if (addedDevice) {
                                         JSON_SetText(addedDevice, "deviceId", deviceId);
+                                        JSON_SetText(addedDevice, "entityType", "condition");
+                                        JSON_SetNumber(addedDevice, "dpId", dpId);
                                     }
                                 }
 
