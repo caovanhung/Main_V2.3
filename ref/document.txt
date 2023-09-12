@@ -248,3 +248,6 @@ Tính năng IR:
             }
         }
     }
+
+# Convert epoch time to human readable time sqlite3
+    SELECT DATETIME(ROUND(time / 1000), 'unixepoch') AS isodate FROM device_histories LIMIT 1;

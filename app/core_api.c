@@ -323,7 +323,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
     ASSERT(dictDPs);
     DeviceInfo deviceInfo;
     int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
-    if (foundDevices == 1) {
+    if (foundDevices == 1 && deviceInfo.state == STATE_ONLINE) {
         if (StringCompare(deviceInfo.pid, HG_BLE_IR_AC) || StringCompare(deviceInfo.pid, HG_BLE_IR_TV) || StringCompare(deviceInfo.pid, HG_BLE_IR_FAN) || StringCompare(deviceInfo.pid, HG_BLE_IR_REMOTE)) {
             Ble_AddExtraDpsToIrDevices(deviceId, dictDPs);
         }
@@ -346,6 +346,22 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
                 JSON_SetNumber(dp, "id", dpId);
                 JSON_SetText(dp, "valueString", o->valuestring);
                 cJSON_AddItemToArray(newDictDps, dp);
+                if (causeId) {
+                    JSON* history = JSON_CreateObject();
+                    JSON_SetText(history, "deviceId", deviceId);
+                    JSON_SetNumber(history, "dpId", dpId);
+                    JSON_SetNumber(history, "dpValue", 0);
+                    JSON_SetText(history, "dpValueStr", o->valuestring);
+                    JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                    if (StringLength(causeId) > 10) {
+                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
+                    } else {
+                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
+                    }
+                    JSON_SetText(history, "causeId", causeId);
+                    Db_AddDeviceHistory(history);
+                    JSON_Delete(history);
+                }
             } else {
                 DpInfo dpInfo;
                 int dpFound = Db_FindDp(&dpInfo, deviceId, dpId);
@@ -364,6 +380,9 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
                         JSON_SetText(history, "deviceId", deviceId);
                         JSON_SetNumber(history, "dpId", dpId);
                         JSON_SetNumber(history, "dpValue", o->valueint);
+                        if (o->valuestring) {
+                            JSON_SetText(history, "dpValueStr", o->valuestring);
+                        }
                         JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
                         if (StringLength(causeId) > 10) {
                             JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);

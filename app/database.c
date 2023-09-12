@@ -780,10 +780,17 @@ int Db_AddDeviceHistory(JSON* packet) {
     char*   deviceId  = JSON_GetText(packet, "deviceId");
     uint8_t dpId      = JSON_HasKey(packet, "dpId")? JSON_GetNumber(packet, "dpId") : 0;
     uint16_t dpValue  = JSON_HasKey(packet, "dpValue")? JSON_GetNumber(packet, "dpValue") : 0;
+    char*   dpValueStr  = JSON_HasKey(packet, "dpValueStr")? JSON_GetText(packet, "dpValueStr") : NULL;
     char sqlCmd[500];
-    sprintf(sqlCmd, "INSERT INTO device_histories(time  , causeType, causeId, eventType, deviceId, dpId, dpValue) \
-                                           VALUES('%lld', %d       , '%s'   , %d        , '%s'    , %d  , '%d'  )",
-                                                  time  , causeType, causeId, eventType, deviceId, dpId, dpValue);
+    if (dpValueStr) {
+        sprintf(sqlCmd, "INSERT INTO device_histories(time  , causeType, causeId, eventType, deviceId, dpId, dpValue) \
+                                               VALUES('%lld', %d       , '%s'   , %d        , '%s'    , %d  , '%s'  )",
+                                                      time  , causeType, causeId, eventType, deviceId, dpId, dpValueStr);
+    } else {
+        sprintf(sqlCmd, "INSERT INTO device_histories(time  , causeType, causeId, eventType, deviceId, dpId, dpValue) \
+                                               VALUES('%lld', %d       , '%s'   , %d        , '%s'    , %d  , '%d'  )",
+                                                      time  , causeType, causeId, eventType, deviceId, dpId, dpValue);
+    }
     // printf("[Db_AddDeviceHistory]: %s", sqlCmd);
     Sql_Exec(sqlCmd);
     return 1;

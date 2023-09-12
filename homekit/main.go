@@ -1,6 +1,7 @@
 package main
 
 import (
+    mqtt "github.com/eclipse/paho.mqtt.golang"
     "github.com/brutella/hap"
     "github.com/brutella/hap/accessory"
 
@@ -16,12 +17,14 @@ import (
     "os/exec"
     "reflect"
     "strings"
-    "time"
+    // "time"
 )
 
 const PID_HG_SWITCH = "BLEHGAA0101,BLEHGAA0102,BLEHGAA0103,BLEHGAA0104"
 const PID_HG_CCT_LIGHT = "BLEHGAA0201"
 const PID_HG_COLOR_LIGHT = "BLEHGAA0202,BLEHG010401,BLEHG010402"
+const TOPIC_CTR_DEVICE = "APPLICATION_SERVICES/Mosq/Control"
+const TOPIC_RESP_DEVICE = "APPLICATION_SERVICES/AWS/50"
 
 type AppConfig struct {
     ThingId string
@@ -49,8 +52,24 @@ type HGSwitch struct {
     hkObj *accessory.Switch
 }
 
+type MqttRecvPackage struct {
+    NameService string `json:"NameService"`
+    ActionType  int    `json:"ActionType"`
+    TimeCreat   int64  `json:"TimeCreat"`
+    PageIndex   int    `json:"pageIndex"`
+    Payload     string `json:"Payload"`
+}
+
+
+type MqttPayloadPackage struct {
+    DeviceID string `json:"deviceId"`
+    DpID     int    `json:"dpId"`
+    DpValue  int    `json:"dpValue"`
+}
+
 var appConfig AppConfig
 var g_hgSwitches []HGSwitch
+var g_mqttClient mqtt.Client
 
 func GetHomeInformation() bool {
     // Get home information
@@ -66,6 +85,60 @@ func GetHomeInformation() bool {
     return false
 }
 
+var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
+    log.Println()
+    log.Printf("Received message: topic: %s, Payload: %s\n", msg.Topic(), msg.Payload())
+    var recvPackage MqttRecvPackage
+    json.Unmarshal(msg.Payload(), &recvPackage)
+    var payload MqttPayloadPackage
+    json.Unmarshal([]byte(recvPackage.Payload), &payload)
+    for _, sw := range(g_hgSwitches) {
+        if sw.Id == payload.DeviceID && sw.DpId == payload.DpID {
+            sw.OnOff = payload.DpValue
+            log.Printf("ControlDevice: %s.%d=%d", sw.Id, sw.DpId, sw.OnOff)
+            if payload.DpValue == 0 {
+                sw.hkObj.Switch.On.SetValue(false)
+            } else {
+                sw.hkObj.Switch.On.SetValue(true)
+            }
+        }
+    }
+}
+
+var Mqtt_OnConnectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
+    log.Println("Mqtt is connected")
+    token := g_mqttClient.Subscribe(TOPIC_RESP_DEVICE, 0, nil)
+    token.Wait()
+    log.Printf("Subscribed to topic: %s\n", TOPIC_RESP_DEVICE)
+}
+
+var Mqtt_OnConnectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
+    log.Printf("Mqtt connection lost: %v", err)
+}
+
+func MqttInit() {
+    opts := mqtt.NewClientOptions()
+    opts.AddBroker(fmt.Sprintf("tcp://localhost:1883"))
+    opts.SetClientID("kjhfpslkjwkmcs")
+    opts.SetUsername("MqttLocalHomegy")
+    opts.SetPassword("Homegysmart")
+    opts.SetDefaultPublishHandler(Mqtt_OnReceivedMessage)
+    opts.OnConnect = Mqtt_OnConnectHandler
+    opts.OnConnectionLost = Mqtt_OnConnectLostHandler
+    g_mqttClient = mqtt.NewClient(opts)
+    if token := g_mqttClient.Connect(); token.Wait() && token.Error() != nil {
+        log.Println("Cannot connect to mqtt: ", token.Error())
+    }
+    log.Println("Mqtt init done")
+}
+
+func ControlDevice(deviceId string, dpId int, onoff int) {
+    msgFormat := `"state":{"reported":{"type":4, "sender":2, "senderId":"homekit", "%s":{"dictDPs":{"%d":%d}}}}`
+    msg := fmt.Sprintf(msgFormat, deviceId, dpId, onoff)
+    token := g_mqttClient.Publish(TOPIC_CTR_DEVICE, 0, false, msg)
+    token.Wait()
+}
+
 func GetShadow(shadowName string) []byte {
     url := fmt.Sprintf("https://a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", appConfig.ThingId, shadowName)
     certName := "c8f9a13dc7c253251b9e250439897bc010f501edd780348ecc1c2e91add22237"
@@ -77,7 +150,7 @@ func GetShadow(shadowName string) []byte {
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Printf("Response: %s\n", out)
+    log.Printf("Response: %s\n", out)
     return out
 }
 
@@ -141,16 +214,16 @@ func OnSwitchRemoteUpdate(v bool) {
         }
         if sw.OnOff != actualOnOff {
             sw.OnOff = actualOnOff
-            // TurnSwitchOnOff(sw.Id, sw.DpId, sw.OnOff)
+            ControlDevice(sw.Id, sw.DpId, sw.OnOff)
             break
         }
     }
 }
 
 func main() {
-    // var switchs []*accessory.Switch
     var accessories []*accessory.A
 
+    MqttInit()
     GetHomeInformation()
     GetDeviceList()
 
@@ -173,7 +246,7 @@ func main() {
     }
     
     // Create CCT light
-    lightbulb := accessory.NewLightbulb(accessory.Info{Name: "Đèn 1"})
+    // lightbulb := accessory.NewLightbulb(accessory.Info{Name: "Đèn 1"})
 
     // devices := []*accessory.A {switchAs, lightbulb.A}
 
@@ -189,13 +262,13 @@ func main() {
     //     log.Println("Đèn 1 đổi màu: " + strconv.Itoa(value))
     // })
 
-    go func() {
-        for {
-            value := lightbulb.Lightbulb.ColorTemperature.Value()
-            log.Println(value)
-            time.Sleep(1 * time.Second)
-        }
-    }()
+    // go func() {
+    //     for {
+    //         value := lightbulb.Lightbulb.ColorTemperature.Value()
+    //         log.Println(value)
+    //         time.Sleep(1 * time.Second)
+    //     }
+    // }()
 
     // Create the hap server.
     server, err := hap.NewServer(fs, hc.A, accessories...)
@@ -221,6 +294,6 @@ func main() {
     }()
 
     // Run the server.
-    fmt.Println("Homekit server is starting")
+    log.Println("Homekit server is starting")
     server.ListenAndServe(ctx)
 }

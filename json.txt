@@ -57,3 +57,19 @@
         }
     }
 }
+
+# Control device
+{
+    "state": {
+        "reported": {
+            "senderid": "192723F2-9D6A-A666-F7A4-D8CC718DC31B",
+            "type": 4,
+            "sender": 1,
+            "A4C138D08692": {
+                "dictDPs": {
+                    "1": 1
+                }
+            }
+        }
+    }
+}

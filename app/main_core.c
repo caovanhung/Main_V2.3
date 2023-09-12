@@ -1097,6 +1097,8 @@ int main(int argc, char ** argv)
     if (!check_flag) {
         logError("Cannot open database");
     }
+    // Delete hisroties older than 30 days
+    Sql_Exec("DELETE FROM device_histories WHERE DATE(ROUND(time / 1000), 'unixepoch') <= DATE('now','-30 day');");
 
     Mosq_Init();
     Db_LoadSceneToRam();

@@ -166,9 +166,9 @@ void BLE_ReceivePacket() {
         if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
             return;
         }
-        if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
-            return;
-        }
+        // if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
+        //     return;
+        // }
         if (len_uart >= 10 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x5d && rcv_uart_buff[9] == 0x00) {
             return;
         }
@@ -190,9 +190,9 @@ void BLE_ReceivePacket() {
         if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0xb5) {
             return;
         }
-        if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
-            return;
-        }
+        // if (len_uart >= 4 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x9d) {
+        //     return;
+        // }
         if (len_uart >= 10 && rcv_uart_buff[2] == 0x91 && rcv_uart_buff[3] == 0x81 && rcv_uart_buff[8] == 0x5d && rcv_uart_buff[9] == 0x00) {
             return;
         }
@@ -718,7 +718,7 @@ int main( int argc,char ** argv )
     StringCopy(g_mosqIP, g_masterIP);
 
     Mosq_Init(SERVICE_BLE);
-    sleep(3);
+    sleep(1);
     // GW_DelAllSceneAction("4001");
     // GW_SetLightHSL("B801", "7fffaea4ffff");
     while (xRun!=0) {
