@@ -75,7 +75,7 @@ JSON* Aws_GetShadow(const char* thingName, const char* shadowName) {
     char url[200];
     sprintf(url, "https://a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", thingName, shadowName);
     char* certName = "c8f9a13dc7c253251b9e250439897bc010f501edd780348ecc1c2e91add22237";
-    sprintf(request, "curl --tlsv1.2 --cacert /usr/bin/AmazonRootCA1.pem --cert /usr/bin/%s-certificate.pem.crt --key /usr/bin/%s-private.pem.key  %s", certName, certName, url);
+    sprintf(request, "curl --connect-timeout 10 --tlsv1.2 --cacert /usr/bin/AmazonRootCA1.pem --cert /usr/bin/%s-certificate.pem.crt --key /usr/bin/%s-private.pem.key  %s", certName, certName, url);
     printInfo(request);
     printInfo("\n");
     FILE* fp = popen(request, "r");
@@ -206,6 +206,8 @@ void Aws_SyncDatabase() {
         if (currentHour >= 6 && currentHour < 21) {
             PlayAudio("ready");
         }
+    } else {
+        PlayAudio("cannot_connect_server");
     }
 }
 

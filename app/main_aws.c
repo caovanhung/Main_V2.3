@@ -132,6 +132,7 @@ uint32_t generateRandomNumber()
 void sendPacketToCloud(const char* topic, JSON* packet) {
     char* message = cJSON_PrintUnformatted(packet);
     mqttCloudPublish(topic, message);
+    mosquitto_publish(mosq, NULL, topic, strlen(message), message, 0, false);
     free(message);
 }
 

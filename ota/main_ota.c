@@ -66,6 +66,7 @@ NetworkContext_t networkContext;
 OpensslParams_t opensslParams;
 const char g_thingId[100];
 const char g_hcAddr[10] = {0};
+int g_currentVersion = 0;
 
 static bool g_awsIsConnected = false;
 static bool g_mosqIsConnected = false;
@@ -127,6 +128,18 @@ void GetThingId() {
         // }
         JSON_Delete(setting);
     }
+}
+
+int GetCurrentVersion() {
+    FILE* f = fopen("version", "r");
+    char buff[20];
+    if (f) {
+        fread(buff, sizeof(char), 10, f);
+        fclose(f);
+        g_currentVersion = atoi(buff);
+        return g_currentVersion;
+    }
+    return 0;
 }
 
 void SaveCurrentVersion(int version) {
@@ -739,7 +752,7 @@ void CheckNewForceVersion() {
         JSON* hcforce = JSON_GetObject(setting, "hcVersion");
         if (hcforce) {
             int newVersion = JSON_GetNumber(hcforce, "forceVersion");
-            int currentVersion = HC_VERSION;
+            int currentVersion = g_currentVersion;
             logInfo("currentVersion: %d, newVersion: %d\n", currentVersion, newVersion);
             if (currentVersion < newVersion) {
                 // Update to new version
@@ -752,6 +765,7 @@ void CheckNewForceVersion() {
                 while (fgets(result, sizeof(result), fp) != NULL);
                 fclose(fp);
                 if (StringContains(result, "SUCCESS")) {
+                    SaveCurrentVersion(newVersion);
                     logInfo("Upgraded to version %d\n", newVersion);
                     PlayAudio("update_success");
                     system("reboot");
@@ -770,7 +784,7 @@ void CheckNewVersion() {
         JSON* hcforce = JSON_GetObject(setting, "hcVersion");
         if (hcforce) {
             int newVersion = JSON_GetNumber(hcforce, "lastestVersion");
-            int currentVersion = HC_VERSION;
+            int currentVersion = g_currentVersion;
             logInfo("currentVersion: %d, newVersion: %d\n", currentVersion, newVersion);
             if (currentVersion < newVersion) {
                 // Update to new version
@@ -783,6 +797,7 @@ void CheckNewVersion() {
                 while (fgets(result, sizeof(result), fp) != NULL);
                 fclose(fp);
                 if (StringContains(result, "SUCCESS")) {
+                    SaveCurrentVersion(newVersion);
                     logInfo("Upgraded to version %d\n", newVersion);
                     PlayAudio("update_success");
                     system("reboot");
@@ -802,6 +817,7 @@ void CheckNewVersion() {
 int main( int argc,char ** argv ) {
     queue_received_aws = newQueue(QUEUE_SIZE);
 
+    GetCurrentVersion();
     GetThingId();
     Aws_Init();
     Mosq_Init();
