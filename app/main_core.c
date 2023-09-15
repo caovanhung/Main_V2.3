@@ -1387,7 +1387,7 @@ int main(int argc, char ** argv)
                         if (foundDevices == 1) {
                             Db_DeleteDevice(deviceInfo.id);
                             Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
-                            if (StringCompare(deviceInfo.pid, HG_BLE_IR)) {
+                            if (StringContains(HG_BLE_IR_FULL, deviceInfo.pid)) {
                                 // Remove TV, AC, FAN, Remote
                                 char sqlCmd[200];
                                 sprintf(sqlCmd, "SELECT * FROM devices_inf d JOIN gateway g ON g.id = d.gwIndex WHERE Unicast = '%s' AND g.hcAddr = '%s';", deviceAddr, hcAddr);
