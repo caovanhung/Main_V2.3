@@ -92,8 +92,18 @@ if (downloadfile(folder, zipFile)):
         print("\nUpdating new program...")
         for service in g_serviceNames:
             # Stop program
-            print("Execute: systemctl stop hg_*")
-            os.system("systemctl stop hg_*")
+            print("Execute: systemctl stop hg_aws")
+            print("Execute: systemctl stop hg_core")
+            print("Execute: systemctl stop hg_ble")
+            print("Execute: systemctl stop hg_wifi")
+            print("Execute: systemctl stop hg_cfg")
+            print("Execute: systemctl stop hg_homekit")
+            os.system("systemctl stop hg_aws")
+            os.system("systemctl stop hg_core")
+            os.system("systemctl stop hg_ble")
+            os.system("systemctl stop hg_wifi")
+            os.system("systemctl stop hg_cfg")
+            os.system("systemctl stop hg_homekit")
 
             #Copy new program to runningFolder
             cmd = f"sudo scp {folder}/{service} {runningFolder}/{service}"

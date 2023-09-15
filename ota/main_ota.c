@@ -821,6 +821,7 @@ int main( int argc,char ** argv ) {
     GetThingId();
     Aws_Init();
     Mosq_Init();
+    sleep(60);
     CheckNewForceVersion();
     while (1) {
         Aws_ProcessLoop();

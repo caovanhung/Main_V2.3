@@ -90,8 +90,6 @@ def main():
     removeOldLogs(logsPath + "cfg")
     removeOldLogs(logsPath + "tuya")
 
-    os.system("systemctl restart hg_ota")
-
     # Check if this HC is master or slave
     f = open("app.json", "r")
     fileContent = f.read()
@@ -112,6 +110,7 @@ def main():
             os.system("systemctl restart hg_aws")
             os.system("systemctl restart hg_wifi")
             os.system("systemctl restart hg_homekit")
+            os.system("systemctl restart hg_ota")
             listenCommands()
         else:
             getMasterIp()
@@ -119,6 +118,7 @@ def main():
         print("HC was not configured")
         os.system("systemctl restart hg_cfg")
         os.system("systemctl restart hg_ble")
+        os.system("systemctl restart hg_ota")
 
 main()
 
