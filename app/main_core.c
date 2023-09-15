@@ -1394,12 +1394,12 @@ int main(int argc, char ** argv)
                                 Sql_Query(sqlCmd, row) {
                                     char* deviceId = sqlite3_column_text(row, 0);
                                     int pageIndex = sqlite3_column_int(row, 15);
-                                    sprintf(sqlCmd, "DELETE FROM devices_inf WHERE unicast = '%s'", deviceAddr);
-                                    Sql_Exec(sqlCmd);
-                                    sprintf(sqlCmd, "DELETE FROM devices WHERE address = '%s'", deviceAddr);
-                                    Sql_Exec(sqlCmd);
                                     Aws_DeleteDevice(deviceId, pageIndex);
                                 }
+                                sprintf(sqlCmd, "DELETE FROM devices_inf WHERE unicast = '%s'", deviceAddr);
+                                Sql_Exec(sqlCmd);
+                                sprintf(sqlCmd, "DELETE FROM devices WHERE address = '%s'", deviceAddr);
+                                Sql_Exec(sqlCmd);
                             }
                             DeleteDeviceFromGroups(deviceInfo.id);
                             DeleteDeviceFromScenes(deviceInfo.id);

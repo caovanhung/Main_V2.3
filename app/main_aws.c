@@ -1181,6 +1181,9 @@ int main( int argc,char ** argv ) {
                     case TYPE_SYNC_DEVICE_STATUS:
                         sendPacketTo(SERVICE_CORE, reqType, recvPacket);
                         break;
+                    case TYPE_DEL_HOMEKIT:
+                        system("rm -r db");
+                        break;
                     case TYPE_GET_LOG:
                         logInfo("TYPE_GET_LOG");
                         if (JSON_HasKey(reported, "fileName")) {

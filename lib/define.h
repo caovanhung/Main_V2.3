@@ -92,6 +92,7 @@
 #define TYPE_OTA_GATEWAY                (36U)
 #define TYPE_OTA_HC                     (37U)
 #define TYPE_GET_LOG                    (39U)
+#define TYPE_DEL_HOMEKIT                (40U)
 
 #define TYPE_RESET_DATABASE             (44U)
 #define TYPE_GET_NUM_OF_PAGE            (45U)
