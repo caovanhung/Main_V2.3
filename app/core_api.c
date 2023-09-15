@@ -323,7 +323,7 @@ void Ble_ControlDeviceJSON(const char* deviceId, JSON* dictDPs, const char* caus
     ASSERT(dictDPs);
     DeviceInfo deviceInfo;
     int foundDevices = Db_FindDevice(&deviceInfo, deviceId);
-    if (foundDevices == 1 && deviceInfo.state == STATE_ONLINE) {
+    if (foundDevices == 1) {
         if (StringCompare(deviceInfo.pid, HG_BLE_IR_AC) || StringCompare(deviceInfo.pid, HG_BLE_IR_TV) || StringCompare(deviceInfo.pid, HG_BLE_IR_FAN) || StringCompare(deviceInfo.pid, HG_BLE_IR_REMOTE)) {
             Ble_AddExtraDpsToIrDevices(deviceId, dictDPs);
         }

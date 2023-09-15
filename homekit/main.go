@@ -20,7 +20,8 @@ import (
     // "time"
 )
 
-const PID_HG_SWITCH = "BLEHGAA0101,BLEHGAA0102,BLEHGAA0103,BLEHGAA0104,BLEHGAA0105,BLEHGAA0106,BLEHGAA0107"
+const PID_HG_SWITCH = "BLEHGAA0101,BLEHGAA0102,BLEHGAA0103,BLEHGAA0104"
+const PID_HG_DOOR_SWITCH = "BLEHGAA0105,BLEHGAA0106,BLEHGAA0107"
 const PID_HG_CCT_LIGHT = "BLEHGAA0201"
 const PID_HG_COLOR_LIGHT = "BLEHGAA0202,BLEHG010401,BLEHG010402"
 const PID_HG_SMOKE_SENSOR = "BLEHG030301"
@@ -54,6 +55,14 @@ type HGSwitch struct {
     OnOff int
     Name  string
     hkObj *accessory.Switch
+}
+
+type HGDoorSwitch struct {
+    Id    string
+    DpId  int
+    State int
+    Name  string
+    hkObj *accessory.GarageDoorOpener
 }
 
 type HGCCTLight struct {
@@ -114,6 +123,7 @@ type MqttPayloadPackage struct {
 
 var appConfig AppConfig
 var g_hgSwitches []HGSwitch
+var g_hgDoorSwitches []HGDoorSwitch
 var g_hgCCTLights []HGCCTLight
 var g_hgColorLights []HGColorLight
 var g_hgSmokeSensors []HGSmokeSensor
@@ -164,6 +174,22 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
                 g_hgSwitches[i].OnOff = payload.DpValue
                 log.Printf("Update switch onoff: %s.%d=%d", sw.Id, sw.DpId, payload.DpValue)
                 sw.hkObj.Switch.On.SetValue(GetBoolValue(payload.DpValue))
+            }
+        }
+
+        // Curtain, door switch
+        for i, sw := range(g_hgDoorSwitches) {
+            if sw.Id == payload.DeviceID && sw.DpId == payload.DpID {
+                if payload.DpValue == 0 {
+                    g_hgDoorSwitches[i].State = 0    // Open
+                } else if payload.DpValue == 2 {
+                    g_hgDoorSwitches[i].State = 1    // Close
+                } else {
+                    g_hgDoorSwitches[i].State = 4    // Stop
+                }
+
+                log.Printf("Update door switch state: %s.%d=%d", sw.Id, sw.DpId, payload.DpValue)
+                sw.hkObj.GarageDoorOpener.CurrentDoorState.SetValue(g_hgDoorSwitches[i].State)
             }
         }
 
@@ -348,6 +374,31 @@ func GetDeviceList() {
                                     }
                                 }
                             }
+                        } else if strings.Contains(PID_HG_DOOR_SWITCH, pid) {
+                            dictDps := deviceObj["dictDPs"].(map[string]interface{})
+                            var dictNames map[string]interface{} = nil
+                            if deviceObj["dictName"] != nil {
+                                dictNames = deviceObj["dictName"].(map[string]interface{})
+                            }
+                            for dp, dpValue := range dictDps {
+                                if dpInt, err := strconv.Atoi(dp); err == nil {
+                                    dpValueInt := GetIntValue(dpValue)
+                                    if (dpValueInt == 2) {
+                                        dpValueInt = 1   // Closed
+                                    } else if (dpValueInt == 1) {
+                                        dpValueInt = 4   // Stopped
+                                    }
+                                    if dpValueInt >= 0 {
+                                        dpName := dp
+                                        if dictNames != nil {
+                                            dpName = dictNames[dp].(string)
+                                        }
+                                        deviceName := deviceObj["name"].(string)
+                                        d := HGDoorSwitch{Id: k, Name: deviceName + "-" + dpName, DpId: dpInt, State: dpValueInt}
+                                        g_hgDoorSwitches = append(g_hgDoorSwitches, d)
+                                    }
+                                }
+                            }
                         } else if strings.Contains(PID_HG_CCT_LIGHT, pid) {
                             dictDps := deviceObj["dictDPs"].(map[string]interface{})
                             onoff := GetIntValue(dictDps["20"])
@@ -395,6 +446,10 @@ func SyncDeviceState() {
         sw.hkObj.Switch.On.SetValue(GetBoolValue(sw.OnOff))
     }
 
+    for _, sw := range(g_hgDoorSwitches) {
+        sw.hkObj.GarageDoorOpener.CurrentDoorState.SetValue(sw.State)
+    }
+
     // CCT light
     for _, d := range(g_hgCCTLights) {
         d.hkObj.Lightbulb.On.SetValue(GetBoolValue(d.OnOff))
@@ -435,6 +490,19 @@ func Switch_OnOff_Update(v bool) {
         if sw.OnOff != actualOnOff {
             ControlDevice(sw.Id, sw.DpId, actualOnOff)
             g_hgSwitches[i].OnOff = actualOnOff
+            break
+        }
+    }
+}
+
+func Door_State_Update(v int) {
+    log.Printf("Door_State_Update: %d\n", v)
+    for i, sw := range(g_hgDoorSwitches) {
+        actualState := 0
+        actualState = sw.hkObj.GarageDoorOpener.TargetDoorState.Value()
+        if sw.State != actualState {
+            ControlDevice(sw.Id, sw.DpId, actualState)
+            g_hgDoorSwitches[i].State = actualState
             break
         }
     }
@@ -546,8 +614,17 @@ func main() {
         accessories = append(accessories, sw.A)
     }
 
+    // Create door switchs
+    for i, d := range(g_hgDoorSwitches) {
+        sw := accessory.NewGarageDoorOpener(accessory.Info{Name: d.Name,})
+        g_hgDoorSwitches[i].hkObj = sw
+        sw.GarageDoorOpener.TargetDoorState.OnValueRemoteUpdate(Door_State_Update)
+        accessories = append(accessories, sw.A)
+    }
+    log.Println(g_hgCCTLights)
     // Create CCT Lights
     for i, d := range(g_hgCCTLights) {
+        log.Println(d)
         light := accessory.NewLightbulb(accessory.Info{Name: d.Name,})
         g_hgCCTLights[i].hkObj = light
         light.Lightbulb.On.OnValueRemoteUpdate(CCTLight_OnOff_Update)

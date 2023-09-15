@@ -625,18 +625,20 @@ void checkResponseLoop() {
 void GetIpAddressLoop() {
     static long long tick = 0;
     static int count = 0;
-    if (timeInMilliseconds() - tick > 30000) {
+    if (timeInMilliseconds() - tick > 60000) {
         tick = timeInMilliseconds();
         if (count == 0) {
             count = 1;
             return;
+        } else {
+            count = 0;
         }
 
         char address[50];
         FILE* fp = popen("python3 getIp.py", "r");
         while (fgets(address, sizeof(address), fp) != NULL);
         if (address) {
-            if (StringCompare(address, g_ipAddress) == false) {
+            // if (StringCompare(address, g_ipAddress) == false) {
                 StringCopy(g_ipAddress, address);
                 logInfo("New IP Address: %s", g_ipAddress);
                 if (StringCompare(g_ipAddress, "192.168.12.1")) {
@@ -646,11 +648,7 @@ void GetIpAddressLoop() {
                     sprintf(clientId, "%lu", timeInMilliseconds());
                     Mosq_Init(clientId);
                 }
-                // Update new IP address to AWS
-                char msg[200];
-                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\", \"hcVersion\":%d}}, \"sender\":11}}}", g_hcAddr, g_ipAddress, HC_VERSION);
-                sendToService(SERVICE_AWS, 255, msg);
-            }
+            // }
         }
         fclose(fp);
 
@@ -660,16 +658,19 @@ void GetIpAddressLoop() {
         while (fgets(wifiName, sizeof(wifiName), fp) != NULL);
         if (wifiName && StringLength(wifiName) > 1) {
             wifiName[StringLength(wifiName) - 1] = 0;
-            if (StringCompare(wifiName, g_wifiName) == false) {
+            // if (StringCompare(wifiName, g_wifiName) == false) {
                 StringCopy(g_wifiName, wifiName);
                 logInfo("New connected wifi name: %s", g_wifiName);
-                // Update new wifi name to AWS
-                char msg[200];
-                sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"nameWifi\":\"%s\"}}, \"sender\":11}}}", g_hcAddr, g_wifiName);
-                sendToService(SERVICE_AWS, 255, msg);
-            }
+            // }
         }
         fclose(fp);
+
+        if (StringLength(g_hcAddr) > 0 && !StringCompare(g_ipAddress, "192.168.12.1")) {
+            // Update new IP address and wifi name to AWS
+            char msg[200];
+            sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\", \"hcVersion\":%d, \"nameWifi\":\"%s\"}}, \"sender\":11}}}", g_hcAddr, g_ipAddress, HC_VERSION, g_wifiName);
+            sendToService(SERVICE_AWS, 255, msg);
+        }
     }
 }
 
