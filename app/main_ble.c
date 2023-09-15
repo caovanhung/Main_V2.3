@@ -56,6 +56,7 @@ char g_hcAddr[10];
 char g_masterIP[100];
 char g_mosqIP[100];
 char g_wifiName[100];
+int g_isMaster = 0;
 
 extern int g_gatewayFds[GATEWAY_NUM];
 char rcv_uart_buff[MAXLINE];
@@ -89,6 +90,7 @@ void On_mqttConnect(struct mosquitto *mosq, void *obj, int rc)
     fclose(f);
     JSON* setting = JSON_Parse(buff);
     char* hcAddr = JSON_GetText(setting, "hcAddr");
+    g_isMaster = JSON_GetNumber(setting, "isMaster");
     StringCopy(g_hcAddr, hcAddr);
     logInfo("hcAddr: %s", g_hcAddr);
 
@@ -707,13 +709,14 @@ int main( int argc,char ** argv )
 
     // Read ip of master HC
     FILE* f = fopen("masterIP", "r");
-    if (f) {
+    if (g_isMaster == 0 && f) {
         int len = fread(g_masterIP, sizeof(char), 100, f);
         g_masterIP[len] = 0;
         fclose(f);
     } else {
         StringCopy(g_masterIP, MQTT_MOSQUITTO_HOST);
     }
+    logInfo("IsMaster: %d", g_isMaster);
     logInfo("Master IP: %s", g_masterIP);
     StringCopy(g_mosqIP, g_masterIP);
 
@@ -764,7 +767,7 @@ int main( int argc,char ** argv )
                     GW_ConfigGateway(1, &PRV);
                     sendToService(SERVICE_CFG, 0, "LED_ON");
                     char* message2 = "{\"step\":4, \"message\":\"cấu hình bộ trung tâm thành công, đang khởi động lại thiết bị\"}";
-                    mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message2), message, 0, false);
+                    mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message2), message2, 0, false);
                     PlayAudio("gateway_end_restarting");
                     PlayAudio("device_restart_warning");
                     sleep(1);

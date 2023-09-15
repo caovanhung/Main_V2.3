@@ -19,7 +19,8 @@ g_serviceNames = {
     "HG_CORE": "hg_core.service",
     "HG_BLE":  "hg_ble.service",
     "HG_WIFI": "hg_wifi.service",
-    "HG_CFG":  "hg_cfg.service"
+    "HG_CFG":  "hg_cfg.service",
+    "homekit":  "hg_homekit.service"
 }
 
 session = Session(aws_access_key_id = ACCESS_KEY, aws_secret_access_key = SECRET_KEY)

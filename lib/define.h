@@ -4,7 +4,7 @@
 
 #include "time_t.h"
 
-#define HC_VERSION      1
+#define HC_VERSION      2
 
 #define TRUE    1
 #define FALSE   0

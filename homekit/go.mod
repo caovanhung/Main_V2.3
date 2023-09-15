@@ -1,6 +1,6 @@
 module homekit
 
-go 1.21.0
+go 1.21.1
 
 require (
     github.com/brutella/dnssd v1.2.7 // indirect
