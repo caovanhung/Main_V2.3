@@ -225,7 +225,7 @@ void ConnectWifiLoop() {
     switch (state) {
     case WIFI_RESCAN:
         if (g_wifiSSID[0] != 0) {
-            char* message = "{\"step\":1, \"message\":\"Đang cấu wifi, vui lòng đợi\"}";
+            char* message = "{\"step\":1, \"message\":\"Đang cấu hình wifi, vui lòng đợi\"}";
             mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
             PlayAudio("wifi_connecting");
             // logInfo("Rescan available networks: nmcli c delete %s", g_wifiSSID);

@@ -1098,8 +1098,9 @@ int main( int argc,char ** argv )
                         char* hcAddr = JSON_GetText(d, "hcAddr");
                         if (StringCompare(hcAddr, g_hcAddr)) {
                             char* addr = JSON_GetText(d, "addr");
-                            GW_GetDeviceOnOffState(gwIndex, addr);
-                            addRespTypeToSendingFrame(GW_RESP_ONOFF_STATE, addr);
+                            if (GW_GetDeviceOnOffState(gwIndex, addr)) {
+                                addRespTypeToSendingFrame(GW_RESP_ONOFF_STATE, addr);
+                            }
                         }
                     }
                     break;

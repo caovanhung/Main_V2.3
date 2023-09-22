@@ -95,6 +95,12 @@ JSON* Aws_GetShadow(const char* thingName, const char* shadowName) {
 }
 
 void Aws_SyncDatabase() {
+    bool syncOK = true;
+    JSON* syncingDevices = JSON_CreateArray();
+    JSON* syncingGroups = JSON_CreateArray();
+    JSON* syncingScenes = JSON_CreateArray();
+    JSON* gatewayInfo;
+
     // Get number of pages
     JSON* accountInfo = Aws_GetShadow(g_thingId, "accountInfo");
     if (accountInfo) {
@@ -102,17 +108,12 @@ void Aws_SyncDatabase() {
         int groupPages = JSON_HasKey(accountInfo, "pageIndex3")? JSON_GetNumber(accountInfo, "pageIndex3") : 1;
         int scenePages = JSON_HasKey(accountInfo, "pageIndex2")? JSON_GetNumber(accountInfo, "pageIndex2") : 1;
         sendPacketTo(SERVICE_CORE, TYPE_RESET_DATABASE, accountInfo);
+
         // Sync gateways
-        JSON* gatewayInfo = JSON_GetObject(accountInfo, "gateWay");
-        JSON_ForEach(gw, gatewayInfo) {
-            if (cJSON_IsObject(gw)) {
-                JSON_SetNumber(gw, "needToConfig", 0);
-                sendPacketTo(SERVICE_CORE, TYPE_ADD_GW, gw);
-            }
-        }
+        gatewayInfo = JSON_Clone(JSON_GetObject(accountInfo, "gateWay"));
         JSON_Delete(accountInfo);
+
         // Sync devices from aws
-        JSON* syncingDevices = JSON_CreateArray();
         for (int i = 1; i <= devicePages; i++) {
             char str[10];
             sprintf(str, "d_%d", i);
@@ -129,16 +130,13 @@ void Aws_SyncDatabase() {
                         printf("deviceId: %s\n", d->string);
                     }
                 }
+            } else {
+                syncOK = false;
             }
             JSON_Delete(devices);
         }
-        if (JArr_Count(syncingDevices) > 0) {
-            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
-        }
-        JSON_Delete(syncingDevices);
 
         // Sync groups from aws
-        JSON* syncingGroups = JSON_CreateArray();
         for (int i = 1; i <= groupPages; i++) {
             char str[10];
             sprintf(str, "g_%d", i);
@@ -156,16 +154,13 @@ void Aws_SyncDatabase() {
                         }
                     }
                 }
+                JSON_Delete(groups);
+            } else {
+                syncOK = false;
             }
-            JSON_Delete(groups);
         }
-        if (JArr_Count(syncingGroups) > 0) {
-            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, syncingGroups);
-        }
-        JSON_Delete(syncingGroups);
 
         // Sync scenes from aws
-        JSON* syncingScenes = JSON_CreateArray();
         for (int i = 1; i <= scenePages; i++) {
             char str[10];
             sprintf(str, "s_%d", i);
@@ -195,13 +190,33 @@ void Aws_SyncDatabase() {
                         }
                     }
                 }
+                JSON_Delete(scenes);
+            } else {
+                syncOK = false;
             }
-            JSON_Delete(scenes);
+        }
+    } else {
+        syncOK = false;
+    }
+
+    if (syncOK) {
+        JSON_ForEach(gw, gatewayInfo) {
+            if (cJSON_IsObject(gw)) {
+                JSON_SetNumber(gw, "needToConfig", 0);
+                sendPacketTo(SERVICE_CORE, TYPE_ADD_GW, gw);
+            }
+        }
+        JSON_Delete(gatewayInfo);
+
+        if (JArr_Count(syncingDevices) > 0) {
+            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
+        }
+        if (JArr_Count(syncingGroups) > 0) {
+            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, syncingGroups);
         }
         if (JArr_Count(syncingScenes) > 0) {
             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, syncingScenes);
         }
-        JSON_Delete(syncingScenes);
         int currentHour = get_hour_today();
         if (currentHour >= 6 && currentHour < 21) {
             PlayAudio("ready");
@@ -209,6 +224,10 @@ void Aws_SyncDatabase() {
     } else {
         PlayAudio("cannot_connect_server");
     }
+
+    JSON_Delete(syncingDevices);
+    JSON_Delete(syncingGroups);
+    JSON_Delete(syncingScenes);
 }
 
 /*

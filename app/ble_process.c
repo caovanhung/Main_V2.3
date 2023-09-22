@@ -55,6 +55,7 @@ void addRespTypeToSendingFrame(int respType, const char* itemId) {
     ASSERT(itemId);
     if (respType >= 0) {
         g_uartSendingFrames[g_uartSendingFramesIdx].respType = respType;
+        logInfo("addRespTypeToSendingFrame[%d] = %d", g_uartSendingFramesIdx, respType);
         StringCopy(g_uartSendingFrames[g_uartSendingFramesIdx].itemId, itemId);
     }
 }
@@ -66,6 +67,14 @@ void addTimeoutToSendingFrame(uint16_t timeout) {
 
 UartSendingFrame* sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
     ASSERT(data);
+    ASSERT(len > 0);
+    // char tmp[100];
+    // memset(tmp, 100, 0);
+    // for (int i = 0; i < len; i++) {
+    //         sprintf(&tmp[i*3], "%02X ", data[i]);
+    // }
+    // logInfo("sendFrameToGwIndex[%d]: %s", len, tmp);
+
     gwIndex = gwIndex % 2;
     // Find lastest index
     int lastestIndex = 0;
@@ -76,7 +85,7 @@ UartSendingFrame* sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, 
         }
     }
     int emptyIndex = lastestIndex == UART_SENDING_FRAME_SIZE - 1? 0 : lastestIndex + 1;
-    // printInfo("emptyIndex: %d", emptyIndex);
+    // logInfo("emptyIndex: %d", emptyIndex);
     g_uartSendingFrames[emptyIndex].respType = 0xff;
     g_uartSendingFrames[emptyIndex].gwIndex = gwIndex;
     g_uartSendingFrames[emptyIndex].addr = addr;
@@ -87,14 +96,13 @@ UartSendingFrame* sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, 
     g_uartSendingFrames[emptyIndex].timeout = 1000;
     g_uartSendingFramesIdx = emptyIndex;
     return &g_uartSendingFrames[emptyIndex];
-    return NULL;
 }
 
 UartSendingFrame* sendFrameToAnyGw(uint16_t addr, uint8_t* data, size_t len) {
     ASSERT(data);
     return sendFrameToGwIndex(-1, addr, data, len);
 }
-
+// int g_sendingIndexTmp = -1;
 UartSendingFrame* findFrameToSend() {
     for (uint8_t priority = 0; priority < 5; priority++) {
         for (int i = 0; i < UART_SENDING_FRAME_SIZE; i++) {
@@ -104,6 +112,7 @@ UartSendingFrame* findFrameToSend() {
                 // }
                 if (g_uartSendingFrames[i].priority == priority) {
                     // printInfo("sending index: %d", i);
+                    // g_sendingIndexTmp = i;
                     return &g_uartSendingFrames[i];
                 }
             }
@@ -122,6 +131,9 @@ void BLE_SendToGateway() {
 
     switch (state) {
         case 0: {
+            // if (g_sendingIndexTmp >= 0) {
+            //     logInfo("reset respType 0 [%d]: %d", g_sendingIndexTmp, g_uartSendingFrames[g_sendingIndexTmp].respType);
+            // }
             // Find frame to send
             UartSendingFrame* frame = findFrameToSend();
             long long int currentTime = timeInMilliseconds();
@@ -138,6 +150,8 @@ void BLE_SendToGateway() {
                 StringCopy(sentFrame.itemId, frame->itemId);
                 memcpy(sentFrame.data, frame->data, frame->dataLength);
                 frame->respType = 0;
+                memset(frame->data, 50, 0);
+                // logInfo("reset respType 1 [%d]: %d", g_sendingIndexTmp, g_uartSendingFrames[g_sendingIndexTmp].respType);
                 state = 1;
                 failedCount = 0;
                 sentTime = timeInMilliseconds();
@@ -146,6 +160,7 @@ void BLE_SendToGateway() {
             break;
         }
         case 1: {
+            // logInfo("reset respType 2 [%d]: %d", g_sendingIndexTmp, g_uartSendingFrames[g_sendingIndexTmp].respType);
             // Send frame to gateway
             g_uartSendingIdx = sentFrame.gwIndex == 0? 3 : 2;
             UART_Send(g_gatewayFds[sentFrame.gwIndex], sentFrame.data, sentFrame.dataLength);
@@ -216,6 +231,8 @@ void BLE_SendToGateway() {
                     }
                     JSON_Delete(p);
                     sendingIsBusy = false;
+                    memset(sentFrame.data, 50, 0);
+                    // logInfo("reset respType 3 [%d]: %d", g_sendingIndexTmp, g_uartSendingFrames[g_sendingIndexTmp].respType);
                     state = 0;      // Goto step 0 to process next frame
                 }
             }
@@ -284,8 +301,9 @@ bool GW_GetDeviceOnOffState(int gwIndex, const char* dpAddr) {
         // frame->timeout = 1000;
         frame->priority = 2;
         frame->retryCount = 1;      // Don't retry for getting status frame
+        return true;
     }
-    return true;
+    return false;
 }
 
 bool GW_ConfigGateway(int gwIndex, provison_inf *PRV)

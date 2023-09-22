@@ -84,6 +84,7 @@ bool addNewDevice(JSON* packet) {
 
         JSON_ForEach(dp, dictDPs) {
             int dpId = atoi(dp->string);
+            int dpValue = dp->valueint;
             uint16_t increasedAddr = tmp + dpId - 1;
             sprintf(dpAddrStr, "%02X%02d", increasedAddr & 0x00FF, increasedAddr >> 8);
             if (addressIncrement) {
@@ -91,6 +92,7 @@ bool addNewDevice(JSON* packet) {
             } else {
                 Db_AddDp(deviceId, dpId, deviceAddr, pageIndex);
             }
+            Db_SaveDpValue(deviceId, dpId, dpValue);
         }
 
         if (StringCompare(pid, HG_BLE_IR_AC) ||
@@ -1523,20 +1525,34 @@ int main(int argc, char ** argv)
                                         JSON_SetNumber(p, "state", 2);
                                     }
                                     sendPacketToBle(-1, reqType, p);
-                                    // Update status of devices in this scene to AWS
-                                    for (int act = 0; act < scene->actionCount; act++) {
-                                        if (scene->actions[act].actionType == EntityDevice) {
-                                            DeviceInfo deviceInfo;
-                                            int foundDevices = Db_FindDevice(&deviceInfo, scene->actions[act].entityId);
-                                            if (foundDevices == 1) {
-                                                for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
-                                                    Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
-                                                    checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
+                                    if (sceneType == SceneTypeManual) {
+                                        // Update status of devices in this scene to AWS
+                                        for (int act = 0; act < scene->actionCount; act++) {
+                                            if (scene->actions[act].actionType == EntityDevice) {
+                                                DeviceInfo deviceInfo;
+                                                int foundDevices = Db_FindDevice(&deviceInfo, scene->actions[act].entityId);
+                                                if (foundDevices == 1) {
+                                                    for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
+                                                        Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
+                                                        Db_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp]);
+                                                        // Save history for group link
+                                                        JSON* history = JSON_CreateObject();
+                                                        JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                                                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
+                                                        JSON_SetText(history, "causeId", sceneId);
+                                                        JSON_SetText(history, "deviceId", deviceInfo.id);
+                                                        JSON_SetNumber(history, "dpId", scene->actions[act].dpIds[dp]);
+                                                        JSON_SetNumber(history, "dpValue", scene->actions[act].dpValues[dp]);
+                                                        Db_AddDeviceHistory(history);
+                                                        JSON_Delete(history);
+
+                                                        checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
+                                                    }
                                                 }
                                             }
                                         }
+                                        GetDeviceStatusForScene(scene);
                                     }
-                                    GetDeviceStatusForScene(scene);
                                     JSON_Delete(p);
                                 }
                             } else {

@@ -596,6 +596,9 @@ int Db_LoadSceneToRam() {
                 conditionCount = 0;
             }
         }
+        if (conditionCount == 0) {
+            g_sceneList[g_sceneCount].type = SceneTypeManual;
+        }
         g_sceneList[g_sceneCount].conditionCount = conditionCount;
         g_sceneCount++;
         JSON_Delete(actionsArray);

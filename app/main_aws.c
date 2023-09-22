@@ -103,6 +103,7 @@ static MQTTSubscribeInfo_t* g_awsSubscriptionList;
 static int g_awsSubscriptionCount = 0;
 static JSON* g_mergePayloads;
 
+void* Thread_ConnectToAws(void* p);
 uint32_t generateRandomNumber();
 int connectToServerWithBackoffRetries( NetworkContext_t * pNetworkContext,MQTTContext_t * pMqttContext,bool * pClientSessionPresent,bool * pBrokerSessionPresent );
 void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdentifier );
@@ -242,7 +243,7 @@ int connectToServerWithBackoffRetries( NetworkContext_t * pNetworkContext,MQTTCo
                 Clock_SleepMs( nextRetryBackOff );
             }
         }
-    usleep(100);
+        usleep(100);
     } while( ( returnStatus == EXIT_FAILURE ) && ( backoffAlgStatus == BackoffAlgorithmSuccess ) );
 
     return returnStatus;
@@ -836,26 +837,13 @@ void Aws_Init() {
 
 void Aws_ProcessLoop() {
     MQTTStatus_t mqttStatus;
-    bool clientSessionPresent = false;
-    bool brokerSessionPresent = false;
-    int returnStatus;
-    if (g_awsIsConnected == false) {
-        returnStatus = connectToServerWithBackoffRetries( &networkContext, &mqttContext, &clientSessionPresent, &brokerSessionPresent );
-        if (returnStatus == EXIT_SUCCESS) {
-            returnStatus = subscribeToTopic( &mqttContext );
-            if (returnStatus == EXIT_SUCCESS) {
-                g_awsIsConnected = true;
-                sendToService(SERVICE_CFG, 0, "AWS_CONNECTED");
-            }
-        }
-    } else {
+    if (g_awsIsConnected) {
         mqttStatus = MQTT_ProcessLoop( &mqttContext, 5 );
         if (mqttStatus != MQTTSuccess ) {
-            returnStatus = EXIT_FAILURE;
             g_awsIsConnected = false;
             sendToService(SERVICE_CFG, 0, "AWS_DISCONNECTED");
             (void) Openssl_Disconnect( &networkContext );
-            LogError( (get_localtime_now()),( "MQTT_ProcessLoop returned with status = %s.",MQTT_Status_strerror( mqttStatus ) ) );
+            logError("MQTT_ProcessLoop returned with status = %s.", MQTT_Status_strerror( mqttStatus));
         }
     }
 }
@@ -1044,6 +1032,7 @@ void Aws_SendMergePayload() {
 
 int main( int argc,char ** argv ) {
     int xRun = 1;
+    pthread_t thrConnectToAws;
 
     queue_received_aws = newQueue(QUEUE_SIZE);
     queue_mos_sub = newQueue(QUEUE_SIZE);
@@ -1059,6 +1048,7 @@ int main( int argc,char ** argv ) {
     Aws_SyncDatabase();
     int size_queue = 0;
     bool check_flag = false;
+    pthread_create(&thrConnectToAws, NULL, Thread_ConnectToAws, NULL);
     while (xRun!=0) {
         Aws_ProcessLoop();
         Aws_SendMergePayload();
@@ -1207,3 +1197,23 @@ int main( int argc,char ** argv ) {
     return 0;
 }
 
+
+void* Thread_ConnectToAws(void* p) {
+    bool clientSessionPresent = false;
+    bool brokerSessionPresent = false;
+    int returnStatus;
+
+    while (1) {
+        if (g_awsIsConnected == false) {
+            returnStatus = connectToServerWithBackoffRetries( &networkContext, &mqttContext, &clientSessionPresent, &brokerSessionPresent );
+            if (returnStatus == EXIT_SUCCESS) {
+                returnStatus = subscribeToTopic( &mqttContext );
+                if (returnStatus == EXIT_SUCCESS) {
+                    g_awsIsConnected = true;
+                    sendToService(SERVICE_CFG, 0, "AWS_CONNECTED");
+                }
+            }
+        }
+        sleep(1);
+    }
+}
