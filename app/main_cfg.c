@@ -111,16 +111,21 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
 
         int type = JSON_GetNumber(recvMsg, "type");
         if (type == TYPE_CONFIG_WIFI || type == TYPE_CONFIG_WIFI_GW) {
-            JSON* wifiInfo = JSON_GetObject(recvMsg, "wifi_info");
-            char* ssid = JSON_GetText(wifiInfo, "ssid");
-            char* pass = JSON_GetText(wifiInfo, "pass");
-            if (ssid) {
-                StringCopy(g_wifiSSID, ssid);
+            bool needToConfigWifi = false;
+            if (JSON_HasKey(recvMsg, "wifi_info")) {
+                JSON* wifiInfo = JSON_GetObject(recvMsg, "wifi_info");
+                char* ssid = JSON_GetText(wifiInfo, "ssid");
+                char* pass = JSON_GetText(wifiInfo, "pass");
+                if (ssid) {
+                    StringCopy(g_wifiSSID, ssid);
+                }
+                if (pass) {
+                    StringCopy(g_wifiPASS, pass);
+                }
+                logInfo("SSID: %s, PASS: %s", ssid, pass);
+                needToConfigWifi = true;
             }
-            if (pass) {
-                StringCopy(g_wifiPASS, pass);
-            }
-            logInfo("SSID: %s, PASS: %s", ssid, pass);
+
             g_homeId[0] = 0;
             g_accountId[0] = 0;
 
@@ -139,6 +144,15 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
             if (type == TYPE_CONFIG_WIFI_GW && JSON_HasKey(recvMsg, "gateWay")) {
                 g_gatewayInfo = JSON_Clone(JSON_GetObject(recvMsg, "gateWay"));
                 g_needConfigGw = true;
+                if (needToConfigWifi == false) {
+                    FILE* f = fopen("app.json", "w");
+                    int isMaster = JSON_GetNumber(g_gatewayInfo, "isMaster");
+                    char* hcAddr = JSON_GetText(g_gatewayInfo, "gateway1");
+                    fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\",\"isMaster\":%d,\"hcAddr\":\"%s\"}", g_accountId, g_homeId, isMaster, hcAddr);
+                    fclose(f);
+                    // Send message to BLE service to configure gateway
+                    sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
+                }
             } else {
                 g_gatewayInfo = NULL;
                 g_needConfigGw = false;
