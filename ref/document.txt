@@ -251,3 +251,9 @@ Tính năng IR:
 
 # Convert epoch time to human readable time sqlite3
     SELECT DATETIME(ROUND(time / 1000), 'unixepoch') AS isodate FROM device_histories LIMIT 1;
+
+# Crontab
+nano /var/spool/cron/crontabs/root
+Add the following lines to the end of file:
+0 3 * * * sudo shutdown -r
+* * * * * /usr/bin/python3 /home/szbaijie/hc_bin/checkWifi.py

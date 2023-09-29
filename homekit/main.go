@@ -24,9 +24,9 @@ const PID_HG_SWITCH = "BLEHGAA0101,BLEHGAA0102,BLEHGAA0103,BLEHGAA0104"
 const PID_HG_DOOR_SWITCH = "BLEHGAA0105,BLEHGAA0106,BLEHGAA0107"
 const PID_HG_CCT_LIGHT = "BLEHGAA0201"
 const PID_HG_COLOR_LIGHT = "BLEHGAA0202,BLEHG010401,BLEHG010402"
-const PID_HG_SMOKE_SENSOR = "BLEHG030301"
-const PID_HG_MOTION_SENSOR = "BLEHG030201"
-const PID_HG_DOOR_SENSOR = "BLEHG030601"
+const PID_HG_SMOKE_SENSOR = "BLEHG030301,BLEHGAA0406"
+const PID_HG_MOTION_SENSOR = "BLEHG030201,BLEHGAA0401"
+const PID_HG_DOOR_SENSOR = "BLEHG030601,BLEHGAA0404"
 
 const TOPIC_CTR_DEVICE = "APPLICATION_SERVICES/Mosq/Control"
 const TOPIC_RESP_DEVICE = "APPLICATION_SERVICES/AWS/#"
@@ -486,17 +486,23 @@ func SyncDeviceState() {
     }
 
     // Smoke sensor
-    for _, d := range(g_hgSmokeSensors) {
+    log.Printf("Number of smoke sensors: %d\n", len(g_hgSmokeSensors))
+    for i, d := range(g_hgSmokeSensors) {
+        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.SmokeSensor.SmokeDetected.SetValue(d.Detected)
     }
 
     // Motion sensor
-    for _, d := range(g_hgMotionSensors) {
+    log.Printf("Number of motion sensors: %d\n", len(g_hgMotionSensors))
+    for i, d := range(g_hgMotionSensors) {
+        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.MotionSensor.MotionDetected.SetValue(GetBoolValue(d.Detected))
     }
 
     // Door sensor
-    for _, d := range(g_hgDoorSensors) {
+    log.Printf("Number of door sensors: %d\n", len(g_hgDoorSensors))
+    for i, d := range(g_hgDoorSensors) {
+        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.ContactSensor.ContactSensorState.SetValue(d.Detected)
     }
 }
@@ -621,10 +627,11 @@ func main() {
     GetHomeInformation()
     GetDeviceList()
 
-    // Print device list
-    for i, d := range(g_hgSwitches) {
-        log.Printf("%d: %s.%d=%d - %s\n", i + 1, d.Id, d.DpId, d.OnOff, d.Name)
-    }
+    // // Print device list
+    // log.Printf("Number of sensors: %d\n", len(g_hgDoorSensors))
+    // for i, d := range(g_hgDoorSensors) {
+    //     log.Printf("%d: %s=%s\n", i + 1, d.Id, d.Name)
+    // }
 
     // Store the data in the "./db" directory.
     fs := hap.NewFsStore("./db")
