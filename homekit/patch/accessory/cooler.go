@@ -4,6 +4,11 @@ import (
     "github.com/brutella/hap/service"
 )
 
+type Cooler struct {
+    *A
+    Cooler *service.Cooler
+}
+
 type SmokeSensor struct {
     *A
     SmokeSensor *service.SmokeSensor
@@ -17,6 +22,17 @@ type MotionSensor struct {
 type ContactSensor struct {
     *A
     ContactSensor *service.ContactSensor
+}
+
+// NewCooler returns a cooler accessory.
+func NewCooler(info Info) *Cooler {
+    a := Cooler{}
+    a.A = New(info, TypeAirConditioner)
+
+    a.Cooler = service.NewCooler()
+    a.AddS(a.Cooler.S)
+
+    return &a
 }
 
 func NewSmokeSensor(info Info) *SmokeSensor {

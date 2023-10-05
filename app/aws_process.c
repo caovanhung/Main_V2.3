@@ -107,7 +107,6 @@ void Aws_SyncDatabase() {
         int devicePages = JSON_HasKey(accountInfo, "pageIndex0")? JSON_GetNumber(accountInfo, "pageIndex0") : 1;
         int groupPages = JSON_HasKey(accountInfo, "pageIndex3")? JSON_GetNumber(accountInfo, "pageIndex3") : 1;
         int scenePages = JSON_HasKey(accountInfo, "pageIndex2")? JSON_GetNumber(accountInfo, "pageIndex2") : 1;
-        sendPacketTo(SERVICE_CORE, TYPE_RESET_DATABASE, accountInfo);
 
         // Sync gateways
         gatewayInfo = JSON_Clone(JSON_GetObject(accountInfo, "gateWay"));
@@ -200,6 +199,8 @@ void Aws_SyncDatabase() {
     }
 
     if (syncOK) {
+        sendPacketTo(SERVICE_CORE, TYPE_RESET_DATABASE, accountInfo);
+        sleep(2);
         JSON_ForEach(gw, gatewayInfo) {
             if (cJSON_IsObject(gw)) {
                 JSON_SetNumber(gw, "needToConfig", 0);

@@ -27,6 +27,9 @@ const PID_HG_COLOR_LIGHT = "BLEHGAA0202,BLEHG010401,BLEHG010402"
 const PID_HG_SMOKE_SENSOR = "BLEHG030301,BLEHGAA0406"
 const PID_HG_MOTION_SENSOR = "BLEHG030201,BLEHGAA0401"
 const PID_HG_DOOR_SENSOR = "BLEHG030601,BLEHGAA0404"
+const PID_HG_TV = "BLEHGAA0302"
+const PID_HG_AC = "BLEHGAA0304"
+const PID_HG_FAN = "BLEHGAA0303"
 
 const TOPIC_CTR_DEVICE = "APPLICATION_SERVICES/Mosq/Control"
 const TOPIC_RESP_DEVICE = "APPLICATION_SERVICES/AWS/#"
@@ -107,6 +110,28 @@ type HGDoorSensor struct {
     hkObj *accessory.ContactSensor
 }
 
+type HGCooler struct {
+    Id    string
+    Active int
+    CurrentTemperature float64
+    Name  string
+    hkObj *accessory.Cooler
+}
+
+type HGTV struct {
+    Id    string
+    Active int
+    Name  string
+    hkObj *accessory.Television
+}
+
+type HGFan struct {
+    Id    string
+    OnOff int
+    Name  string
+    hkObj *accessory.Fan
+}
+
 type MqttRecvPackage struct {
     NameService string `json:"NameService"`
     ActionType  int    `json:"ActionType"`
@@ -130,6 +155,9 @@ var g_hgColorLights []HGColorLight
 var g_hgSmokeSensors []HGSmokeSensor
 var g_hgMotionSensors []HGMotionSensor
 var g_hgDoorSensors []HGDoorSensor
+var g_hgTVs []HGTV
+var g_hgFans []HGFan
+var g_hgCoolers []HGCooler
 var g_mqttClient mqtt.Client
 
 func CreatePassword(thingId string) string {
@@ -175,6 +203,45 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
     }
 
     if recvPackage.ActionType == 50 {
+        // TV
+        for i, sw := range(g_hgTVs) {
+            if sw.Id == payload.DeviceID && payload.DpID == 101 {
+                g_hgTVs[i].Active = payload.DpValue
+                log.Printf("Update TV active: %s=%d", sw.Id, payload.DpValue)
+                sw.hkObj.Television.Active.SetValue(payload.DpValue)
+            }
+        }
+
+        // Fan
+        for i, sw := range(g_hgFans) {
+            if sw.Id == payload.DeviceID && payload.DpID == 101 {
+                g_hgFans[i].OnOff = payload.DpValue
+                log.Printf("Update Fan OnOff: %s=%d", sw.Id, payload.DpValue)
+                sw.hkObj.Fan.On.SetValue(GetBoolValue(payload.DpValue))
+            }
+        }
+
+        // Cooler
+        for i, sw := range(g_hgCoolers) {
+            if sw.Id == payload.DeviceID {
+                if payload.DpID == 103 {
+                    if payload.DpValue == 0 {
+                        g_hgCoolers[i].Active = 0
+                        log.Printf("Update Cooler OnOff: %s=%d", sw.Id, 0)
+                        sw.hkObj.Cooler.Active.SetValue(0)
+                    } else {
+                        g_hgCoolers[i].Active = 1
+                        log.Printf("Update Cooler OnOff: %s=%d", sw.Id, 1)
+                        sw.hkObj.Cooler.Active.SetValue(1)
+
+                        g_hgCoolers[i].CurrentTemperature = float64(payload.DpValue)
+                        log.Printf("Update Cooler current temperature: %s=%d", sw.Id, payload.DpValue)
+                        sw.hkObj.Cooler.CurrentTemperature.SetValue(float64(payload.DpValue))
+                    }
+                }
+            }
+        }
+
         // Switch
         for i, sw := range(g_hgSwitches) {
             if sw.Id == payload.DeviceID && sw.DpId == payload.DpID {
@@ -240,6 +307,39 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
                     // d.hkObj.Lightbulb.ColorTemperature.SetValue(d.ColorTemperature / 2)
                 } else if payload.DpID == 24 {
 
+                }
+            }
+        }
+
+        // Door sensor
+        for i, d := range(g_hgDoorSensors) {
+            if d.Id == payload.DeviceID {
+                if payload.DpID == 1 {
+                    g_hgDoorSensors[i].Detected = payload.DpValue
+                    log.Printf("Update door sensor: %s=%d", d.Id, payload.DpValue)
+                    d.hkObj.ContactSensor.ContactSensorState.SetValue(payload.DpValue)
+                }
+            }
+        }
+
+        // Smoke sensor
+        for i, d := range(g_hgSmokeSensors) {
+            if d.Id == payload.DeviceID {
+                if payload.DpID == 1 {
+                    g_hgSmokeSensors[i].Detected = payload.DpValue
+                    log.Printf("Update smoke sensor: %s=%d", d.Id, payload.DpValue)
+                    d.hkObj.SmokeSensor.SmokeDetected.SetValue(payload.DpValue)
+                }
+            }
+        }
+
+        // Motion sensor
+        for i, d := range(g_hgMotionSensors) {
+            if d.Id == payload.DeviceID {
+                if payload.DpID == 101 {
+                    g_hgMotionSensors[i].Detected = payload.DpValue
+                    log.Printf("Update motion sensor: %s=%d", d.Id, payload.DpValue)
+                    d.hkObj.MotionSensor.MotionDetected.SetValue(GetBoolValue(payload.DpValue))
                 }
             }
         }
@@ -453,6 +553,33 @@ func GetDeviceList() {
                             deviceName := deviceObj["name"].(string)
                             d := HGDoorSensor{Id: k, Name: deviceName, Detected: detected}
                             g_hgDoorSensors = append(g_hgDoorSensors, d)
+                        } else if strings.Contains(PID_HG_TV, pid) {
+                            dictDps := deviceObj["dictDPs"].(map[string]interface{})
+                            active, err := strconv.Atoi(dictDps["101"].(string))
+                            if err == nil {
+                                deviceName := deviceObj["name"].(string)
+                                d := HGTV{Id: k, Name: deviceName, Active: active}
+                                g_hgTVs = append(g_hgTVs, d)
+                            } else {
+                                log.Printf("Parse tv is error: %+v\n", err)
+                            }
+                        } else if strings.Contains(PID_HG_FAN, pid) {
+                            dictDps := deviceObj["dictDPs"].(map[string]interface{})
+                            onoff, err := strconv.Atoi(dictDps["101"].(string))
+                            if err == nil {
+                                deviceName := deviceObj["name"].(string)
+                                d := HGFan{Id: k, Name: deviceName, OnOff: onoff}
+                                g_hgFans = append(g_hgFans, d)
+                            } else {
+                                log.Printf("Parse fan is error: %+v\n", err)
+                            }
+                        } else if strings.Contains(PID_HG_AC, pid) {
+                            dictDps := deviceObj["dictDPs"].(map[string]interface{})
+                            active := GetIntValue(dictDps["103"])
+                            currentTemperature := GetIntValue(dictDps["103"])
+                            deviceName := deviceObj["name"].(string)
+                            d := HGCooler{Id: k, Name: deviceName, Active: active, CurrentTemperature: float64(currentTemperature)}
+                            g_hgCoolers = append(g_hgCoolers, d)
                         }
                     }
                 }
@@ -467,7 +594,7 @@ func SyncDeviceState() {
     }
 
     for _, sw := range(g_hgDoorSwitches) {
-        log.Println(sw)
+        // log.Println(sw)
         sw.hkObj.GarageDoorOpener.CurrentDoorState.SetValue(2)
     }
 
@@ -505,6 +632,28 @@ func SyncDeviceState() {
         log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.ContactSensor.ContactSensorState.SetValue(d.Detected)
     }
+
+    // TV
+    log.Printf("Number of TVs: %d\n", len(g_hgTVs))
+    for i, d := range(g_hgTVs) {
+        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
+        d.hkObj.Television.Active.SetValue(d.Active)
+    }
+
+    // Fan
+    log.Printf("Number of Fans: %d\n", len(g_hgFans))
+    for i, d := range(g_hgFans) {
+        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
+        d.hkObj.Fan.On.SetValue(GetBoolValue(d.OnOff))
+    }
+
+    // Air conditioner
+    log.Printf("Number of air conditioners: %d\n", len(g_hgCoolers))
+    for i, d := range(g_hgCoolers) {
+        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
+        d.hkObj.Cooler.Active.SetValue(d.Active)
+        d.hkObj.Cooler.CurrentTemperature.SetValue(d.CurrentTemperature)
+    }
 }
 
 func Switch_OnOff_Update(v bool) {
@@ -524,7 +673,7 @@ func Switch_OnOff_Update(v bool) {
 
 func Door_State_Update(v int) {
     log.Printf("Door_State_Update: %d\n", v)
-    log.Println(g_hgDoorSwitches)
+    // log.Println(g_hgDoorSwitches)
     for i, sw := range(g_hgDoorSwitches) {
         actualState := 0
         actualState = sw.hkObj.GarageDoorOpener.TargetDoorState.Value()
@@ -533,7 +682,7 @@ func Door_State_Update(v int) {
             ControlDoorSwitch(sw.Id, sw.DpId, actualState)
             g_hgDoorSwitches[i].TargetState = actualState
             g_hgDoorSwitches[i].CurrentState = actualState
-            log.Println(g_hgDoorSwitches)
+            // log.Println(g_hgDoorSwitches)
             // break
         }
     }
@@ -541,7 +690,7 @@ func Door_State_Update(v int) {
 
 func CCTLight_OnOff_Update(v bool) {
     log.Printf("CCTLight_OnOff_Update: %t\n", v)
-    log.Println(g_hgCCTLights)
+    // log.Println(g_hgCCTLights)
     for i, d := range(g_hgCCTLights) {
         actualOnOff := 0
         if d.hkObj.Lightbulb.On.Value() {
@@ -551,7 +700,7 @@ func CCTLight_OnOff_Update(v bool) {
         if d.OnOff != actualOnOff {
             ControlDevice(d.Id, 20, actualOnOff)
             g_hgCCTLights[i].OnOff = actualOnOff
-            log.Println(g_hgCCTLights)
+            // log.Println(g_hgCCTLights)
             break
         }
     }
@@ -615,6 +764,45 @@ func ColorLight_ColorTemperature_Update(v int) {
         if d.ColorTemperature != actualColorTemperature {
             ControlLightCCT(d.Id, d.Brightness, actualColorTemperature)
             g_hgColorLights[i].ColorTemperature = actualColorTemperature
+            break
+        }
+    }
+}
+
+func TV_Active_Update(v int) {
+    log.Printf("TV_Active_Update: %t\n", v)
+    for i, d := range(g_hgTVs) {
+        actualActive := d.hkObj.Television.Active.Value()
+        if d.Active != actualActive {
+            ControlDevice(d.Id, 20, actualActive)
+            g_hgTVs[i].Active = actualActive
+            break
+        }
+    }
+}
+
+func Fan_OnOff_Update(v bool) {
+    log.Printf("Fan_OnOff_Update: %t\n", v)
+    for i, d := range(g_hgFans) {
+        actualOnOff := 0
+        if d.hkObj.Fan.On.Value() {
+            actualOnOff = 1
+        }
+        if d.OnOff != actualOnOff {
+            ControlDevice(d.Id, 20, actualOnOff)
+            g_hgFans[i].OnOff = actualOnOff
+            break
+        }
+    }
+}
+
+func Cooler_Active_Update(v int) {
+    log.Printf("Cooler_Active_Update: %t\n", v)
+    for i, d := range(g_hgCoolers) {
+        actualActive := d.hkObj.Cooler.Active.Value()
+        if d.Active != actualActive {
+            ControlDevice(d.Id, 20, actualActive)
+            g_hgCoolers[i].Active = actualActive
             break
         }
     }
@@ -693,33 +881,34 @@ func main() {
     for i, d := range(g_hgDoorSensors) {
         sensor := accessory.NewContactSensor(accessory.Info{Name: d.Name,})
         g_hgDoorSensors[i].hkObj = sensor
+        log.Println(d.Name)
         accessories = append(accessories, sensor.A)
     }
 
-    // Create CCT light
-    // lightbulb := accessory.NewLightbulb(accessory.Info{Name: "Đèn 1"})
+    // Create TVs
+    for i, d := range(g_hgTVs) {
+        tv := accessory.NewTelevision(accessory.Info{Name: d.Name,})
+        tv.Television.Active.OnValueRemoteUpdate(TV_Active_Update)
+        g_hgTVs[i].hkObj = tv
+        accessories = append(accessories, tv.A)
+    }
 
-    // devices := []*accessory.A {switchAs, lightbulb.A}
+    // Create Fans
+    for i, d := range(g_hgFans) {
+        fan := accessory.NewFan(accessory.Info{Name: d.Name,})
+        fan.Fan.On.OnValueRemoteUpdate(Fan_OnOff_Update)
+        g_hgFans[i].hkObj = fan
+        accessories = append(accessories, fan.A)
+    }
 
-    // lamp1.Switch.On.OnValueRemoteUpdate(func(on bool) {
-    //     if on == true {
-    //         log.Println("Lamp 1 is on")
-    //     } else {
-    //         log.Println("Lamp 1 is off")
-    //     }
-    // })
+    // Create Air conditioners
+    for i, d := range(g_hgCoolers) {
+        cooler := accessory.NewCooler(accessory.Info{Name: d.Name,})
+        cooler.Cooler.Active.OnValueRemoteUpdate(Cooler_Active_Update)
+        g_hgCoolers[i].hkObj = cooler
+        accessories = append(accessories, cooler.A)
+    }
 
-    // lightbulb.Lightbulb.ColorTemperature.OnValueRemoteUpdate(func(value int) {
-    //     log.Println("Đèn 1 đổi màu: " + strconv.Itoa(value))
-    // })
-
-    // go func() {
-    //     for {
-    //         value := lightbulb.Lightbulb.ColorTemperature.Value()
-    //         log.Println(value)
-    //         time.Sleep(1 * time.Second)
-    //     }
-    // }()
 
     // Create the hap server.
     server, err := hap.NewServer(fs, hc.A, accessories...)

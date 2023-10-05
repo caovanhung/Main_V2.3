@@ -765,7 +765,9 @@ int main( int argc,char ** argv )
                     ble_getInfoProvison(&PRV, payload);
                     GW_ConfigGateway(0, &PRV);
                     sleep(1);
-                    GW_ConfigGateway(1, &PRV);
+                    if (PRV.deviceKey2 != NULL && PRV.address2 != NULL) {
+                        GW_ConfigGateway(1, &PRV);
+                    }
                     sendToService(SERVICE_CFG, 0, "LED_ON");
                     char* message2 = "{\"step\":4, \"message\":\"cấu hình bộ trung tâm thành công, đang khởi động lại thiết bị\"}";
                     mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message2), message2, 0, false);
