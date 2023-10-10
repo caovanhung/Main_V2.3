@@ -453,73 +453,75 @@ int Db_LoadSceneToRam() {
         JSON* actionsArray = JSON_Parse(actions);
         int actionCount = 0;
         JSON_ForEach(act, actionsArray) {
-            SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
-            action->dpCount = 0;
-            if (JSON_HasKey(act, "actionExecutor")) {
-                StringCopy(action->entityId, JSON_GetText(act, "entityId"));
-                char* actionExecutor = JSON_GetText(act, "actionExecutor");
-                JSON* executorProperty = JSON_GetObject(act, "executorProperty");
-                if (StringCompare(actionExecutor, "dpIssue")) {
-                    action->actionType = EntityDevice;
-                } else if (StringCompare("ruleTrigger", actionExecutor)) {
-                    action->actionType = EntityScene;
-                    action->dpValues[0] = 2;
-                } else if (StringCompare("ruleEnable", actionExecutor)) {
-                    action->actionType = EntityScene;
-                    action->dpValues[0] = 1;
-                } else if (StringCompare("ruleDisable", actionExecutor)) {
-                    action->actionType = EntityScene;
-                    action->dpValues[0] = 0;
-                } else if (StringCompare(actionExecutor, "delay")) {
-                    action->actionType = EntityDelay;
-                    int minutes = atoi(JSON_GetText(executorProperty, "minutes"));
-                    action->delaySeconds = atoi(JSON_GetText(executorProperty, "seconds"));
-                    action->delaySeconds = minutes * 60 + action->delaySeconds;
-                } else if (StringCompare(actionExecutor, "deviceGroupDpIssue")) {
-                    action->actionType = EntityGroup;
-                }
-
-                JSON_ForEach(o, executorProperty) {
-                    action->dpIds[action->dpCount] = atoi(o->string);
-                    if (cJSON_IsNumber(o) || cJSON_IsBool(o)) {
-                        action->dpValues[action->dpCount] = (double)o->valueint;
-                    } else if (cJSON_IsString(o)) {
-                        if (action->dpIds[action->dpCount] == 21) {
-                            if (StringContains(o->valuestring, "scene_")) {
-                                List* tmp = String_Split(o->valuestring, "_");
-                                if (tmp->count == 2) {
-                                    uint8_t value = atoi(tmp->items[1]);
-                                    action->dpIds[0] = 21;
-                                    action->dpValues[0] = value;
-                                    action->dpCount = 1;
-                                    break;
-                                }
-                                List_Delete(tmp);
-                            } else {
-                                action->dpValues[action->dpCount] = -1;
-                            }
-                        } else {
-                            action->valueType = ValueTypeString;
-                            action->dpIds[0] = action->dpIds[action->dpCount];
-                            action->dpCount = 1;
-                            StringCopy(action->valueString, o->valuestring);
-                            break;
-                        }
+            if (actionCount < SCENE_ACTIONS_MAX) {
+                SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
+                action->dpCount = 0;
+                if (JSON_HasKey(act, "actionExecutor")) {
+                    StringCopy(action->entityId, JSON_GetText(act, "entityId"));
+                    char* actionExecutor = JSON_GetText(act, "actionExecutor");
+                    JSON* executorProperty = JSON_GetObject(act, "executorProperty");
+                    if (StringCompare(actionExecutor, "dpIssue")) {
+                        action->actionType = EntityDevice;
+                    } else if (StringCompare("ruleTrigger", actionExecutor)) {
+                        action->actionType = EntityScene;
+                        action->dpValues[0] = 2;
+                    } else if (StringCompare("ruleEnable", actionExecutor)) {
+                        action->actionType = EntityScene;
+                        action->dpValues[0] = 1;
+                    } else if (StringCompare("ruleDisable", actionExecutor)) {
+                        action->actionType = EntityScene;
+                        action->dpValues[0] = 0;
+                    } else if (StringCompare(actionExecutor, "delay")) {
+                        action->actionType = EntityDelay;
+                        int minutes = atoi(JSON_GetText(executorProperty, "minutes"));
+                        action->delaySeconds = atoi(JSON_GetText(executorProperty, "seconds"));
+                        action->delaySeconds = minutes * 60 + action->delaySeconds;
+                    } else if (StringCompare(actionExecutor, "deviceGroupDpIssue")) {
+                        action->actionType = EntityGroup;
                     }
-                    action->dpCount++;
-                }
 
-                // Load 'code' field for controlling tuya
-                if (JSON_HasKey(act, "code")) {
-                    StringCopy(action->wifiCode, JSON_GetText(act, "code"));
+                    JSON_ForEach(o, executorProperty) {
+                        action->dpIds[action->dpCount] = atoi(o->string);
+                        if (cJSON_IsNumber(o) || cJSON_IsBool(o)) {
+                            action->dpValues[action->dpCount] = (double)o->valueint;
+                        } else if (cJSON_IsString(o)) {
+                            if (action->dpIds[action->dpCount] == 21) {
+                                if (StringContains(o->valuestring, "scene_")) {
+                                    List* tmp = String_Split(o->valuestring, "_");
+                                    if (tmp->count == 2) {
+                                        uint8_t value = atoi(tmp->items[1]);
+                                        action->dpIds[0] = 21;
+                                        action->dpValues[0] = value;
+                                        action->dpCount = 1;
+                                        break;
+                                    }
+                                    List_Delete(tmp);
+                                } else {
+                                    action->dpValues[action->dpCount] = -1;
+                                }
+                            } else {
+                                action->valueType = ValueTypeString;
+                                action->dpIds[0] = action->dpIds[action->dpCount];
+                                action->dpCount = 1;
+                                StringCopy(action->valueString, o->valuestring);
+                                break;
+                            }
+                        }
+                        action->dpCount++;
+                    }
+
+                    // Load 'code' field for controlling tuya
+                    if (JSON_HasKey(act, "code")) {
+                        StringCopy(action->wifiCode, JSON_GetText(act, "code"));
+                    }
+                    int isWifi = JSON_HasKey(act, "isWifi")? JSON_GetNumber(act, "isWifi") : 0;
+                    if (isWifi || JSON_HasKey(act, "code")) {
+                        StringCopy(action->serviceName, SERVICE_TUYA);  // Service for controlling Tuya device
+                    } else {
+                        StringCopy(action->serviceName, SERVICE_BLE);   // Service for controlling BLE device
+                    }
+                    actionCount++;
                 }
-                int isWifi = JSON_HasKey(act, "isWifi")? JSON_GetNumber(act, "isWifi") : 0;
-                if (isWifi || JSON_HasKey(act, "code")) {
-                    StringCopy(action->serviceName, SERVICE_TUYA);  // Service for controlling Tuya device
-                } else {
-                    StringCopy(action->serviceName, SERVICE_BLE);   // Service for controlling BLE device
-                }
-                actionCount++;
             }
         }
         g_sceneList[g_sceneCount].actionCount = actionCount;
@@ -528,72 +530,71 @@ int Db_LoadSceneToRam() {
         JSON* conditionsArray = JSON_Parse(sqlite3_column_text(row, 6));
         int conditionCount = 0;
         JSON_ForEach(condition, conditionsArray) {
-            SceneCondition* cond = &g_sceneList[g_sceneCount].conditions[conditionCount];
-            StringCopy(cond->entityId, JSON_GetText(condition, "entityId"));
-            JSON* exprArray = JSON_GetObject(condition, "expr");
-            cond->timeReached = 0;
-            if (StringCompare(cond->entityId, "timer")) {
-                cond->conditionType = EntitySchedule;
-                cond->repeat = strtol(JSON_GetText(exprArray, "loops"), NULL, 2);
-                char* time = JSON_GetText(exprArray, "time");
-                List* timeItems = String_Split(time, ":");
-                if (timeItems->count == 2) {
-                    int hour = atoi(timeItems->items[0]);
-                    int minute = atoi(timeItems->items[1]);
-                    cond->schMinutes = hour * 60 + minute;
-                    // If repeat is 0, scheMinutes will be epoch time so that scene will be executed only 1 time
-                    if (cond->repeat == 0) {
-                        char* dateStr = JSON_GetText(exprArray, "date");
-                        if (dateStr) {
-                            int date = atoi(&dateStr[6]);
-                            dateStr[6] = 0;
-                            int month = atoi(&dateStr[4]);
-                            dateStr[4] = 0;
-                            int year = atoi(dateStr);
-                            // Convert date time to epoch time
-                            struct tm t;
-                            t.tm_year = year - 1900;  // Year - 1900
-                            t.tm_mon = month - 1;     // Month, where 0 = jan
-                            t.tm_mday = date;         // Day of the month
-                            t.tm_hour = hour;
-                            t.tm_min = minute;
-                            t.tm_sec = 0;
-                            t.tm_isdst = -1;
-                            cond->schMinutes = mktime(&t);
-                            printInfo("schMinutes of scene %s is %u", g_sceneList[g_sceneCount].id, cond->schMinutes);
+            if (conditionCount < SCENE_CONDITIONS_MAX) {
+                SceneCondition* cond = &g_sceneList[g_sceneCount].conditions[conditionCount];
+                StringCopy(cond->entityId, JSON_GetText(condition, "entityId"));
+                JSON* exprArray = JSON_GetObject(condition, "expr");
+                cond->timeReached = 0;
+                if (StringCompare(cond->entityId, "timer")) {
+                    cond->conditionType = EntitySchedule;
+                    cond->repeat = strtol(JSON_GetText(exprArray, "loops"), NULL, 2);
+                    char* time = JSON_GetText(exprArray, "time");
+                    List* timeItems = String_Split(time, ":");
+                    if (timeItems->count == 2) {
+                        int hour = atoi(timeItems->items[0]);
+                        int minute = atoi(timeItems->items[1]);
+                        cond->schMinutes = hour * 60 + minute;
+                        // If repeat is 0, scheMinutes will be epoch time so that scene will be executed only 1 time
+                        if (cond->repeat == 0) {
+                            char* dateStr = JSON_GetText(exprArray, "date");
+                            if (dateStr) {
+                                int date = atoi(&dateStr[6]);
+                                dateStr[6] = 0;
+                                int month = atoi(&dateStr[4]);
+                                dateStr[4] = 0;
+                                int year = atoi(dateStr);
+                                // Convert date time to epoch time
+                                struct tm t;
+                                t.tm_year = year - 1900;  // Year - 1900
+                                t.tm_mon = month - 1;     // Month, where 0 = jan
+                                t.tm_mday = date;         // Day of the month
+                                t.tm_hour = hour;
+                                t.tm_min = minute;
+                                t.tm_sec = 0;
+                                t.tm_isdst = -1;
+                                cond->schMinutes = mktime(&t);
+                                printInfo("schMinutes of scene %s is %u", g_sceneList[g_sceneCount].id, cond->schMinutes);
+                            }
                         }
                     }
-                }
-                List_Delete(timeItems);
-            } else {
-                cond->conditionType = EntityDevice;
-                DeviceInfo deviceInfo;
-                int foundDevices = Db_FindDevice(&deviceInfo, cond->entityId);
-                if (foundDevices == 1) {
-                    StringCopy(cond->expr, JArr_GetText(exprArray, 1));
-                    cond->dpId = atoi(JArr_GetText(exprArray, 0) + 3);   // Template is "$dp1"
-                    DpInfo dpInfo;
-                    int foundDps = Db_FindDp(&dpInfo, cond->entityId, cond->dpId);
-                    if (foundDps == 1 || StringCompare(deviceInfo.pid, HG_BLE_IR)) {
-                        StringCopy(cond->pid, deviceInfo.pid);
-                        if (foundDps == 1) {
-                            StringCopy(cond->dpAddr, dpInfo.addr);
+                    List_Delete(timeItems);
+                } else {
+                    cond->conditionType = EntityDevice;
+                    DeviceInfo deviceInfo;
+                    int foundDevices = Db_FindDevice(&deviceInfo, cond->entityId);
+                    if (foundDevices == 1) {
+                        StringCopy(cond->expr, JArr_GetText(exprArray, 1));
+                        cond->dpId = atoi(JArr_GetText(exprArray, 0) + 3);   // Template is "$dp1"
+                        DpInfo dpInfo;
+                        int foundDps = Db_FindDp(&dpInfo, cond->entityId, cond->dpId);
+                        if (foundDps == 1 || StringCompare(deviceInfo.pid, HG_BLE_IR)) {
+                            StringCopy(cond->pid, deviceInfo.pid);
+                            if (foundDps == 1) {
+                                StringCopy(cond->dpAddr, dpInfo.addr);
+                            }
                         }
                     }
+                    JSON* objItem = JArr_GetObject(exprArray, 2);
+                    if (cJSON_IsString(objItem)) {
+                        cond->valueType = ValueTypeString;
+                        StringCopy(cond->dpValueStr, JArr_GetText(exprArray, 2));
+                    } else if(cJSON_IsNumber(objItem) || cJSON_IsBool(objItem)){
+                        cond->valueType = ValueTypeDouble;
+                        int dpValue = JArr_GetNumber(exprArray, 2);
+                        cond->dpValue = dpValue;
+                    }
                 }
-                JSON* objItem = JArr_GetObject(exprArray, 2);
-                if (cJSON_IsString(objItem)) {
-                    cond->valueType = ValueTypeString;
-                    StringCopy(cond->dpValueStr, JArr_GetText(exprArray, 2));
-                } else if(cJSON_IsNumber(objItem) || cJSON_IsBool(objItem)){
-                    cond->valueType = ValueTypeDouble;
-                    int dpValue = JArr_GetNumber(exprArray, 2);
-                    cond->dpValue = dpValue;
-                }
-            }
-            conditionCount++;
-            if (conditionCount > 1000) {
-                conditionCount = 0;
+                conditionCount++;
             }
         }
         if (conditionCount == 0) {

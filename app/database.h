@@ -17,6 +17,9 @@
 #include "cJSON.h"
 #include "helper.h"
 
+#define SCENE_ACTIONS_MAX     200
+#define SCENE_CONDITIONS_MAX  50
+
 typedef enum {
     GroupSwitch = 0,     // Nhóm công tắc (liên động mềm)
     GroupLight  = 1      // Nhóm đèn
@@ -110,9 +113,9 @@ typedef struct {
     bool            isLocal;
     int             isEnable;
     SceneType       type;
-    SceneAction     actions[200];
+    SceneAction     actions[SCENE_ACTIONS_MAX];
     int             actionCount;
-    SceneCondition  conditions[50];
+    SceneCondition  conditions[SCENE_CONDITIONS_MAX];
     int             conditionCount;
     int             effectFrom;          // Effective start time (minutes)
     int             effectTo;            // Effective end time (minutes)

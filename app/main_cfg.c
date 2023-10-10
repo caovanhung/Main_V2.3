@@ -152,6 +152,7 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
                     fclose(f);
                     // Send message to BLE service to configure gateway
                     sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
+                    sendPacketTo("CORE_LOCAL", TYPE_RESET_DATABASE, g_gatewayInfo);
                 }
             } else {
                 g_gatewayInfo = NULL;
@@ -373,6 +374,7 @@ void MainLoop() {
                         fclose(f);
                         // Send message to BLE service to configure gateway
                         sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
+                        sendPacketTo("CORE_LOCAL", TYPE_RESET_DATABASE, g_gatewayInfo);
                     } else {
                         PlayAudio("restarting");
                         system("reboot");

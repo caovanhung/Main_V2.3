@@ -251,6 +251,7 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc)
         logError("Error with result code: %d\n", rc);
         exit(-1);
     }
+    mosquitto_subscribe(mosq, NULL, "CORE_LOCAL/#", 0);
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_CORE_DATA, 0);
     mosquitto_subscribe(mosq, NULL, "/topic/detected/#", 0); //subcribe MQTT for camera HANET
 }
