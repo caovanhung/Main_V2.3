@@ -43,6 +43,7 @@
 #define LED_FAST_FLASH      g_ledDelayTime = 300
 #define LED_SLOW_FLASH      g_ledDelayTime = 700
 
+
 typedef enum {
     MODE_NORMAL,
     MODE_WIFI_CONFIG
@@ -454,6 +455,8 @@ int main(int argc, char ** argv) {
     }
     pinMode(USER_LED, OUTPUT);
     pinMode(USER_BUTTON, INPUT);
+    pinMode(SPEAKER_PIN, OUTPUT);
+    SPEAKER_DISABLE;
     LED_ON;
     Mosq_Init();
     sleep(1);

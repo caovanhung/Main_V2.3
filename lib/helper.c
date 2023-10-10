@@ -185,8 +185,10 @@ List* String_Split(const char* str, const char* delim) {
 
 void PlayAudio(const char* audioName) {
     char str[100];
+    SPEAKER_ENABLE;
     sprintf(str, "aplay /home/szbaijie/audio/%s.wav", audioName);
     system(str);
+    SPEAKER_DISABLE;
 }
 
 void ExecCommand(const char* command, char* output) {

@@ -3,11 +3,16 @@
 
 #include "parson.h"
 #include "stdbool.h"
+#include "gpio.h"
 
 typedef struct {
     void* items[1000];
     size_t count;
 } List;
+
+#define SPEAKER_PIN          (PF + 2)
+#define SPEAKER_ENABLE       pinWrite(SPEAKER_PIN, 0)
+#define SPEAKER_DISABLE      pinWrite(SPEAKER_PIN, 1)
 
 void logInfo(const char* formatedString, ...);
 void logError(const char* formatedString, ...);

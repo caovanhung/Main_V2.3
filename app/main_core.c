@@ -2214,24 +2214,24 @@ int main(int argc, char ** argv)
                         logInfo("person_name = %s",person_name);
                         logInfo("person_type = %d",person_type);
                         logInfo("camera_id = %s",camera_id);
-                        if(person_type == 0 || person_type == 1){ //camera phát hiện người nhà hoặc người quen
-                            person_type = 3; //synch dpID reponse of Hanet with app Homegy
+                        if (person_type == 0 || person_type == 1 || person_type == 2) { //camera phát hiện người nhà hoặc người quen hoặc người lạ
+                            int dpId = 5; //synch dpID reponse of Hanet with app Homegy
                             DpInfo dpInfo;
-                            int foundDps = Db_FindDp(&dpInfo, camera_id, person_type);
+                            int foundDps = Db_FindDp(&dpInfo, camera_id, dpId);
                             logInfo("foundDps = %d",foundDps);
                             if (foundDps == 1) {
-                                Db_SaveDpValueString(dpInfo.deviceId, dpInfo.id, person_id);
-                                checkSceneForDevice(camera_id, person_type, 0, person_id, true);
+                                Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, person_type);
+                                checkSceneForDevice(camera_id, dpId, person_type, NULL, true);
                             }
-                        } else if(person_type == 2){//camera phát hiện người la
-                            person_type = 5; //synch dpID reponse of Hanet with app Homegy
-                            DpInfo dpInfo;
-                            int foundDps = Db_FindDp(&dpInfo, camera_id, person_type);
-                            logInfo("foundDps = %d",foundDps);
-                            if (foundDps == 1) {
-                                Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, 2);
-                                checkSceneForDevice(camera_id, person_type, 2, NULL, true);
-                            }
+                        }
+                        // Check camera phát hiện đúng người
+                        int dpId = 3;
+                        DpInfo dpInfo;
+                        int foundDps = Db_FindDp(&dpInfo, camera_id, dpId);
+                        logInfo("foundDps = %d", foundDps);
+                        if (foundDps == 1) {
+                            // Db_SaveDpValueString(dpInfo.deviceId, dpInfo.id, person_id);
+                            checkSceneForDevice(camera_id, dpId, 0, person_id, true);
                         }
                         break;
                     }
