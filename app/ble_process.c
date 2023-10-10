@@ -3,7 +3,6 @@
 #include "time_t.h"
 #include "uart.h"
 #include "aws_mosquitto.h"
-#include "app_config.h"
 #include "common.h"
 
 #define UART_SENDING_FRAME_SIZE     1000
@@ -11,6 +10,13 @@
 
 extern struct mosquitto * mosq;
 extern char g_hcAddr[10];
+
+int GWCFG_TIMEOUT_SCENEGROUP = 5000;
+int GWCFG_TIMEOUT_ONLINE = 2000;
+int GWCFG_TIMEOUT_DEFAULT = 1000;
+int GWCFG_MIN_TIME_SCENEGROUP = 1000;
+int GWCFG_MIN_TIME_ONLINE = 2000;
+int GWCFG_MIN_TIME_DEFAULT = 1000;
 
 typedef struct {
     uint8_t  priority;
@@ -93,7 +99,7 @@ UartSendingFrame* sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, 
     memcpy(g_uartSendingFrames[emptyIndex].data, data, len);
     g_uartSendingFrames[emptyIndex].dataLength = len;
     g_uartSendingFrames[emptyIndex].retryCount = 3;
-    g_uartSendingFrames[emptyIndex].timeout = 1000;
+    g_uartSendingFrames[emptyIndex].timeout = GWCFG_TIMEOUT_DEFAULT;
     g_uartSendingFramesIdx = emptyIndex;
     return &g_uartSendingFrames[emptyIndex];
 }
@@ -240,9 +246,11 @@ void BLE_SendToGateway() {
         }
         case 3: {
             // Wait 1000ms before sending next frame
-            int timeout = 1000;
+            int timeout = GWCFG_MIN_TIME_DEFAULT;
             if (sentFrame.respType == GW_RESPONSE_GROUP || sentFrame.respType == GW_RESPONSE_ADD_SCENE) {
-                timeout = GW_SENDING_TIMEOUT_MIN;
+                timeout = GWCFG_MIN_TIME_SCENEGROUP;
+            } else if (sentFrame.respType == GW_RESP_ONOFF_STATE) {
+                timeout = GWCFG_MIN_TIME_ONLINE;
             }
             if (timeInMilliseconds() - sentTime > timeout) {
                 sendingIsBusy = false;
@@ -298,7 +306,7 @@ bool GW_GetDeviceOnOffState(int gwIndex, const char* dpAddr) {
         data[9] = dpAddrHex & (0xFF);
         data[8] = (dpAddrHex >> 8) & 0xFF;
         UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 12);
-        // frame->timeout = 1000;
+        frame->timeout = GWCFG_TIMEOUT_ONLINE;
         frame->priority = 2;
         frame->retryCount = 1;      // Don't retry for getting status frame
         return true;
@@ -844,7 +852,7 @@ bool GW_AddGroupLight(int gwIndex, const char *address_group,const char *address
     SET_GROUP[15] = *(hex_address_group+1);
 
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, SET_GROUP, 18);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -874,7 +882,7 @@ bool GW_AddGroupSwitch(int gwIndex, const char *groupAddr, const char *deviceAdd
     data[15] = *(hex_address_group + 1);
 
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, deviceAddrHex, data, 18);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -903,7 +911,7 @@ bool GW_DeleteGroup(int gwIndex, const char *groupAddr, const char *deviceAddr, 
     SET_GROUP[15] = hex_address_group[1];
 
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, deviceAddrHex, SET_GROUP, 18);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1178,7 +1186,7 @@ bool GW_SetSceneActionForSwitch(int gwIndex, const char* dpAddr, const char* sce
     data[13] = (uint8_t)(sceneIdHex);
     data[14] = dpValue;
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 15);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1200,7 +1208,7 @@ bool GW_SetSceneActionForLightCCT(int gwIndex, const char* address_device,const 
     SceneLocalToDevice[13] = *(hex_sceneID+1);
 
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, SceneLocalToDevice, 14);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1224,7 +1232,7 @@ bool GW_SetSceneActionForLightRGB(int gwIndex, const char* address_device,const 
     SceneLocalToDevice[14] = blinkMode;
 
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, SceneLocalToDevice,17);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1241,7 +1249,7 @@ bool GW_DelSceneAction(int gwIndex, const char* dpAddr, const char* sceneId) {
     data[13] = (uint8_t)(sceneIdHex);
 
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 14);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1255,7 +1263,7 @@ bool GW_DelAllSceneAction(int gwIndex, const char* dpAddr) {
     data[9] = (uint8_t)(dpAddrHex);
 
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 19);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1273,7 +1281,7 @@ bool GW_SetSceneCondition(int gwIndex, const char* dpAddr, const char* sceneId, 
     data[19] = dpValue;
 
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 20);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1290,7 +1298,7 @@ bool GW_DelSceneCondition(int gwIndex, const char* dpAddr, const char* sceneId) 
     data[18] = (uint8_t)(sceneIdHex);
 
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 19);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1308,7 +1316,7 @@ bool GW_EnableDisableScene(const char* dpAddr, const char* sceneId, uint8_t enab
     data[19] = enableOrDisable;
 
     UartSendingFrame* frame = sendFrameToGwIndex(0, dpAddrHex, data, 20);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1495,7 +1503,7 @@ bool GW_AddSceneActionIR(int gwIndex, const char* deviceAddr, const char* sceneI
     data[22] |= (uint8_t)(fan << 2);
     data[22] |= (uint8_t)(swing);
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 23);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
@@ -1518,7 +1526,7 @@ bool GW_DeleteSceneActionIR(int gwIndex, const char* deviceAddr, const char* sce
     data[20] = (uint8_t)(brandId >> 8);
     data[21] = (uint8_t)(remoteId << 3);
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 23);
-    addTimeoutToSendingFrame(GW_SENDING_TIMEOUT_MAX);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 

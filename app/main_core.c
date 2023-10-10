@@ -29,8 +29,10 @@
 #include "helper.h"
 #include "messages.h"
 #include "cJSON.h"
-#include "app_config.h"
 #include "common.h"
+
+int GWCFG_TIMEOUT_SCENEGROUP = 5000;
+int GWCFG_GET_ONLINE_TIME = 120000;
 
 const char* SERVICE_NAME = SERVICE_CORE;
 uint8_t SERVICE_ID = SERVICE_ID_CORE;
@@ -339,7 +341,7 @@ void ResponseWaiting() {
         int reqType  = atoi(strtok(reqId, "."));
         char* itemId = strtok(NULL, ".");
         // Calculate timeout based on number of successed and failed devices
-        int timeout = deviceCount * (GW_SENDING_TIMEOUT_MAX + 500);
+        int timeout = deviceCount * (GWCFG_TIMEOUT_SCENEGROUP + 500);
         bool checkDone = false;
 
         if (currentTime - createdTime < timeout) {
@@ -1063,13 +1065,13 @@ void GetDeviceStatusForGroup(const char* deviceId, int dpId, double dpValue) {
 void GetDeviceStatusInterval() {
     static long long int oldTick = 0;
 
-    if (timeInMilliseconds() - oldTick > 120000) {
+    if (GWCFG_GET_ONLINE_TIME >= 10000 && timeInMilliseconds() - oldTick > GWCFG_GET_ONLINE_TIME) {
         oldTick = timeInMilliseconds();
         char sqlCmd[500];
         char pid[1000];
         sprintf(pid, "%s,%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN, HG_BLE_IR);
         sprintf(sqlCmd, "SELECT unicast, g.hcAddr, d.gwIndex FROM devices_inf d JOIN gateway g ON d.gwIndex = g.id \
-                        WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NULL OR %lld - d.last_updated > 100000) AND d.deviceKey IS NOT NULL", pid, oldTick);
+                        WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NULL OR %lld - d.last_updated > %d) AND d.deviceKey IS NOT NULL", pid, oldTick, GWCFG_GET_ONLINE_TIME - 5000);
         JSON* devicesArray = cJSON_CreateArray();
         Sql_Query(sqlCmd, row) {
             char* addr = sqlite3_column_text(row, 0);
@@ -1683,13 +1685,13 @@ int main(int argc, char ** argv)
                     }
                     case TYPE_ADD_GW: {
                         Db_AddGateway(payload);
-                        int needToConfig = true;
-                        if (JSON_HasKey(payload, "needToConfig")) {
-                            needToConfig = JSON_GetNumber(payload, "needToConfig");
+                        if (JSON_HasKey(payload, "GWCFG_TIMEOUT_SCENEGROUP")) {
+                            GWCFG_TIMEOUT_SCENEGROUP = JSON_GetNumber(payload, "GWCFG_TIMEOUT_SCENEGROUP");
                         }
-                        if (needToConfig) {
-                            sendPacketToBle(0, reqType, payload);
+                        if (JSON_HasKey(payload, "GWCFG_GET_ONLINE_TIME")) {
+                            GWCFG_GET_ONLINE_TIME = JSON_GetNumber(payload, "GWCFG_GET_ONLINE_TIME");
                         }
+                        sendPacketToBle(0, reqType, payload);
                         break;
                     }
                     case TYPE_ADD_SCENE: {

@@ -1173,6 +1173,7 @@ int main( int argc,char ** argv ) {
                         break;
                     case TYPE_DEL_HOMEKIT:
                         system("rm -r db");
+                        system("systemctl restart hg_homekit");
                         break;
                     case TYPE_GET_LOG:
                         logInfo("TYPE_GET_LOG");

@@ -70,6 +70,13 @@ static struct Queue* g_bleFrameQueue;
 
 static JSON *g_checkRespList;
 
+extern int GWCFG_TIMEOUT_SCENEGROUP;
+extern int GWCFG_TIMEOUT_ONLINE;
+extern int GWCFG_TIMEOUT_DEFAULT;
+extern int GWCFG_MIN_TIME_SCENEGROUP;
+extern int GWCFG_MIN_TIME_ONLINE;
+extern int GWCFG_MIN_TIME_DEFAULT;
+
 bool addSceneActions(const char* sceneId, JSON* actions);
 bool deleteSceneActions(const char* sceneId, JSON* actions);
 bool addSceneCondition(const char* sceneId, JSON* condition);
@@ -757,24 +764,50 @@ int main( int argc,char ** argv )
             char* dpAddr, *groupAddr;
             switch (reqType) {
                 case TYPE_ADD_GW: {
-                    provison_inf PRV;
-                    char* message = "{\"step\":3, \"message\":\"Đang cấu hình bộ trung tâm\"}";
-                    mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
-                    PlayAudio("configuring_gateway");
-                    sendToService(SERVICE_CFG, 0, "LED_FAST_FLASH");
-                    ble_getInfoProvison(&PRV, payload);
-                    GW_ConfigGateway(0, &PRV);
-                    sleep(1);
-                    if (PRV.deviceKey2 != NULL && PRV.address2 != NULL) {
-                        GW_ConfigGateway(1, &PRV);
+                    int needToConfig = true;
+                    if (JSON_HasKey(payload, "needToConfig")) {
+                        needToConfig = JSON_GetNumber(payload, "needToConfig");
                     }
-                    sendToService(SERVICE_CFG, 0, "LED_ON");
-                    char* message2 = "{\"step\":4, \"message\":\"cấu hình bộ trung tâm thành công, đang khởi động lại thiết bị\"}";
-                    mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message2), message2, 0, false);
-                    PlayAudio("gateway_end_restarting");
-                    PlayAudio("device_restart_warning");
-                    sleep(1);
-                    system("reboot");
+
+                    if (JSON_HasKey(payload, "GWCFG_TIMEOUT_SCENEGROUP")) {
+                        GWCFG_TIMEOUT_SCENEGROUP = JSON_GetNumber(payload, "GWCFG_TIMEOUT_SCENEGROUP");
+                    }
+                    if (JSON_HasKey(payload, "GWCFG_TIMEOUT_ONLINE")) {
+                        GWCFG_TIMEOUT_ONLINE = JSON_GetNumber(payload, "GWCFG_TIMEOUT_ONLINE");
+                    }
+                    if (JSON_HasKey(payload, "GWCFG_TIMEOUT_DEFAULT")) {
+                        GWCFG_TIMEOUT_DEFAULT = JSON_GetNumber(payload, "GWCFG_TIMEOUT_DEFAULT");
+                    }
+                    if (JSON_HasKey(payload, "GWCFG_MIN_TIME_SCENEGROUP")) {
+                        GWCFG_MIN_TIME_SCENEGROUP = JSON_GetNumber(payload, "GWCFG_MIN_TIME_SCENEGROUP");
+                    }
+                    if (JSON_HasKey(payload, "GWCFG_MIN_TIME_ONLINE")) {
+                        GWCFG_MIN_TIME_ONLINE = JSON_GetNumber(payload, "GWCFG_MIN_TIME_ONLINE");
+                    }
+                    if (JSON_HasKey(payload, "GWCFG_MIN_TIME_DEFAULT")) {
+                        GWCFG_MIN_TIME_DEFAULT = JSON_GetNumber(payload, "GWCFG_MIN_TIME_DEFAULT");
+                    }
+
+                    if (needToConfig) {
+                        provison_inf PRV;
+                        char* message = "{\"step\":3, \"message\":\"Đang cấu hình bộ trung tâm\"}";
+                        mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
+                        PlayAudio("configuring_gateway");
+                        sendToService(SERVICE_CFG, 0, "LED_FAST_FLASH");
+                        ble_getInfoProvison(&PRV, payload);
+                        GW_ConfigGateway(0, &PRV);
+                        sleep(1);
+                        if (PRV.deviceKey2 != NULL && PRV.address2 != NULL) {
+                            GW_ConfigGateway(1, &PRV);
+                        }
+                        sendToService(SERVICE_CFG, 0, "LED_ON");
+                        char* message2 = "{\"step\":4, \"message\":\"cấu hình bộ trung tâm thành công, đang khởi động lại thiết bị\"}";
+                        mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message2), message2, 0, false);
+                        PlayAudio("gateway_end_restarting");
+                        PlayAudio("device_restart_warning");
+                        sleep(1);
+                        system("reboot");
+                    }
                     break;
                 }
                 case TYPE_CTR_DEVICE: {
