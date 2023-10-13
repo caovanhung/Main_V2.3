@@ -437,6 +437,14 @@ func ControlLightCCT(deviceId string, brightness int, colorTemperature int) {
     token.Wait()
 }
 
+func ControlWifiDevice(deviceId string, dpId int, onoff int) {
+    msgFormat := `{"state":{"reported":{"type":4, "sender":2, "senderId":"homekit", "%s":{"dictDPs":{"%d":%d}}}}}`
+    msg := fmt.Sprintf(msgFormat, deviceId, dpId, onoff)
+    log.Printf("Sent to AWS: %s\n", msg)
+    token := g_mqttClient.Publish(TOPIC_CTR_DEVICE, 0, false, msg)
+    token.Wait()
+}
+
 func GetShadow(shadowName string) []byte {
     url := fmt.Sprintf("https://a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", appConfig.ThingId, shadowName)
     certName := "c8f9a13dc7c253251b9e250439897bc010f501edd780348ecc1c2e91add22237"
