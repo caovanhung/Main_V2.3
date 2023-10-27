@@ -18,6 +18,7 @@ import (
     "reflect"
     "strings"
     // "time"
+    "math"
 )
 
 const PID_HG_SWITCH = "BLEHGAA0101,BLEHGAA0102,BLEHGAA0103,BLEHGAA0104"
@@ -275,7 +276,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
                     log.Printf("Update CCT Light onoff: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.Lightbulb.On.SetValue(GetBoolValue(payload.DpValue))
                 } else if payload.DpID == 22 {
-                    g_hgCCTLights[i].Brightness = payload.DpValue / 10
+                    g_hgCCTLights[i].Brightness = int(math.Round(float64(payload.DpValue) / 10))
                     log.Printf("Update CCT Light brightness: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.Lightbulb.Brightness.SetValue(g_hgCCTLights[i].Brightness)
                 } else if payload.DpID == 23 {
@@ -533,7 +534,7 @@ func GetDeviceList() {
                             brightness := GetIntValue(dictDps["22"])
                             colorTemperature := GetIntValue(dictDps["23"])
                             deviceName := deviceObj["name"].(string)
-                            d := HGCCTLight{Id: k, Name: deviceName, OnOff: onoff, Brightness: brightness, ColorTemperature: colorTemperature}
+                            d := HGCCTLight{Id: k, Name: deviceName, OnOff: onoff, Brightness: brightness / 10, ColorTemperature: 500 - colorTemperature / 2}
                             g_hgCCTLights = append(g_hgCCTLights, d)
                         } else if strings.Contains(PID_HG_COLOR_LIGHT, pid) {
                             dictDps := deviceObj["dictDPs"].(map[string]interface{})
@@ -541,7 +542,7 @@ func GetDeviceList() {
                             brightness := GetIntValue(dictDps["22"])
                             colorTemperature := GetIntValue(dictDps["23"])
                             deviceName := deviceObj["name"].(string)
-                            d := HGColorLight{Id: k, Name: deviceName, OnOff: onoff, Brightness: brightness, ColorTemperature: colorTemperature}
+                            d := HGColorLight{Id: k, Name: deviceName, OnOff: onoff, Brightness: brightness / 10, ColorTemperature: 500 - colorTemperature / 2}
                             g_hgColorLights = append(g_hgColorLights, d)
                         } else if strings.Contains(PID_HG_SMOKE_SENSOR, pid) {
                             dictDps := deviceObj["dictDPs"].(map[string]interface{})
@@ -719,6 +720,7 @@ func CCTLight_Brightness_Update(v int) {
     for i, d := range(g_hgCCTLights) {
         actualBrightness := d.hkObj.Lightbulb.Brightness.Value()
         if d.Brightness != actualBrightness {
+            log.Printf("Test: %+v\n", d)
             ControlLightCCT(d.Id, actualBrightness, d.ColorTemperature)
             g_hgCCTLights[i].Brightness = actualBrightness
             break

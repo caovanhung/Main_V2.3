@@ -1175,6 +1175,7 @@ int main( int argc,char ** argv ) {
                     case TYPE_DEL_HOMEKIT:
                         system("rm -r db");
                         system("systemctl restart hg_homekit");
+                        sendNotiToUser("Xóa liên kết homekit thành công", false);
                         break;
                     case TYPE_GET_LOG:
                         logInfo("TYPE_GET_LOG");

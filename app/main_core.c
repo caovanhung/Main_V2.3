@@ -1684,7 +1684,7 @@ int main(int argc, char ** argv)
                         break;
                     }
                     case TYPE_ADD_GW: {
-                        Sql_Exec("DELETE FROM gateway ");
+                        Sql_Exec("DELETE FROM gateway");
                         JSON_ForEach(gw, payload) {
                             Db_AddGateway(gw);
                             if (JSON_HasKey(gw, "GWCFG_TIMEOUT_SCENEGROUP")) {
