@@ -34,6 +34,10 @@ void pinWrite(int pin, int val) {
 
     sprintf(str, "/sys/class/gpio/gpio%d/value", pin);
     p = fopen(str, "w");
+    if (p == 0) {
+        pinMode(pin, OUTPUT);
+        p = fopen(str, "w");
+    }
     fprintf(p, "%d", val > 0 ? 1 : 0);
     fclose(p);
 }

@@ -90,6 +90,9 @@ def main():
     removeOldLogs(logsPath + "cfg")
     removeOldLogs(logsPath + "tuya")
 
+    time.sleep(5)
+    os.system("/home/szbaijie/hc_bin/HG_OTA 0")
+
     # Check if this HC is master or slave
     f = open("app.json", "r")
     fileContent = f.read()
@@ -106,7 +109,7 @@ def main():
             os.system("systemctl restart hg_ble")
             time.sleep(1)
             os.system("systemctl restart hg_core")
-            time.sleep(15)
+            time.sleep(10)
             os.system("systemctl restart hg_aws")
             os.system("systemctl restart hg_wifi")
             os.system("systemctl restart hg_homekit")

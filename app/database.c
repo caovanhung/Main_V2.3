@@ -58,8 +58,8 @@ int Db_AddGateway(JSON* gatewayInfo) {
     Sql_Exec(sqlCmd);
     // printf("sqlCmd: %s\n", sqlCmd);
 
-    sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(%d,'%s',%d,'%s','%s','%s','%s','%s','%s','%s','%s')", currentId + 2, name, isMaster, hcAddr, address2, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey2);
-    Sql_Exec(sqlCmd);
+    // sprintf(sqlCmd, "INSERT INTO GATEWAY VALUES(%d,'%s',%d,'%s','%s','%s','%s','%s','%s','%s','%s')", currentId + 2, name, isMaster, hcAddr, address2, appkey, ivIndex, netkeyIndex, netkey, appkeyIndex, deviceKey2);
+    // Sql_Exec(sqlCmd);
     return 1;
 }
 
@@ -456,7 +456,7 @@ int Db_LoadSceneToRam() {
             if (actionCount < SCENE_ACTIONS_MAX) {
                 SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
                 action->dpCount = 0;
-                if (g_sceneList[g_sceneCount].isLocal || (JSON_HasKey(act, "actionExecutor") && JSON_HasKey(act, "state") && JSON_GetNumber(act, "state") == 0)) {
+                if (g_sceneList[g_sceneCount].isLocal == false || (JSON_HasKey(act, "actionExecutor") && JSON_HasKey(act, "state") && JSON_GetNumber(act, "state") == 0)) {
                     StringCopy(action->entityId, JSON_GetText(act, "entityId"));
                     char* actionExecutor = JSON_GetText(act, "actionExecutor");
                     JSON* executorProperty = JSON_GetObject(act, "executorProperty");
@@ -531,7 +531,7 @@ int Db_LoadSceneToRam() {
         int conditionCount = 0;
         JSON_ForEach(condition, conditionsArray) {
             if (conditionCount < SCENE_CONDITIONS_MAX) {
-                if (g_sceneList[g_sceneCount].isLocal || (JSON_HasKey(condition, "state") && JSON_GetNumber(condition, "state") == 0)) {
+                if (g_sceneList[g_sceneCount].isLocal == false || (JSON_HasKey(condition, "state") && JSON_GetNumber(condition, "state") == 0)) {
                     SceneCondition* cond = &g_sceneList[g_sceneCount].conditions[conditionCount];
                     StringCopy(cond->entityId, JSON_GetText(condition, "entityId"));
                     JSON* exprArray = JSON_GetObject(condition, "expr");

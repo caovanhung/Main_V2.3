@@ -363,7 +363,7 @@ void Aws_OnReveicedMessage( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIden
             if (reported) {
                 int sender = JSON_GetNumber(reported, "sender");
                 if (sender == SENDER_APP_VIA_LOCAL || sender == SENDER_APP_TO_CLOUD) {
-                    logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
+                    // logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
                     int size_queue = get_sizeQueue(queue_received_aws);
                     if (size_queue < QUEUE_SIZE) {
                         enqueue(queue_received_aws, aws_buff);
@@ -747,6 +747,7 @@ void Mosq_ProcessLoop() {
 }
 
 void CheckNewForceVersion() {
+    // PlayAudio("version_checking");
     JSON* setting = Aws_GetShadow("agency2022", "Setting");
     if (setting) {
         JSON* hcforce = JSON_GetObject(setting, "hcVersion");
@@ -773,6 +774,9 @@ void CheckNewForceVersion() {
                     logInfo("[ERROR] Error to update to new version\n");
                     PlayAudio("update_error");
                 }
+            } else {
+                logInfo("There is no new version to upgrade");
+                // PlayAudio("no_new_version");
             }
         }
     }
@@ -813,19 +817,39 @@ void CheckNewVersion() {
     }
 }
 
+void ForceUpdate() {
+    // Update to new version
+    PlayAudio("version_updating");
+    char cmd[100];
+    char result[1000];
+    sprintf(cmd, "python3 /usr/bin/ota.pyc %d\n", 0);
+    logInfo("Executing command: %s", cmd);
+    FILE* fp = popen(cmd, "r");
+    while (fgets(result, sizeof(result), fp) != NULL);
+    fclose(fp);
+    if (StringContains(result, "SUCCESS")) {
+        logInfo("Upgraded to version 0\n");
+        PlayAudio("update_success");
+        system("reboot");
+    } else {
+        logInfo("[ERROR] Error to update to default version\n");
+        PlayAudio("update_error");
+    }
+}
+
 
 int main( int argc,char ** argv ) {
     queue_received_aws = newQueue(QUEUE_SIZE);
-
     GetCurrentVersion();
     GetThingId();
+    if (argc > 1) {
+        CheckNewForceVersion();
+        return 0;
+    }
     Aws_Init();
-    Mosq_Init();
-    sleep(60);
-    CheckNewForceVersion();
+
     while (1) {
         Aws_ProcessLoop();
-        // Mosq_ProcessLoop();
 
         int size_queue = get_sizeQueue(queue_received_aws);
         if (size_queue > 0) {
@@ -833,24 +857,32 @@ int main( int argc,char ** argv ) {
             JSON* recvPacket = JSON_Parse(recvMsg);
             free(recvMsg);
             if (recvPacket) {
+
                 JSON* state = JSON_GetObject(recvPacket, "state");
                 JSON* reported = JSON_GetObject(state, "reported");
                 int reqType = JSON_GetNumber(reported, "type");
                 int sender = JSON_GetNumber(reported, "sender");
-                if (sender == 0) {
-                    sender = JSON_GetNumber(recvPacket, "sender");
-                }
-                if (reqType == 0) {
-                    reqType = JSON_GetNumber(recvPacket, "type");
-                }
                 if (sender != SENDER_APP_VIA_LOCAL && sender != SENDER_APP_TO_CLOUD) {
                     continue;
                 }
+                if (reqType != TYPE_OTA_HC) {
+                    continue;
+                }
+
                 switch(reqType) {
                     case TYPE_OTA_HC: {
-                        logInfo("TYPE_OTA_HC");
-                        PlayAudio("version_checking");
-                        CheckNewVersion();
+                        int checkVersion = 1;
+                        if (JSON_HasKey(reported, "checkVersion")) {
+                            checkVersion = JSON_GetNumber(reported, "checkVersion");
+                        }
+                        if (checkVersion) {
+                            logInfo("TYPE_OTA_HC");
+                            PlayAudio("version_checking");
+                            CheckNewVersion();
+                        } else {
+                            logInfo("TYPE_OTA_HC with default version");
+                            ForceUpdate();
+                        }
                         break;
                     }
                 }

@@ -1684,14 +1684,17 @@ int main(int argc, char ** argv)
                         break;
                     }
                     case TYPE_ADD_GW: {
-                        Db_AddGateway(payload);
-                        if (JSON_HasKey(payload, "GWCFG_TIMEOUT_SCENEGROUP")) {
-                            GWCFG_TIMEOUT_SCENEGROUP = JSON_GetNumber(payload, "GWCFG_TIMEOUT_SCENEGROUP");
+                        Sql_Exec("DELETE FROM gateway ");
+                        JSON_ForEach(gw, payload) {
+                            Db_AddGateway(gw);
+                            if (JSON_HasKey(gw, "GWCFG_TIMEOUT_SCENEGROUP")) {
+                                GWCFG_TIMEOUT_SCENEGROUP = JSON_GetNumber(gw, "GWCFG_TIMEOUT_SCENEGROUP");
+                            }
+                            if (JSON_HasKey(gw, "GWCFG_GET_ONLINE_TIME")) {
+                                GWCFG_GET_ONLINE_TIME = JSON_GetNumber(gw, "GWCFG_GET_ONLINE_TIME");
+                            }
+                            sendPacketToBle(0, reqType, gw);
                         }
-                        if (JSON_HasKey(payload, "GWCFG_GET_ONLINE_TIME")) {
-                            GWCFG_GET_ONLINE_TIME = JSON_GetNumber(payload, "GWCFG_GET_ONLINE_TIME");
-                        }
-                        sendPacketToBle(0, reqType, payload);
                         break;
                     }
                     case TYPE_ADD_SCENE: {

@@ -1041,6 +1041,7 @@ int main( int argc,char ** argv ) {
     getHcInformation();
     Aws_Init();
     Mosq_Init();
+    logInfo("Current Time: %s", get_localtime_now());
     int currentHour = get_hour_today();
     if (currentHour >= 6 && currentHour < 21) {
         PlayAudio("server_connecting");

@@ -675,7 +675,7 @@ void GetIpAddressLoop() {
         if (StringLength(g_hcAddr) > 0 && !StringCompare(g_ipAddress, "192.168.12.1")) {
             // Update new IP address and wifi name to AWS
             char msg[200];
-            sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\", \"hcVersion\":%d, \"nameWifi\":\"%s\"}}, \"sender\":11}}}", g_hcAddr, g_ipAddress, HC_VERSION, g_wifiName);
+            sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\", \"hcVersion\":%d, \"nameWifi\":\"%s\", \"buildTime\": \"%s\"}}, \"sender\":11}}}", g_hcAddr, g_ipAddress, HC_VERSION, g_wifiName, __TIMESTAMP__);
             sendToService(SERVICE_AWS, 255, msg);
         }
     }

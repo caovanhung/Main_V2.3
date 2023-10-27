@@ -199,14 +199,14 @@ void Aws_SyncDatabase() {
     }
 
     if (syncOK) {
-        sendPacketTo(SERVICE_CORE, TYPE_RESET_DATABASE, accountInfo);
+        sendPacketTo(SERVICE_CORE, TYPE_RESET_DATABASE, gatewayInfo);
         sleep(2);
         JSON_ForEach(gw, gatewayInfo) {
             if (cJSON_IsObject(gw)) {
                 JSON_SetNumber(gw, "needToConfig", 0);
-                sendPacketTo(SERVICE_CORE, TYPE_ADD_GW, gw);
             }
         }
+        sendPacketTo(SERVICE_CORE, TYPE_ADD_GW, gatewayInfo);
         JSON_Delete(gatewayInfo);
 
         if (JArr_Count(syncingDevices) > 0) {
