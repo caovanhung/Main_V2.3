@@ -1,0 +1,21 @@
+Install:
+	sudo apt-get update
+	sudo apt-get install build-essential -y
+	sudo apt-get install libmosquitto-dev -y
+	sudo apt-get install libssl-dev -y
+	sudo timedatectl set-timezone Asia/Ho_Chi_Minh
+	sudo apt-get install libavahi-glib-dev -y
+	sudo apt-get install libavahi-client-dev -y
+	sudo apt-get install libavahi-core-dev -y
+
+
+Copy : 
+	AmazonRootCA1.pem c8* --->>>>. /usr/bin
+	main.db---->/home/szbaijie
+	pass_mosq ---->/etc
+	
+
+Sqlite3 setting:
+	nano ~/.sqliterc
+	.headers on
+	.mode column

@@ -257,3 +257,19 @@ nano /var/spool/cron/crontabs/root
 Add the following lines to the end of file:
 0 3 * * * sudo shutdown -r
 * * * * * /usr/bin/python3 /home/szbaijie/hc_bin/checkWifi.py
+
+#ngrok
+
+cd ~
+wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-arm64.tgz
+sudo tar xvzf ./ngrok-v3-stable-linux-arm64.tgz -C /usr/local/bin
+ngrok authtoken 2DZLHQZc0I2Xz914lFJn9b3Ncu4_7xfotkGuiaLsRM8uKtU5K
+ngrok config edit
+    version: "2"
+    authtoken: 2DZLHQZc0I2Xz914lFJn9b3Ncu4_7xfotkGuiaLsRM8uKtU5K
+    tunnels:
+      device-ssh:
+        proto: tcp
+        addr: 22
+ngrok service install --config $HOME/.config/ngrok/ngrok.yml
+ngrok service start

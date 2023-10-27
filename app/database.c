@@ -456,7 +456,7 @@ int Db_LoadSceneToRam() {
             if (actionCount < SCENE_ACTIONS_MAX) {
                 SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
                 action->dpCount = 0;
-                if (JSON_HasKey(act, "actionExecutor")) {
+                if (g_sceneList[g_sceneCount].isLocal || (JSON_HasKey(act, "actionExecutor") && JSON_HasKey(act, "state") && JSON_GetNumber(act, "state") == 0)) {
                     StringCopy(action->entityId, JSON_GetText(act, "entityId"));
                     char* actionExecutor = JSON_GetText(act, "actionExecutor");
                     JSON* executorProperty = JSON_GetObject(act, "executorProperty");
@@ -531,70 +531,72 @@ int Db_LoadSceneToRam() {
         int conditionCount = 0;
         JSON_ForEach(condition, conditionsArray) {
             if (conditionCount < SCENE_CONDITIONS_MAX) {
-                SceneCondition* cond = &g_sceneList[g_sceneCount].conditions[conditionCount];
-                StringCopy(cond->entityId, JSON_GetText(condition, "entityId"));
-                JSON* exprArray = JSON_GetObject(condition, "expr");
-                cond->timeReached = 0;
-                if (StringCompare(cond->entityId, "timer")) {
-                    cond->conditionType = EntitySchedule;
-                    cond->repeat = strtol(JSON_GetText(exprArray, "loops"), NULL, 2);
-                    char* time = JSON_GetText(exprArray, "time");
-                    List* timeItems = String_Split(time, ":");
-                    if (timeItems->count == 2) {
-                        int hour = atoi(timeItems->items[0]);
-                        int minute = atoi(timeItems->items[1]);
-                        cond->schMinutes = hour * 60 + minute;
-                        // If repeat is 0, scheMinutes will be epoch time so that scene will be executed only 1 time
-                        if (cond->repeat == 0) {
-                            char* dateStr = JSON_GetText(exprArray, "date");
-                            if (dateStr) {
-                                int date = atoi(&dateStr[6]);
-                                dateStr[6] = 0;
-                                int month = atoi(&dateStr[4]);
-                                dateStr[4] = 0;
-                                int year = atoi(dateStr);
-                                // Convert date time to epoch time
-                                struct tm t;
-                                t.tm_year = year - 1900;  // Year - 1900
-                                t.tm_mon = month - 1;     // Month, where 0 = jan
-                                t.tm_mday = date;         // Day of the month
-                                t.tm_hour = hour;
-                                t.tm_min = minute;
-                                t.tm_sec = 0;
-                                t.tm_isdst = -1;
-                                cond->schMinutes = mktime(&t);
-                                printInfo("schMinutes of scene %s is %u", g_sceneList[g_sceneCount].id, cond->schMinutes);
+                if (g_sceneList[g_sceneCount].isLocal || (JSON_HasKey(condition, "state") && JSON_GetNumber(condition, "state") == 0)) {
+                    SceneCondition* cond = &g_sceneList[g_sceneCount].conditions[conditionCount];
+                    StringCopy(cond->entityId, JSON_GetText(condition, "entityId"));
+                    JSON* exprArray = JSON_GetObject(condition, "expr");
+                    cond->timeReached = 0;
+                    if (StringCompare(cond->entityId, "timer")) {
+                        cond->conditionType = EntitySchedule;
+                        cond->repeat = strtol(JSON_GetText(exprArray, "loops"), NULL, 2);
+                        char* time = JSON_GetText(exprArray, "time");
+                        List* timeItems = String_Split(time, ":");
+                        if (timeItems->count == 2) {
+                            int hour = atoi(timeItems->items[0]);
+                            int minute = atoi(timeItems->items[1]);
+                            cond->schMinutes = hour * 60 + minute;
+                            // If repeat is 0, scheMinutes will be epoch time so that scene will be executed only 1 time
+                            if (cond->repeat == 0) {
+                                char* dateStr = JSON_GetText(exprArray, "date");
+                                if (dateStr) {
+                                    int date = atoi(&dateStr[6]);
+                                    dateStr[6] = 0;
+                                    int month = atoi(&dateStr[4]);
+                                    dateStr[4] = 0;
+                                    int year = atoi(dateStr);
+                                    // Convert date time to epoch time
+                                    struct tm t;
+                                    t.tm_year = year - 1900;  // Year - 1900
+                                    t.tm_mon = month - 1;     // Month, where 0 = jan
+                                    t.tm_mday = date;         // Day of the month
+                                    t.tm_hour = hour;
+                                    t.tm_min = minute;
+                                    t.tm_sec = 0;
+                                    t.tm_isdst = -1;
+                                    cond->schMinutes = mktime(&t);
+                                    printInfo("schMinutes of scene %s is %u", g_sceneList[g_sceneCount].id, cond->schMinutes);
+                                }
                             }
                         }
-                    }
-                    List_Delete(timeItems);
-                } else {
-                    cond->conditionType = EntityDevice;
-                    DeviceInfo deviceInfo;
-                    int foundDevices = Db_FindDevice(&deviceInfo, cond->entityId);
-                    if (foundDevices == 1) {
-                        StringCopy(cond->expr, JArr_GetText(exprArray, 1));
-                        cond->dpId = atoi(JArr_GetText(exprArray, 0) + 3);   // Template is "$dp1"
-                        DpInfo dpInfo;
-                        int foundDps = Db_FindDp(&dpInfo, cond->entityId, cond->dpId);
-                        if (foundDps == 1 || StringCompare(deviceInfo.pid, HG_BLE_IR)) {
-                            StringCopy(cond->pid, deviceInfo.pid);
-                            if (foundDps == 1) {
-                                StringCopy(cond->dpAddr, dpInfo.addr);
+                        List_Delete(timeItems);
+                    } else {
+                        cond->conditionType = EntityDevice;
+                        DeviceInfo deviceInfo;
+                        int foundDevices = Db_FindDevice(&deviceInfo, cond->entityId);
+                        if (foundDevices == 1) {
+                            StringCopy(cond->expr, JArr_GetText(exprArray, 1));
+                            cond->dpId = atoi(JArr_GetText(exprArray, 0) + 3);   // Template is "$dp1"
+                            DpInfo dpInfo;
+                            int foundDps = Db_FindDp(&dpInfo, cond->entityId, cond->dpId);
+                            if (foundDps == 1 || StringCompare(deviceInfo.pid, HG_BLE_IR)) {
+                                StringCopy(cond->pid, deviceInfo.pid);
+                                if (foundDps == 1) {
+                                    StringCopy(cond->dpAddr, dpInfo.addr);
+                                }
                             }
                         }
+                        JSON* objItem = JArr_GetObject(exprArray, 2);
+                        if (cJSON_IsString(objItem)) {
+                            cond->valueType = ValueTypeString;
+                            StringCopy(cond->dpValueStr, JArr_GetText(exprArray, 2));
+                        } else if(cJSON_IsNumber(objItem) || cJSON_IsBool(objItem)){
+                            cond->valueType = ValueTypeDouble;
+                            int dpValue = JArr_GetNumber(exprArray, 2);
+                            cond->dpValue = dpValue;
+                        }
                     }
-                    JSON* objItem = JArr_GetObject(exprArray, 2);
-                    if (cJSON_IsString(objItem)) {
-                        cond->valueType = ValueTypeString;
-                        StringCopy(cond->dpValueStr, JArr_GetText(exprArray, 2));
-                    } else if(cJSON_IsNumber(objItem) || cJSON_IsBool(objItem)){
-                        cond->valueType = ValueTypeDouble;
-                        int dpValue = JArr_GetNumber(exprArray, 2);
-                        cond->dpValue = dpValue;
-                    }
+                    conditionCount++;
                 }
-                conditionCount++;
             }
         }
         if (conditionCount == 0) {
