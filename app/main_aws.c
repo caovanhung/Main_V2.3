@@ -1055,7 +1055,6 @@ int main( int argc,char ** argv ) {
         Aws_SendMergePayload();
         Mosq_ProcessLoop();
         Mosq_ProcessMessage();
-        // GetIpAddressLoop();
 
         size_queue = get_sizeQueue(queue_received_aws);
         if (size_queue > 0) {
@@ -1190,6 +1189,9 @@ int main( int argc,char ** argv ) {
                             sprintf(str, "{\"sender\":11, \"type\": %d, \"message\": \"DONE\"}", TYPE_GET_LOG);
                             mqttCloudPublish(topic, str);
                             free(topic);
+                        } else if (JSON_HasKey(reported, "reboot")) {
+                            PlayAudio("restarting");
+                            system("reboot");
                         }
                         break;
                 }

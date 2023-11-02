@@ -79,6 +79,7 @@ void BLE_SetDeviceResp(int respType, uint16_t deviceAddr, int status, bool print
 void BLE_SendUartFrameLoop();
 
 // Send request to get the device ON/OFF state
+bool GW_GetDevicesOnOffBroardcast(int gwIndex);
 bool GW_GetDeviceOnOffState(int gwIndex, const char* dpAddr);
 bool GW_HgSwitchOnOff(int gwIndex, const char* dpAddr, uint8_t dpValue);
 bool GW_HgSwitchOnOff_NoResp(int gwIndex, const char* dpAddr, uint8_t dpValue);

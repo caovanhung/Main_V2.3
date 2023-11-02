@@ -76,6 +76,7 @@ extern int GWCFG_TIMEOUT_DEFAULT;
 extern int GWCFG_MIN_TIME_SCENEGROUP;
 extern int GWCFG_MIN_TIME_ONLINE;
 extern int GWCFG_MIN_TIME_DEFAULT;
+int GWCFG_GET_ONLINE_TIME = 120000;
 
 bool addSceneActions(const char* sceneId, JSON* actions);
 bool deleteSceneActions(const char* sceneId, JSON* actions);
@@ -281,7 +282,7 @@ void Ble_ProcessPacket()
                 }
                 case GW_RESPONSE_DIM_LED_SWITCH_HOMEGY:
                 case GW_RESP_ONOFF_STATE: {
-                    if (bleFrames[i].frameSize >= 4 && bleFrames[i].param[0] == 0x82 && bleFrames[i].param[1] == 0x01) {
+                    if (bleFrames[i].frameSize >= 4 && ((bleFrames[i].param[0] == 0x82 && bleFrames[i].param[1] == 0x01) || (bleFrames[i].param[0] == 0xF1 && bleFrames[i].param[1] == 0x00))) {
                         uint8_t dpCount = bleFrames[i].param[2];
                         uint16_t deviceAddr = bleFrames[i].sendAddr;
                         char str[10];
@@ -675,9 +676,20 @@ void GetIpAddressLoop() {
         if (StringLength(g_hcAddr) > 0 && !StringCompare(g_ipAddress, "192.168.12.1")) {
             // Update new IP address and wifi name to AWS
             char msg[200];
-            sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\", \"hcVersion\":%d, \"nameWifi\":\"%s\", \"buildTime\": \"%s\"}}, \"sender\":11}}}", g_hcAddr, g_ipAddress, HC_VERSION, g_wifiName, __TIMESTAMP__);
+            sprintf(msg, "{\"state\":{\"reported\":{\"gateWay\":{\"%s\":{\"ipLocal\":\"%s\", \"hcVersion\":%d, \"nameWifi\":\"%s\", \"buildTime\": \"%s\"}}, \"sender\":11}}}", g_hcAddr, g_ipAddress, HC_VERSION, g_wifiName, BUILDTIME);
             sendToService(SERVICE_AWS, 255, msg);
         }
+    }
+}
+
+void GetDevicesStateProcess() {
+    static long long int oldTick = 0;
+
+    if (GWCFG_GET_ONLINE_TIME >= 10000 && timeInMilliseconds() - oldTick > GWCFG_GET_ONLINE_TIME) {
+        oldTick = timeInMilliseconds();
+        // Sending broadcast frame to get real device status
+        logInfo("Sending broadcast frame to get real device status");
+        GW_GetDevicesOnOffBroardcast(0);
     }
 }
 
@@ -738,6 +750,7 @@ int main( int argc,char ** argv )
         Ble_ProcessPacket();  // Get BLE frames from bleFrameQueue => publish message to CORE service
         Mosq_ProcessLoop();   // Receive mqtt message from CORE service => Push to mqttMsgQueue
         GetIpAddressLoop();
+        GetDevicesStateProcess();
 
         int mqttSizeQueue = get_sizeQueue(g_mqttMsgQueue);
         int lowPrioMqttSizeQueue = get_sizeQueue(g_lowPrioMqttMsgQueue);
@@ -786,6 +799,9 @@ int main( int argc,char ** argv )
                     }
                     if (JSON_HasKey(payload, "GWCFG_MIN_TIME_DEFAULT")) {
                         GWCFG_MIN_TIME_DEFAULT = JSON_GetNumber(payload, "GWCFG_MIN_TIME_DEFAULT");
+                    }
+                    if (JSON_HasKey(payload, "GWCFG_GET_ONLINE_TIME")) {
+                        GWCFG_GET_ONLINE_TIME = JSON_GetNumber(payload, "GWCFG_GET_ONLINE_TIME");
                     }
 
                     if (needToConfig) {

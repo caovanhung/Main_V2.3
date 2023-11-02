@@ -1,5 +1,5 @@
 CC=aarch64-linux-gnu-gcc
-CFLAGS= -g -O0 -funwind-tables -rdynamic -Wall -Wextra -Wconversion -Werror=int-conversion -Werror-implicit-function-declaration -Wno-discarded-qualifiers -lcrypto -lssl -ldl -lpthread -pthread -lmosquitto  -I/opt/common/ssl/include -I/opt/common/mqtt/usr/local/include -Ilib -Iapp
+CFLAGS= -g -O0 -funwind-tables -rdynamic -Wall -Wextra -Wconversion -Werror=int-conversion -Werror-implicit-function-declaration -Wno-discarded-qualifiers -lcrypto -lssl -ldl -lpthread -pthread -lmosquitto  -I/opt/common/ssl/include -I/opt/common/mqtt/usr/local/include -Ilib -Iapp -DBUILDTIME=\"$(shell date --iso=seconds)\"
 
 all : HG_AWS HG_CORE HG_BLE HG_WIFI HG_CFG
 

@@ -37,6 +37,7 @@ int GWCFG_GET_ONLINE_TIME = 120000;
 const char* SERVICE_NAME = SERVICE_CORE;
 uint8_t SERVICE_ID = SERVICE_ID_CORE;
 bool g_printLog = true;
+uint32_t g_respId = 1;
 
 struct mosquitto * mosq;
 sqlite3 *db;
@@ -66,6 +67,7 @@ bool addNewDevice(JSON* packet) {
         char* deviceAddr = tmp->items[3];
         char* pid = tmp->items[1];
         int pageIndex = JSON_GetNumber(packet, "pageIndex");
+        int onlineState = JSON_GetNumber(packet, "state");
         char* gatewayAddr = JSON_HasKey(packet, "gateWay")? JSON_GetText(packet, "gateWay"): "_";
         JSON_SetText(packet, KEY_UNICAST, tmp->items[3]);
         JSON_SetText(packet, "deviceAddr", deviceAddr);
@@ -74,6 +76,7 @@ bool addNewDevice(JSON* packet) {
         JSON_SetText(packet, KEY_PID, pid);
         JSON_SetText(packet, "devicePid", pid);
         Db_AddDevice(packet);
+        Db_SaveDeviceState(deviceId, onlineState);
         bool addressIncrement = StringContains(HG_BLE_SWITCH, pid) || StringContains(HG_BLE_CURTAIN, pid)? true : false;
         // Calculate addresses of dps for Homegy switch
         char dpAddrStr[5];
@@ -547,7 +550,7 @@ void ResponseWaiting() {
             // Send notification to user
             if (reqType != TYPE_CTR_DEVICE) {
                 char noti[200];
-                sprintf(noti, "{\"successCount\": %d, \"failedCount\": %d, \"noResponseCount\": %d, \"done\":true}", successCount, failedCount, noRespCount);
+                sprintf(noti, "{\"successCount\": %d, \"failedCount\": %d, \"noResponseCount\": %d, \"done\":true, \"id\": %u}", successCount, failedCount, noRespCount, g_respId++);
                 sendNotiToUser(noti, true);
             }
         } else {
@@ -561,7 +564,7 @@ void ResponseWaiting() {
                 // Send real time status notification to user
                 if (reqType != TYPE_CTR_DEVICE) {
                     char noti[200];
-                    sprintf(noti, "{\"successCount\": %d, \"failedCount\": %d, \"noResponseCount\": %d, \"done\":false}", successCount, failedCount, noRespCount);
+                    sprintf(noti, "{\"successCount\": %d, \"failedCount\": %d, \"noResponseCount\": %d, \"done\":false, \"id\": %u}", successCount, failedCount, noRespCount, g_respId++);
                     sendNotiToUser(noti, true);
                 }
             }
@@ -993,7 +996,7 @@ void GetDeviceStatusForScene(Scene* scene) {
         }
     }
     if (JArr_Count(devicesArray) > 0) {
-        sendPacketToBle(-1, TYPE_GET_ONOFF_STATE, devicesArray);
+        // sendPacketToBle(-1, TYPE_GET_ONOFF_STATE, devicesArray);
     }
     JSON_Delete(devicesArray);
 }
@@ -1057,35 +1060,37 @@ void GetDeviceStatusForGroup(const char* deviceId, int dpId, double dpValue) {
     }
     JSON_Delete(foundGroups);
     if (JArr_Count(devicesArray) > 0) {
-        sendPacketToBle(-1, TYPE_GET_ONOFF_STATE, devicesArray);
+        // sendPacketToBle(-1, TYPE_GET_ONOFF_STATE, devicesArray);
     }
     JSON_Delete(devicesArray);
 }
 
-void GetDeviceStatusInterval() {
+void CheckDeviceOffline() {
     static long long int oldTick = 0;
 
-    if (GWCFG_GET_ONLINE_TIME >= 10000 && timeInMilliseconds() - oldTick > GWCFG_GET_ONLINE_TIME) {
+    if (GWCFG_GET_ONLINE_TIME >= 10000 && timeInMilliseconds() - oldTick > 10000) {
         oldTick = timeInMilliseconds();
         char sqlCmd[500];
         char pid[1000];
+        List* offlineDevices = List_Create();
         sprintf(pid, "%s,%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN, HG_BLE_IR);
-        sprintf(sqlCmd, "SELECT unicast, g.hcAddr, d.gwIndex FROM devices_inf d JOIN gateway g ON d.gwIndex = g.id \
-                        WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NULL OR %lld - d.last_updated > %d) AND d.deviceKey IS NOT NULL", pid, oldTick, GWCFG_GET_ONLINE_TIME - 5000);
-        JSON* devicesArray = cJSON_CreateArray();
+        sprintf(sqlCmd, "SELECT deviceId, pageIndex FROM devices_inf d \
+                        WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NOT NULL AND %lld - d.last_updated > %d) AND d.deviceKey IS NOT NULL", pid, oldTick, GWCFG_GET_ONLINE_TIME * 4);
         Sql_Query(sqlCmd, row) {
-            char* addr = sqlite3_column_text(row, 0);
-            char* hcAddr = sqlite3_column_text(row, 1);
-            int gwIndex = sqlite3_column_int(row, 2);
-            JSON* item = JArr_CreateObject(devicesArray);
-            JSON_SetText(item, "addr", addr);
-            JSON_SetText(item, "hcAddr", hcAddr);
-            JSON_SetNumber(item, "gwIndex", gwIndex);
+            char* deviceId = sqlite3_column_text(row, 0);
+            int pageIndex = sqlite3_column_int(row, 1);
+            Db_SaveDeviceState(deviceId, STATE_OFFLINE);
+            Aws_SaveDeviceState(deviceId, STATE_OFFLINE, pageIndex);
+            List_PushString(offlineDevices, deviceId);
         }
-        if (JArr_Count(devicesArray) > 0) {
-            sendPacketToBle(-1, TYPE_GET_ONOFF_STATE, devicesArray);
+
+        if (offlineDevices->count > 0) {
+            char offlineDeviceStr[10000];
+            List_ToString(offlineDevices, ",", offlineDeviceStr);
+            logInfo("There are %d offline devices: %s", offlineDevices->count, offlineDeviceStr);
         }
-        JSON_Delete(devicesArray);
+
+        List_Delete(offlineDevices);
     }
 }
 
@@ -1114,7 +1119,7 @@ int main(int argc, char ** argv)
         Mosq_ProcessLoop();
         ResponseWaiting();
         ExecuteScene();
-        GetDeviceStatusInterval();
+        CheckDeviceOffline();
 
         size_queue = get_sizeQueue(queue_received);
         if (size_queue > 0) {

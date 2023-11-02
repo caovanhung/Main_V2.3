@@ -4,6 +4,9 @@ import json
 import os
 import time
 
+homeId = ""
+isMaster = 0
+
 def getIpAddress():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
@@ -19,38 +22,62 @@ def listenCommands():
 
     print("Waiting for command...")
     while True:
-        data, address = s.recvfrom(4096)
-        cmd = data.decode('utf-8')
-        print("Received command: ", cmd)
-        if cmd == "GET_MASTER_IP":
-            ipAddress = getIpAddress()
-            s.sendto(ipAddress.encode('utf-8'), address)
-            print(f"Sent to {address}: {ipAddress}")
-
+        try:
+            data, address = s.recvfrom(4096)
+            tmp = data.decode('utf-8')
+            print("Received command: ", tmp)
+            items = tmp.split(",")
+            cmd = items[0]
+            if cmd == "GET_MASTER_IP":
+                if len(items) == 2 and items[1] == homeId:
+                    ipAddress = getIpAddress()
+                    s.sendto(ipAddress.encode('utf-8') , address)
+                    print(f"Sent to {address}: {ipAddress}")
+                else:
+                    print(f"Invalid homeId. Must be {homeId}, received {items[1]}")
+            elif cmd == "FIND_HC":
+                ipAddress = getIpAddress()
+                master = "slave"
+                if isMaster == True:
+                    master = "master"
+                s.sendto((ipAddress + ", " + homeId + ", " + master + "\n").encode('utf-8') , address)
+                print(f"Sent to {address}: {ipAddress}")
+        except KeyboardInterrupt:
+            sys.exit()
+        except Exception as e:
+            print(f'Error: {e}')
 
 def getMasterIp():
     port = 5005
-    msg = b'GET_MASTER_IP'
+    msg = 'GET_MASTER_IP,' + homeId
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)  # UDP
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.bind(("0.0.0.0", 1000))
+    failedCount = 0
+    os.system("aplay /home/szbaijie/audio/slave_restarted.wav")
     while True:
         try:
-            print(f'Sending GET_MASTER_IP')
-            sock.sendto(msg, ("255.255.255.255", port))
+            print(f'Sending ' + msg)
+            sock.sendto(msg.encode('utf-8'), ("255.255.255.255", port))
             print("Waiting for response...")
             sock.settimeout(5.0)
             data, address = sock.recvfrom(4096)
             f = open("masterIP", "w")
             f.write(data.decode('utf-8'))
             print("Master HC IP: ", data.decode('utf-8'))
+            os.system("aplay /home/szbaijie/audio/ready.wav")
             os.system("systemctl restart hg_cfg")
             os.system("systemctl restart hg_ble")
+            os.system("systemctl restart hg_ota")
             break
         except KeyboardInterrupt:
             sys.exit()
         except:
             print('Timeout. Trying again')
+            failedCount = failedCount + 1
+            if failedCount >= 3:
+                failedCount = 0
+                os.system("aplay /home/szbaijie/audio/master_not_found.wav")
     sock.close()
 
 def removeOldLogs(folder):
@@ -97,11 +124,13 @@ def main():
     f = open("app.json", "r")
     fileContent = f.read()
     try:
+        global homeId
+        global isMaster
         appConfig = json.loads(fileContent)
-        isMaster = 0
+        homeId = appConfig["homeId"]
         if "isMaster" in appConfig:
             isMaster = appConfig["isMaster"]
-        print("isMaster:", isMaster)
+        print(f"homeId: {homeId}, isMaster: {isMaster}")
         if (isMaster):
             time.sleep(2)
             os.system("systemctl restart hg_cfg")
@@ -117,8 +146,8 @@ def main():
             listenCommands()
         else:
             getMasterIp()
-    except:
-        print("HC was not configured")
+    except Exception as e:
+        print(f"Error {e}")
         os.system("systemctl restart hg_cfg")
         os.system("systemctl restart hg_ble")
         os.system("systemctl restart hg_ota")

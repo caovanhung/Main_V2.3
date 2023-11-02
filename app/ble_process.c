@@ -74,6 +74,7 @@ void addTimeoutToSendingFrame(uint16_t timeout) {
 UartSendingFrame* sendFrameToGwIndex(int gwIndex, uint16_t addr, uint8_t* data, size_t len) {
     ASSERT(data);
     ASSERT(len > 0);
+    gwIndex = 0;
     // char tmp[100];
     // memset(tmp, 100, 0);
     // for (int i = 0; i < len; i++) {
@@ -170,7 +171,13 @@ void BLE_SendToGateway() {
             // Send frame to gateway
             g_uartSendingIdx = sentFrame.gwIndex == 0? 3 : 2;
             UART_Send(g_gatewayFds[sentFrame.gwIndex], sentFrame.data, sentFrame.dataLength);
-            state = 2;
+            
+            // Go to step 2 to check timeout if sentFrame.timeout > 0, otherwise go to step 3 to wait a while
+            if (sentFrame.timeout > 0) {
+                state = 2;
+            } else {
+                state = 3;
+            }
 
             if (failedCount == 0) {
                 for (int i = 0; i < UART_DEVICE_RESP_SIZE; i++) {
@@ -288,6 +295,13 @@ bool ble_getInfoProvison(provison_inf *PRV, JSON* packet)
     PRV->deviceKey2 = JSON_GetText(packet, "deviceKey2");
     PRV->address1 = JSON_GetText(packet, "gateway1");
     PRV->address2 = JSON_GetText(packet, "gateway2");
+    return true;
+}
+
+bool GW_GetDevicesOnOffBroardcast(int gwIndex) {
+    uint8_t  data[] = {0xe8,0xff,  0x00,0x00,0x00,0x00,0x00,0x00,  0xff,0xff,  0xE0,0x11,0x02,0x00,0x00, 0xF1,0x00, 0x01,0x00};
+    UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, 0xFFFF, data, 19);
+    frame->timeout = 0;     // Disable handling timeout for this command
     return true;
 }
 
