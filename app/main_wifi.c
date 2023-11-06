@@ -111,6 +111,14 @@ void* RUN_MQTT_LOCAL(void* p)
     }
 }
 
+void ReportHealthCheck() {
+    static long long time = 0;
+    if (timeInMilliseconds() - time > 10000) {
+        time = timeInMilliseconds();
+        mosquitto_publish(mosq, NULL, "APPLICATION_SERVICES/AWS/0", strlen("WIFI_PONG"), "WIFI_PONG", 0, false);
+    }
+}
+
 int main( int argc,char ** argv )
 {
     long long GetAccessTokenTime = 0;
@@ -155,6 +163,8 @@ int main( int argc,char ** argv )
 
     getHomeId();
     while (xRun!=0) {
+        ReportHealthCheck();
+
         pthread_mutex_lock(&mutex_lock_t);
         size_queue = get_sizeQueue(queue_received);
         if(size_queue > 0)

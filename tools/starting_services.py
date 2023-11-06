@@ -66,9 +66,7 @@ def getMasterIp():
             f.write(data.decode('utf-8'))
             print("Master HC IP: ", data.decode('utf-8'))
             os.system("aplay /home/szbaijie/audio/ready.wav")
-            os.system("systemctl restart hg_cfg")
             os.system("systemctl restart hg_ble")
-            os.system("systemctl restart hg_ota")
             break
         except KeyboardInterrupt:
             sys.exit()
@@ -145,6 +143,8 @@ def main():
             os.system("systemctl restart hg_ota")
             listenCommands()
         else:
+            os.system("systemctl restart hg_cfg")
+            os.system("systemctl restart hg_ota")
             getMasterIp()
     except Exception as e:
         print(f"Error {e}")

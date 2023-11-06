@@ -102,6 +102,7 @@ MQTTSubAckStatus_t globalSubAckStatus = MQTTSubAckFailure;
 static MQTTSubscribeInfo_t* g_awsSubscriptionList;
 static int g_awsSubscriptionCount = 0;
 static JSON* g_mergePayloads;
+static int g_wifiServiceWatchdog = 0;
 
 void* Thread_ConnectToAws(void* p);
 uint32_t generateRandomNumber();
@@ -445,6 +446,11 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
 }
 
 void Mosq_ReceivedHandler(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
+    if StringCompare((char*)msg->payload, "WIFI_PONG") {
+        g_wifiServiceWatchdog = 0;
+        return;
+    }
+
     if (StringCompare(msg->topic, MOSQ_TOPIC_CONTROL_LOCAL)) {
         char* payload = calloc((int)msg->payloadlen + 1, sizeof(char));
         strncpy(payload, msg->payload, msg->payloadlen);
@@ -1026,6 +1032,14 @@ void Aws_SendMergePayload() {
             JSON_RemoveKey(g_mergePayloads, str);
             free(topic);
             return;
+        }
+
+        // Process watchdog for wifi service
+        g_wifiServiceWatchdog++;
+        if (g_wifiServiceWatchdog > 60) {
+            g_wifiServiceWatchdog = 0;
+            logInfo("Restarting wifi service");
+            system("systemctl restart hg_wifi");
         }
     }
 }

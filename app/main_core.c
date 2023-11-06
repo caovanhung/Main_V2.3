@@ -37,7 +37,6 @@ int GWCFG_GET_ONLINE_TIME = 120000;
 const char* SERVICE_NAME = SERVICE_CORE;
 uint8_t SERVICE_ID = SERVICE_ID_CORE;
 bool g_printLog = true;
-uint32_t g_respId = 1;
 
 struct mosquitto * mosq;
 sqlite3 *db;
@@ -91,7 +90,7 @@ bool addNewDevice(JSON* packet) {
             int dpId = atoi(dp->string);
             int dpValue = dp->valueint;
             uint16_t increasedAddr = tmp + dpId - 1;
-            sprintf(dpAddrStr, "%02X%02d", increasedAddr & 0x00FF, increasedAddr >> 8);
+            sprintf(dpAddrStr, "%02X%02X", increasedAddr & 0x00FF, increasedAddr >> 8);
             if (addressIncrement) {
                 Db_AddDp(deviceId, dpId, dpAddrStr, pageIndex);
             } else {
@@ -550,7 +549,7 @@ void ResponseWaiting() {
             // Send notification to user
             if (reqType != TYPE_CTR_DEVICE) {
                 char noti[200];
-                sprintf(noti, "{\"successCount\": %d, \"failedCount\": %d, \"noResponseCount\": %d, \"done\":true, \"id\": %u}", successCount, failedCount, noRespCount, g_respId++);
+                sprintf(noti, "{\"successCount\": %d, \"failedCount\": %d, \"noResponseCount\": %d, \"done\":true, \"id\": \"%s\"}", successCount, failedCount, noRespCount, itemId);
                 sendNotiToUser(noti, true);
             }
         } else {
@@ -564,7 +563,7 @@ void ResponseWaiting() {
                 // Send real time status notification to user
                 if (reqType != TYPE_CTR_DEVICE) {
                     char noti[200];
-                    sprintf(noti, "{\"successCount\": %d, \"failedCount\": %d, \"noResponseCount\": %d, \"done\":false, \"id\": %u}", successCount, failedCount, noRespCount, g_respId++);
+                    sprintf(noti, "{\"successCount\": %d, \"failedCount\": %d, \"noResponseCount\": %d, \"done\":false, \"id\": \"%s\"}", successCount, failedCount, noRespCount, itemId);
                     sendNotiToUser(noti, true);
                 }
             }
@@ -1238,7 +1237,11 @@ int main(int argc, char ** argv)
                                         updateDeviceRespStatus(TYPE_CTR_DEVICE, dpInfo.deviceId, dpInfo.deviceId, 0);
                                     }
                                 }
+                            } else {
+                                logError("Cannot find deviceId %s", dpInfo.deviceId);
                             }
+                        } else {
+                            logError("Cannot find dpAddr %s on hcAddr %s", dpAddr, hcAddr);
                         }
                         break;
                     }
