@@ -607,7 +607,7 @@ int Db_LoadSceneToRam() {
         JSON_Delete(actionsArray);
         JSON_Delete(conditionsArray);
     }
-    printf("Loaded %d scenes from database\n", g_sceneCount);
+    logInfo("Loaded %d scenes from database\n", g_sceneCount);
     return 1;
 }
 

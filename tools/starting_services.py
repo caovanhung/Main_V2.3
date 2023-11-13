@@ -3,6 +3,7 @@ import sys
 import json
 import os
 import time
+from pathlib import Path
 
 homeId = ""
 isMaster = 0
@@ -54,6 +55,7 @@ def getMasterIp():
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.bind(("0.0.0.0", 1000))
     failedCount = 0
+    firstTimePlay = 0
     os.system("aplay /home/szbaijie/audio/slave_restarted.wav")
     while True:
         try:
@@ -73,9 +75,11 @@ def getMasterIp():
         except:
             print('Timeout. Trying again')
             failedCount = failedCount + 1
-            if failedCount >= 3:
+            if failedCount >= 6:
                 failedCount = 0
-                os.system("aplay /home/szbaijie/audio/master_not_found.wav")
+                file_path = Path("/home/szbaijie/hc_bin/cfg")
+                if !file_path.exists():
+                    os.system("aplay /home/szbaijie/audio/master_not_found.wav")
     sock.close()
 
 def removeOldLogs(folder):
@@ -93,6 +97,7 @@ def removeOldLogs(folder):
                 os.remove(folder + "/" + f)
 
 def main():
+    os.remove("/home/szbaijie/hc_bin/cfg");
     os.system("nmcli r wifi on")
     # Create logs folder if not exist
     logsPath = "/home/szbaijie/hc_bin/logs/"
@@ -145,6 +150,7 @@ def main():
         else:
             os.system("systemctl restart hg_cfg")
             os.system("systemctl restart hg_ota")
+            os.system("systemctl restart hg_ble")
             getMasterIp()
     except Exception as e:
         print(f"Error {e}")

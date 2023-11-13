@@ -239,6 +239,7 @@ void DeleteDeviceFromScenes(const char* deviceId) {
         } else if (JArr_Count(actions) != JArr_Count(newActions) || JArr_Count(conditions) != JArr_Count(newConditions)) {
             logInfo("Update actions and conditions for scene %s", sceneId);
             Db_SaveScene(sceneId, newActions, newConditions);
+            Db_LoadSceneToRam();
             Aws_SaveScene(sceneId);
         }
 
@@ -519,6 +520,7 @@ void ResponseWaiting() {
                 Aws_UpdateSceneInfo(g_sceneTobeUpdated);
                 char* sceneId = JSON_GetText(g_sceneTobeUpdated, "id");
                 Db_SaveScene(sceneId, updatedActions, updatedConditions);
+                Db_LoadSceneToRam();
                 JSON_Delete(g_sceneTobeUpdated);
             } else if (reqType == TYPE_CTR_DEVICE) {
                 for (int d = 0; d < deviceCount; d++) {
@@ -786,21 +788,26 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                                     DeviceInfo deviceInfo;
                                     int foundDevices = Db_FindDevice(&deviceInfo, scene->actions[act].entityId);
                                     if (foundDevices == 1) {
-                                        for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
-                                            if (scene->actions[act].dpIds[dp] != 21 && scene->actions[act].dpIds[dp] != 106) {
-                                                Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
-                                                Db_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp]);
-                                                checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
-                                                JSON* history = JSON_CreateObject();
-                                                JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
-                                                JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
-                                                JSON_SetText(history, "causeId", scene->id);
-                                                JSON_SetText(history, "deviceId", deviceInfo.id);
-                                                JSON_SetNumber(history, "dpId", scene->actions[act].dpIds[dp]);
-                                                JSON_SetNumber(history, "dpValue", scene->actions[act].dpValues[dp]);
-                                                Db_AddDeviceHistory(history);
-                                                JSON_Delete(history);
+                                        if (deviceInfo.state == STATE_ONLINE) {
+                                            for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
+                                                if (scene->actions[act].dpIds[dp] != 21 && scene->actions[act].dpIds[dp] != 106) {
+                                                    logInfo("Updating value for device %s.%d by scene %s", deviceInfo.id, scene->actions[act].dpIds[dp], scene->id);
+                                                    Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
+                                                    Db_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp]);
+                                                    checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
+                                                    JSON* history = JSON_CreateObject();
+                                                    JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                                                    JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
+                                                    JSON_SetText(history, "causeId", scene->id);
+                                                    JSON_SetText(history, "deviceId", deviceInfo.id);
+                                                    JSON_SetNumber(history, "dpId", scene->actions[act].dpIds[dp]);
+                                                    JSON_SetNumber(history, "dpValue", scene->actions[act].dpValues[dp]);
+                                                    Db_AddDeviceHistory(history);
+                                                    JSON_Delete(history);
+                                                }
                                             }
+                                        } else {
+                                            logInfo("Device %s is offline");
                                         }
                                     }
                                 }

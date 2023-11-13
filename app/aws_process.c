@@ -104,9 +104,9 @@ void Aws_SyncDatabase() {
     // Get number of pages
     JSON* accountInfo = Aws_GetShadow(g_thingId, "accountInfo");
     if (accountInfo) {
-        int devicePages = JSON_HasKey(accountInfo, "pageIndex0")? JSON_GetNumber(accountInfo, "pageIndex0") : 1;
-        int groupPages = JSON_HasKey(accountInfo, "pageIndex3")? JSON_GetNumber(accountInfo, "pageIndex3") : 1;
-        int scenePages = JSON_HasKey(accountInfo, "pageIndex2")? JSON_GetNumber(accountInfo, "pageIndex2") : 1;
+        int devicePages = JSON_HasKey(accountInfo, "pageIndex0")? JSON_GetNumber(accountInfo, "pageIndex0") : 0;
+        int groupPages = JSON_HasKey(accountInfo, "pageIndex3")? JSON_GetNumber(accountInfo, "pageIndex3") : 0;
+        int scenePages = JSON_HasKey(accountInfo, "pageIndex2")? JSON_GetNumber(accountInfo, "pageIndex2") : 0;
 
         // Sync gateways
         gatewayInfo = JSON_Clone(JSON_GetObject(accountInfo, "gateWay"));

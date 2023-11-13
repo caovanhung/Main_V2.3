@@ -446,7 +446,7 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
 }
 
 void Mosq_ReceivedHandler(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
-    if StringCompare((char*)msg->payload, "WIFI_PONG") {
+    if (StringCompare((char*)msg->payload, "WIFI_PONG")) {
         g_wifiServiceWatchdog = 0;
         return;
     }
@@ -1008,6 +1008,7 @@ void Mosq_ProcessMessage() {
 
 
 void Aws_SendMergePayload() {
+    static int pingServiceCount = 0;
     static long long time = 0;
     if (timeInMilliseconds() - time > 500) {
         time = timeInMilliseconds();
@@ -1032,6 +1033,13 @@ void Aws_SendMergePayload() {
             JSON_RemoveKey(g_mergePayloads, str);
             free(topic);
             return;
+        }
+
+        // Ping services every 10 seconds
+        pingServiceCount++;
+        if (pingServiceCount > 20) {
+            pingServiceCount = 0;
+            mosquitto_publish(mosq, NULL, "DEVICE_SERVICES/TUYA/0", strlen("WIFI_PING"), "WIFI_PING", 0, false);
         }
 
         // Process watchdog for wifi service

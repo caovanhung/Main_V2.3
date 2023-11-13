@@ -70,6 +70,10 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc)
 
 void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg)
 {
+    if (StringCompare((char*)msg->payload, "WIFI_PING")) {
+        mosquitto_publish(mosq, NULL, "APPLICATION_SERVICES/AWS/0", strlen("WIFI_PONG"), "WIFI_PONG", 0, false);
+        return;
+    }
     pthread_mutex_lock(&mutex_lock_t);
     int size_queue = get_sizeQueue(queue_received);
     if(size_queue < QUEUE_SIZE)
@@ -111,13 +115,14 @@ void* RUN_MQTT_LOCAL(void* p)
     }
 }
 
-void ReportHealthCheck() {
-    static long long time = 0;
-    if (timeInMilliseconds() - time > 10000) {
-        time = timeInMilliseconds();
-        mosquitto_publish(mosq, NULL, "APPLICATION_SERVICES/AWS/0", strlen("WIFI_PONG"), "WIFI_PONG", 0, false);
-    }
-}
+// void ReportHealthCheck() {
+//     static long long time = 0;
+//     if (timeInMilliseconds() - time > 10000) {
+//         time = timeInMilliseconds();
+//         logInfo("WIFI_PONG");
+//         // mosquitto_publish(mosq, NULL, "APPLICATION_SERVICES/AWS/0", strlen("WIFI_PONG"), "WIFI_PONG", 0, false);
+//     }
+// }
 
 int main( int argc,char ** argv )
 {
@@ -163,7 +168,7 @@ int main( int argc,char ** argv )
 
     getHomeId();
     while (xRun!=0) {
-        ReportHealthCheck();
+        // ReportHealthCheck();
 
         pthread_mutex_lock(&mutex_lock_t);
         size_queue = get_sizeQueue(queue_received);

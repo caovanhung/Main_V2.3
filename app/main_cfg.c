@@ -17,6 +17,8 @@
 #include <time.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
 #include <assert.h>
 #include <mosquitto.h>
 #include "define.h"
@@ -56,6 +58,10 @@ typedef enum {
     WIFI_CHECK_STATUS
 } WifiConnectingState;
 
+#define SHM_SIZE            1024
+#define SHM_PAYLOAD_OFFSET  10
+char* g_sharedMemory;
+
 const char* SERVICE_NAME = SERVICE_CFG;
 uint8_t     SERVICE_ID   = SERVICE_ID_CFG;
 bool g_printLog = true;
@@ -83,6 +89,24 @@ static long long int g_connectedTime = 0;
 
 bool CheckWifiConnection(const char* ssid);
 bool CheckSSIDExist(const char* ssid);
+
+void InitSharedMemory() {
+    key_t key = ftok("/tmp", 'A');  // Same key as used in the reader
+    int shmid;
+
+    // Access the shared memory segment
+    if ((shmid = shmget(key, SHM_SIZE, IPC_CREAT | 0666)) == -1) {
+        perror("shmget");
+        fprintf(stderr, "shmget failed with error: %d\n", errno);
+    }
+
+    // Attach to the shared memory segment
+    g_sharedMemory = shmat(shmid, NULL, 0);
+
+    if (g_sharedMemory == (void *)-1) {
+        logError("shmat");
+    }
+}
 
 void on_connect(struct mosquitto *mosq, void *obj, int rc) {
     if(rc) {
@@ -341,6 +365,7 @@ void MainLoop() {
                     count = 0;
                     state = 1;
                     // Create wifi hotspot
+                    system("touch /home/szbaijie/hc_bin/cfg");
                     LED_SLOW_FLASH;
                     g_wifiConnectDone = false;
                     system("nmcli r wifi off");
@@ -363,8 +388,8 @@ void MainLoop() {
             // Wait for button press or finished configuration
             if (pinRead(USER_BUTTON) == 0 || g_wifiConnectDone) {
                 count = 0;
+                LED_ON;
                 if (g_wifiIsConnected) {
-                    LED_ON;
                     PlayAudio("wifi_config_success");
                     // Save homeId and accountId to app.json file
                     if (g_needConfigGw && g_homeId[0] != 0 && g_accountId[0] != 0) {
@@ -374,14 +399,18 @@ void MainLoop() {
                         fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\",\"isMaster\":%d,\"hcAddr\":\"%s\"}", g_accountId, g_homeId, isMaster, hcAddr);
                         fclose(f);
                         // Send message to BLE service to configure gateway
-                        sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
-                        sendPacketTo("CORE_LOCAL", TYPE_RESET_DATABASE, g_gatewayInfo);
+                        // sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
+                        // sendPacketTo("CORE_LOCAL", TYPE_RESET_DATABASE, g_gatewayInfo);
+                        if (g_sharedMemory > 0) {
+                            g_sharedMemory[0] = TYPE_ADD_GW;
+                            StringCopy(g_sharedMemory + SHM_PAYLOAD_OFFSET, cJSON_PrintUnformatted(g_gatewayInfo));
+                        }
                     } else {
                         PlayAudio("restarting");
                         system("reboot");
                     }
                 } else {
-                    LED_OFF;
+                    LED_ON;
                 }
                 if (!g_needConfigGw) {
                     system("pkill -15 create_ap");
@@ -458,6 +487,7 @@ int main(int argc, char ** argv) {
     pinMode(SPEAKER_PIN, OUTPUT);
     SPEAKER_DISABLE;
     LED_ON;
+    InitSharedMemory();
     Mosq_Init();
     sleep(1);
 

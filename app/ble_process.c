@@ -11,7 +11,7 @@
 extern struct mosquitto * mosq;
 extern char g_hcAddr[10];
 
-int GWCFG_TIMEOUT_SCENEGROUP = 5000;
+int GWCFG_TIMEOUT_SCENEGROUP = 2000;
 int GWCFG_TIMEOUT_ONLINE = 2000;
 int GWCFG_TIMEOUT_DEFAULT = 1000;
 int GWCFG_MIN_TIME_SCENEGROUP = 1000;
@@ -759,7 +759,7 @@ void get_string_add_DV_write_GW(char **result,const char* address_device,const c
 int set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,const char* deviceKey)
 {
     ASSERT(address_device); ASSERT(pid); ASSERT(deviceKey);
-    gwIndex = gwIndex % 2;
+    gwIndex = 0;
     g_uartSendingIdx = gwIndex == 0 ? 3 : 2;
     char *str_send_uart = (char*) malloc(1000 * sizeof(char));
     unsigned char *hex_send_uart;
