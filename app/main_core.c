@@ -233,8 +233,15 @@ void DeleteDeviceFromScenes(const char* deviceId) {
         if (JArr_Count(newActions) == 0) {
             // Delete scene if there is no any action in it
             logInfo("Delete scene %s because it has no any action", sceneId);
-            Aws_DeleteScene(sceneId);
-            Db_DeleteScene(sceneId);
+            if (JArr_Count(newConditions) > 0) {
+                // Send command to delete this scene in this device
+                JSON* tmp = JSON_CreateObject();
+                JSON_SetText(tmp, "id", sceneId);
+                sendPacketTo(SERVICE_CORE, TYPE_DEL_SCENE, tmp);
+                JSON_Delete(tmp);
+            }
+            // Aws_DeleteScene(sceneId);
+            // Db_DeleteScene(sceneId);
             DeleteDeviceFromScenes(sceneId);
         } else if (JArr_Count(actions) != JArr_Count(newActions) || JArr_Count(conditions) != JArr_Count(newConditions)) {
             logInfo("Update actions and conditions for scene %s", sceneId);
@@ -403,12 +410,12 @@ void ResponseWaiting() {
                         }
                     }
                 }
-                if (JArr_Count(updatedDevices) > 0) {
+                // if (JArr_Count(updatedDevices) > 0) {
                     JSON_SetObject(g_groupTobeUpdated, "devices", updatedDevices);
                     Aws_UpdateGroupDevices(g_groupTobeUpdated);
                     char* groupAddr = JSON_GetText(g_groupTobeUpdated, "groupAddr");
                     Db_SaveGroupDevices(groupAddr, updatedDevices);
-                }
+                // }
                 JSON_Delete(g_groupTobeUpdated);
             } else if (reqType == TYPE_ADD_SCENE || reqType == TYPE_UPDATE_SCENE) {
                 // Save state of devices to AWS
@@ -1447,7 +1454,7 @@ int main(int argc, char ** argv)
                         break;
                     }
                 }
-            } else if (StringCompare(NameService, SERVICE_AWS) && payload) {
+            } else if ((StringCompare(NameService, SERVICE_AWS) || StringCompare(NameService, SERVICE_CORE)) && payload) {
                 switch (reqType) {
                     case TYPE_GET_ALL_DEVICES: {
                         JSON* p = JSON_CreateObject();
@@ -1763,6 +1770,7 @@ int main(int argc, char ** argv)
                     }
                     case TYPE_DEL_SCENE: {
                         char* sceneId = JSON_GetText(payload, "Id");
+                        logInfo("TYPE_DEL_SCENE: %s", sceneId);
                         JSON* sceneInfo = Db_FindScene(sceneId);
                         if (sceneInfo) {
                             int isLocal = JSON_GetNumber(sceneInfo, "isLocal");
@@ -1772,8 +1780,11 @@ int main(int argc, char ** argv)
                             } else {
                                 logInfo("Deleted HC scene %s", sceneId);
                             }
+                            Aws_DeleteScene(sceneId);
                             Db_DeleteScene(sceneId);    // Delete scene from database
                             DeleteDeviceFromScenes(sceneId);
+                        } else {
+                            logError("Scene %s not found", sceneId);
                         }
                         JSON_Delete(sceneInfo);
                         break;
