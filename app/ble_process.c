@@ -773,7 +773,7 @@ int set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,co
     hex_send_uart  = (char*) malloc(len_str * sizeof(char)*10);
     String2HexArr(str_send_uart,hex_send_uart);
     UART_Send(g_gatewayFds[gwIndex],hex_send_uart,len_str/2);
-    usleep(DELAY_SEND_UART_MS);
+    usleep(SAVE_DEVICE_KEY_DELAY_MS);
     free(element_count_str);
     free(hex_send_uart);
     free(str_send_uart);

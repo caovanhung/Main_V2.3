@@ -102,7 +102,7 @@ MQTTSubAckStatus_t globalSubAckStatus = MQTTSubAckFailure;
 static MQTTSubscribeInfo_t* g_awsSubscriptionList;
 static int g_awsSubscriptionCount = 0;
 static JSON* g_mergePayloads;
-static int g_wifiServiceWatchdog = 0;
+static int g_wifiServiceWatchdog = 0, g_coreServiceWatchdog = 0, g_bleServiceWatchdog = 0;
 
 void* Thread_ConnectToAws(void* p);
 uint32_t generateRandomNumber();
@@ -448,6 +448,14 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
 void Mosq_ReceivedHandler(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
     if (StringCompare((char*)msg->payload, "WIFI_PONG")) {
         g_wifiServiceWatchdog = 0;
+        return;
+    }
+    if (StringCompare((char*)msg->payload, "CORE_PONG")) {
+        g_coreServiceWatchdog = 0;
+        return;
+    }
+    if (StringCompare((char*)msg->payload, "BLE_PONG")) {
+        g_bleServiceWatchdog = 0;
         return;
     }
 
@@ -905,7 +913,8 @@ void Mosq_ProcessMessage() {
         char* payloadString = JSON_GetText(recvPacket, MOSQ_Payload);
         JSON* payload = JSON_Parse(payloadString);
         switch (reqType) {
-            case GW_RESP_ONOFF_STATE: {
+            case GW_RESP_ONOFF_STATE:
+            case GW_RESP_ONLINE_STATE: {
                 if (pageIndex >= 0) {
                     char* deviceId = JSON_GetText(payload, "deviceId");
                     char str[50];
@@ -924,23 +933,24 @@ void Mosq_ProcessMessage() {
                     if (JSON_HasKey(payload, "state")) {
                         JSON_SetNumber(deviceInfo, "state", JSON_GetNumber(payload, "state"));
                     }
-                    JSON* dictDPs = JSON_GetObject(deviceInfo, "dictDPs");
-                    if (dictDPs == NULL) {
-                        dictDPs = JSON_CreateObject();
-                        JSON_SetObject(deviceInfo, "dictDPs", dictDPs);
-                    }
-                    int dpId = JSON_GetNumber(payload, "dpId");
-                    sprintf(str, "%d", dpId);
-                    if (dpId == 24 || dpId == 21) {
-                        JSON_SetText(dictDPs, str, JSON_GetText(payload, "dpValue"));
-                    } else {
-                        JSON_SetNumber(dictDPs, str, JSON_GetNumber(payload, "dpValue"));
+                    if (JSON_HasKey(payload, "dpId")) {
+                        JSON* dictDPs = JSON_GetObject(deviceInfo, "dictDPs");
+                        if (dictDPs == NULL) {
+                            dictDPs = JSON_CreateObject();
+                            JSON_SetObject(deviceInfo, "dictDPs", dictDPs);
+                        }
+                        int dpId = JSON_GetNumber(payload, "dpId");
+                        sprintf(str, "%d", dpId);
+                        if (dpId == 24 || dpId == 21) {
+                            JSON_SetText(dictDPs, str, JSON_GetText(payload, "dpValue"));
+                        } else {
+                            JSON_SetNumber(dictDPs, str, JSON_GetNumber(payload, "dpValue"));
+                        }
                     }
                 }
                 break;
             }
-            case GW_RESPONSE_DEVICE_KICKOUT:
-            case GW_RESP_ONLINE_STATE: {
+            case GW_RESPONSE_DEVICE_KICKOUT: {
                 if (pageIndex >= 0) {
                     char* topic = Aws_GetTopic(PAGE_DEVICE, pageIndex, TOPIC_UPD_PUB);
                     sendPacketToCloud(topic, payload);
@@ -1040,6 +1050,8 @@ void Aws_SendMergePayload() {
         if (pingServiceCount > 20) {
             pingServiceCount = 0;
             mosquitto_publish(mosq, NULL, "DEVICE_SERVICES/TUYA/0", strlen("WIFI_PING"), "WIFI_PING", 0, false);
+            mosquitto_publish(mosq, NULL, "CORE_SERVICES/CORE/0", strlen("CORE_PING"), "CORE_PING", 0, false);
+            mosquitto_publish(mosq, NULL, "DEVICE_SERVICES/BLE_0A00/0", strlen("BLE_PING"), "BLE_PING", 0, false);
         }
 
         // Process watchdog for wifi service
@@ -1048,6 +1060,20 @@ void Aws_SendMergePayload() {
             g_wifiServiceWatchdog = 0;
             logInfo("Restarting wifi service");
             system("systemctl restart hg_wifi");
+        }
+
+        g_coreServiceWatchdog++;
+        if (g_coreServiceWatchdog > 60) {
+            g_coreServiceWatchdog = 0;
+            logInfo("Restarting CORE service");
+            system("systemctl restart hg_core");
+        }
+
+        g_bleServiceWatchdog++;
+        if (g_bleServiceWatchdog > 60) {
+            g_bleServiceWatchdog = 0;
+            logInfo("Restarting BLE service");
+            system("systemctl restart hg_ble");
         }
     }
 }

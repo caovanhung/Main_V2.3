@@ -209,18 +209,14 @@ void Aws_SyncDatabase() {
         sendPacketTo(SERVICE_CORE, TYPE_ADD_GW, gatewayInfo);
         JSON_Delete(gatewayInfo);
 
-        if (JArr_Count(syncingDevices) > 0) {
-            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
-        }
         if (JArr_Count(syncingGroups) > 0) {
             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, syncingGroups);
         }
         if (JArr_Count(syncingScenes) > 0) {
             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, syncingScenes);
         }
-        int currentHour = get_hour_today();
-        if (currentHour >= 6 && currentHour < 21) {
-            PlayAudio("ready");
+        if (JArr_Count(syncingDevices) > 0) {
+            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
         }
     } else {
         PlayAudio("cannot_connect_server");

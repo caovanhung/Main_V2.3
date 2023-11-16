@@ -271,6 +271,15 @@ Tính năng IR:
             }
         }
     }
+3. Bản tin ping HC:
+    {
+        "state": {
+            "reported": {
+                "sender": 1,
+                "type": 24
+            }
+        }
+    }
 
 # Convert epoch time to human readable time sqlite3
     SELECT DATETIME(ROUND(time / 1000), 'unixepoch') AS isodate FROM device_histories LIMIT 1;

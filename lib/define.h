@@ -15,7 +15,7 @@
 //UART
 #define UART_GATEWAY1           "/dev/ttyS3"
 #define UART_GATEWAY2           "/dev/ttyS2"
-#define DELAY_SEND_UART_MS         250000
+#define SAVE_DEVICE_KEY_DELAY_MS         200000
 #define _USE_DEBUG_UART //define for debug UART
 #define _USE_DEBUG //define for debug UART
 #define MAXLINE 100000U     //max length for message receive of UART

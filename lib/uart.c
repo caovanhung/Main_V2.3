@@ -256,7 +256,7 @@ bool UART_Send(int fd, char *send_buf,int data_len)
 {
     char tmp[100];
     int len = 0;
-   
+    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
     len = write(fd, send_buf, data_len);
     if (len == data_len) {
         for (int i = 0; i < data_len; i++) {

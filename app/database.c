@@ -853,7 +853,7 @@ int sql_creat_table(sqlite3 **db,char *name_table)
 bool creat_table_database(sqlite3 **db)
 {
     int check = 0;
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS GATEWAY;CREATE TABLE GATEWAY(id INTEGER, name TEXT, isMaster INTEGER, hcAddr TEXT, address TEXT, appkey TEXT, ivIndex TEXT, netkeyIndex TEXT, netkey TEXT, appkeyIndex TEXT, deviceKey TEXT);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS GATEWAY;CREATE TABLE GATEWAY(id INTEGER PRIMARY KEY, name TEXT, isMaster INTEGER, hcAddr TEXT, address TEXT UNIQUE, appkey TEXT, ivIndex TEXT, netkeyIndex TEXT, netkey TEXT, appkeyIndex TEXT, deviceKey TEXT);");
     if(check != 0)
     {
         printf("DELETE GATEWAY is error!\n");
@@ -867,21 +867,21 @@ bool creat_table_database(sqlite3 **db)
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES_INF;CREATE TABLE DEVICES_INF(deviceID TEXT, state INTEGER, name TEXT, MAC TEXT, Unicast TEXT, gwIndex INTEGER, deviceKey TEXT, provider INTEGER, pid TEXT, created INTEGER, modified INTEGER, last_updated INTEGER, firmware TEXT, GroupList TEXT, SceneList TEXT, pageIndex INTEGER, offlineCount INTEGER);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES_INF;CREATE TABLE DEVICES_INF(deviceID TEXT PRIMARY KEY, state INTEGER, name TEXT, MAC TEXT, Unicast TEXT, gwIndex INTEGER, deviceKey TEXT, provider INTEGER, pid TEXT, created INTEGER, modified INTEGER, last_updated INTEGER, firmware TEXT, GroupList TEXT, SceneList TEXT, pageIndex INTEGER, offlineCount INTEGER);");
     if(check != 0)
     {
         printf("DELETE DEVICES_INF is error!\n");
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS GROUP_INF;CREATE TABLE GROUP_INF(groupAdress TEXT, state INTEGER, name TEXT, pid TEXT, isLight INTEGER, devices TEXT, pageIndex INTEGER);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS GROUP_INF;CREATE TABLE GROUP_INF(groupAdress TEXT PRIMARY KEY, state INTEGER, name TEXT, pid TEXT, isLight INTEGER, devices TEXT, pageIndex INTEGER);");
     if(check != 0)
     {
         printf("DELETE GROUP_INF is error!\n");
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS SCENE_INF;CREATE TABLE SCENE_INF(sceneId TEXT,isLocal INTEGER,state INTEGER,name TEXT,sceneType TEXT,actions TEXT,conditions TEXT,created INTEGER,last_updated INTEGER, pageIndex INTEGER, preconditions TEXT);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS SCENE_INF;CREATE TABLE SCENE_INF(sceneId TEXT PRIMARY KEY,isLocal INTEGER,state INTEGER,name TEXT,sceneType TEXT,actions TEXT,conditions TEXT,created INTEGER,last_updated INTEGER, pageIndex INTEGER, preconditions TEXT);");
     if(check != 0)
     {
         printf("DELETE SCENE_INF is error!\n");
@@ -894,5 +894,6 @@ bool creat_table_database(sqlite3 **db)
     //     printf("DELETE SCENE_INF is error!\n");
     //     return false;
     // }
+    // Sql_Exec("VACUUM;");
     return true;
 }

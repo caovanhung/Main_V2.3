@@ -147,6 +147,10 @@ void On_mqttConnect(struct mosquitto *mosq, void *obj, int rc)
 }
 
 void On_mqttMessage(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
+    if (StringCompare((char*)msg->payload, "BLE_PING")) {
+        mosquitto_publish(mosq, NULL, "APPLICATION_SERVICES/AWS/0", strlen("BLE_PONG"), "BLE_PONG", 0, false);
+        return;
+    }
     char* topic = msg->topic;
     List* tmp = String_Split(topic, "/");
     if (tmp->count == 3 && atoi(tmp->items[2]) >= 100) {
@@ -875,7 +879,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_CTR_DEVICE: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     int gwIndex = JSON_GetNumber(payload, "gwIndex");
                     char* pid = JSON_GetText(payload, "pid");
                     cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
@@ -941,7 +945,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_CTR_GROUP_NORMAL: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     int gwIndex = JSON_GetNumber(payload, "gwIndex");
                     char* pid = JSON_GetText(payload, "pid");
                     cJSON* dictDPs = cJSON_GetObjectItem(payload, "dictDPs");
@@ -972,7 +976,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_CTR_SCENE: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* sceneId = JSON_GetText(payload, "sceneId");
                     int gwIndex = JSON_GetNumber(payload, "gwIndex");
                     int state = JSON_GetNumber(payload, "state");
@@ -989,7 +993,7 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_ADD_GROUP_LIGHT:
                 case TYPE_DEL_GROUP_LIGHT: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* devicesArray = JSON_GetObject(payload, "devices");
                     JSON_ForEach(device, devicesArray) {
@@ -1009,7 +1013,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_UPDATE_GROUP_LIGHT: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
                     JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
@@ -1037,7 +1041,7 @@ int main( int argc,char ** argv )
                 }
                 case TYPE_ADD_GROUP_LINK:
                 case TYPE_DEL_GROUP_LINK: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* devicesArray = JSON_GetObject(payload, "devices");
                     JSON_ForEach(device, devicesArray) {
@@ -1058,7 +1062,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_UPDATE_GROUP_LINK: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* groupAddr = JSON_GetText(payload, "groupAddr");
                     JSON* dpsNeedRemove = JSON_GetObject(payload, "dpsNeedRemove");
                     JSON* dpsNeedAdd = JSON_GetObject(payload, "dpsNeedAdd");
@@ -1087,7 +1091,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_ADD_DEVICE: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                     char* devicePid = JSON_GetText(payload, "devicePid");
                     char* deviceKey = JSON_GetText(payload, "deviceKey");
@@ -1100,7 +1104,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_DEL_DEVICE: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* pid = JSON_GetText(payload, "devicePid");
                     char* deviceId = JSON_GetText(payload, "deviceId");
                     char* deviceAddr = JSON_GetText(payload, "deviceAddr");
@@ -1115,7 +1119,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_ADD_SCENE: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* sceneId = JSON_GetText(payload, "id");
                     JSON* actions = JSON_GetObject(payload, "actions");
                     bool ret = addSceneActions(sceneId, actions);
@@ -1128,12 +1132,14 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_DEL_SCENE: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* sceneId = JSON_GetText(payload, "sceneId");
                     logInfo("[TYPE_DEL_SCENE] sceneId = %s", sceneId);
                     JSON* actions = JSON_GetObject(payload, "actions");
-                    bool ret = deleteSceneActions(sceneId, actions);
-                    if (ret && JSON_HasKey(payload, "conditions")) {
+                    if (JSON_HasKey(payload, "actions")) {
+                        deleteSceneActions(sceneId, actions);
+                    }
+                    if (JSON_HasKey(payload, "conditions")) {
                         JSON* conditions = JSON_GetObject(payload, "conditions");
                         JSON_ForEach(c, conditions) {
                             deleteSceneCondition(sceneId, c);
@@ -1142,7 +1148,7 @@ int main( int argc,char ** argv )
                     break;
                 }
                 case TYPE_UPDATE_SCENE: {
-                    sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
+                    // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* sceneId = JSON_GetText(payload, "sceneId");
                     JSON* actionsNeedRemove = JSON_GetObject(payload, "actionsNeedRemove");
                     JSON* actionsNeedAdd = JSON_GetObject(payload, "actionsNeedAdd");

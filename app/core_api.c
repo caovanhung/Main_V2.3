@@ -262,6 +262,7 @@ void Aws_SaveScene(const char* sceneId) {
             sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"actions\":%s, \"conditions\":null}}}}", TYPE_UPDATE_SCENE, SENDER_HC_TO_CLOUD, sceneId, actions);
         }
         sendToServicePageIndex(SERVICE_AWS, GW_RESPONSE_UPDATE_SCENE, pageIndex, payload);
+        free(payload);
     }
 }
 

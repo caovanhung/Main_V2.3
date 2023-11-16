@@ -74,7 +74,9 @@ bool addNewDevice(JSON* packet) {
         JSON_SetNumber(packet, KEY_PROVIDER, atoi(tmp->items[0]));
         JSON_SetText(packet, KEY_PID, pid);
         JSON_SetText(packet, "devicePid", pid);
-        Db_AddDevice(packet);
+        if (Db_AddDevice(packet) == 0) {
+            return false;
+        }
         Db_SaveDeviceState(deviceId, onlineState);
         bool addressIncrement = StringContains(HG_BLE_SWITCH, pid) || StringContains(HG_BLE_CURTAIN, pid)? true : false;
         // Calculate addresses of dps for Homegy switch
@@ -208,6 +210,8 @@ void DeleteDeviceFromGroups(const char* deviceId) {
 
 void DeleteDeviceFromScenes(const char* deviceId) {
     ASSERT(deviceId);
+    long start = time(NULL);
+    logInfo("[DeleteDeviceFromScenes] deviceId=%s, start=%ld", deviceId, start);
     char* sqlCmd = "SELECT sceneId, actions, conditions, pageIndex FROM scene_inf";
     Sql_Query(sqlCmd, row) {
         char* sceneId = sqlite3_column_text(row, 0);
@@ -235,13 +239,20 @@ void DeleteDeviceFromScenes(const char* deviceId) {
             logInfo("Delete scene %s because it has no any action", sceneId);
             if (JArr_Count(newConditions) > 0) {
                 // Send command to delete this scene in this device
-                JSON* tmp = JSON_CreateObject();
-                JSON_SetText(tmp, "id", sceneId);
-                sendPacketTo(SERVICE_CORE, TYPE_DEL_SCENE, tmp);
-                JSON_Delete(tmp);
+                JSON* sceneInfo = Db_FindScene(sceneId);
+                if (sceneInfo) {
+                    int isLocal = JSON_GetNumber(sceneInfo, "isLocal");
+                    if (isLocal) {
+                        Scene_GetFullInfo(sceneInfo);
+                        sendPacketToBle(-1, TYPE_DEL_SCENE, sceneInfo);   // Send packet to BLE
+                    }
+                } else {
+                    logError("Scene %s not found", sceneId);
+                }
+                JSON_Delete(sceneInfo);
             }
-            // Aws_DeleteScene(sceneId);
-            // Db_DeleteScene(sceneId);
+            Aws_DeleteScene(sceneId);
+            Db_DeleteScene(sceneId);
             DeleteDeviceFromScenes(sceneId);
         } else if (JArr_Count(actions) != JArr_Count(newActions) || JArr_Count(conditions) != JArr_Count(newConditions)) {
             logInfo("Update actions and conditions for scene %s", sceneId);
@@ -253,6 +264,8 @@ void DeleteDeviceFromScenes(const char* deviceId) {
         JSON_Delete(newActions);
     }
     Db_LoadSceneToRam();
+    long end = time(NULL);
+    logInfo("[DeleteDeviceFromScenes] deviceId=%s, end=%ld, spent=%d(ms)", deviceId, end, end - start);
 }
 
 
@@ -270,8 +283,12 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc)
 
 void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg)
 {
+    if (StringCompare((char*)msg->payload, "CORE_PING")) {
+        mosquitto_publish(mosq, NULL, "APPLICATION_SERVICES/AWS/0", strlen("CORE_PONG"), "CORE_PONG", 0, false);
+        return;
+    }
     int reponse = 0;
-    bool check_flag =false;
+    bool check_flag = false;
 
     int size_queue = get_sizeQueue(queue_received);
     if (size_queue < QUEUE_SIZE) {
@@ -1407,13 +1424,12 @@ int main(int argc, char ** argv)
                         break;
                     }
                     case GW_RESPONSE_DEVICE_KICKOUT: {
+                        logInfo("GW_RESPONSE_DEVICE_KICKOUT");
                         char* hcAddr = JSON_GetText(payload, "hcAddr");
                         char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                         DeviceInfo deviceInfo;
                         int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr, hcAddr);
                         if (foundDevices == 1) {
-                            Db_DeleteDevice(deviceInfo.id);
-                            Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
                             if (StringContains(HG_BLE_IR_FULL, deviceInfo.pid)) {
                                 // Remove TV, AC, FAN, Remote
                                 char sqlCmd[200];
@@ -1422,14 +1438,20 @@ int main(int argc, char ** argv)
                                     char* deviceId = sqlite3_column_text(row, 0);
                                     int pageIndex = sqlite3_column_int(row, 15);
                                     Aws_DeleteDevice(deviceId, pageIndex);
+                                    DeleteDeviceFromScenes(deviceId);
                                 }
                                 sprintf(sqlCmd, "DELETE FROM devices_inf WHERE unicast = '%s'", deviceAddr);
                                 Sql_Exec(sqlCmd);
                                 sprintf(sqlCmd, "DELETE FROM devices WHERE address = '%s'", deviceAddr);
                                 Sql_Exec(sqlCmd);
+                            } else {
+                                DeleteDeviceFromGroups(deviceInfo.id);
+                                DeleteDeviceFromScenes(deviceInfo.id);
+                                Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
+                                Db_DeleteDevice(deviceInfo.id);
                             }
-                            DeleteDeviceFromGroups(deviceInfo.id);
-                            DeleteDeviceFromScenes(deviceInfo.id);
+                        } else {
+                            logError("Device %s in hc %s is not found", deviceAddr, hcAddr);
                         }
                         break;
                     }
@@ -1593,7 +1615,10 @@ int main(int argc, char ** argv)
                         Db_DeleteDevice(deviceId);
                         logInfo("Adding device: %s", deviceId);
                         // Insert device to database
-                        addNewDevice(payload);
+                        if (addNewDevice(payload) == false) {
+                            PlayAudio("add_device_error");
+                            break;
+                        }
                         int provider = JSON_GetNumber(payload, "provider");
                         if (provider == HOMEGY_BLE) {
                             char* gatewayAddr = JSON_GetText(payload, "gateWay");
@@ -1653,13 +1678,16 @@ int main(int argc, char ** argv)
                     }
                     case TYPE_SYNC_DB_DEVICES: {
                         logInfo("TYPE_SYNC_DB_DEVICES");
+                        int failedCount = 0;
                         Db_DeleteAllDevices();
                         // Add new devices from cloud
                         JSON_ForEach(d, payload) {
                             char* tmp = cJSON_PrintUnformatted(d);
                             printf("Adding device: %s\n", tmp);
                             free(tmp);
-                            addNewDevice(d);
+                            if (addNewDevice(d) == false) {
+                                failedCount++;
+                            }
                             int provider = JSON_GetNumber(d, "provider");
                             if (provider == HOMEGY_BLE) {
                                 char* gatewayAddr = JSON_GetText(d, "gateWay");
@@ -1669,10 +1697,19 @@ int main(int argc, char ** argv)
                                     JSON_SetNumber(d, "gatewayId", gatewayId);
                                     // printf("ok: %s\n", cJSON_PrintUnformatted(d));
                                     sendPacketToBle(gatewayId, TYPE_ADD_DEVICE, d);
+                                    usleep(SAVE_DEVICE_KEY_DELAY_MS);
                                 } else {
                                     logError("Gateway %s is not found", gatewayAddr);
                                 }
                             }
+                        }
+                        if (failedCount == 0) {
+                            int currentHour = get_hour_today();
+                            if (currentHour >= 6 && currentHour < 21) {
+                                PlayAudio("ready");
+                            }
+                        } else {
+                            PlayAudio("sync_device_error");
                         }
                         break;
                     }
@@ -1680,6 +1717,7 @@ int main(int argc, char ** argv)
                         logInfo("TYPE_SYNC_DB_GROUPS");
                         Db_DeleteAllGroup();
                         int groupCount = 0;
+                        int failedCount = 0;
                         JSON_ForEach(group, payload) {
                             char* groupAddr = JSON_GetText(group, "groupAddr");
                             char* groupName = JSON_GetText(group, "name");
@@ -1687,22 +1725,33 @@ int main(int argc, char ** argv)
                             char* pid = JSON_GetText(group, "pid");
                             int isLight = StringCompare(pid, "BLEHGAA0101")? 0 : 1;
                             int pageIndex = JSON_GetNumber(group, "pageIndex");
-                            Db_AddGroup(groupAddr, groupName, devices, isLight, pid, pageIndex);
+                            if (Db_AddGroup(groupAddr, groupName, devices, isLight, pid, pageIndex) == 0) {
+                                failedCount++;
+                            }
                             groupCount++;
                             free(devices);
                         }
                         logInfo("Added %d groups", groupCount);
+                        if (failedCount > 0) {
+                            PlayAudio("sync_group_error");
+                        }
                         break;
                     }
                     case TYPE_SYNC_DB_SCENES: {
                         logInfo("TYPE_SYNC_DB_SCENES");
                         Db_DeleteAllScene();
                         int sceneCount = 0;
+                        int failedCount = 0;
                         JSON_ForEach(scene, payload) {
-                            Db_AddScene(scene);
+                            if (Db_AddScene(scene) == 0) {
+                                failedCount++;
+                            }
                             sceneCount++;
                         }
-                        logInfo("Added %d scenes", sceneCount);;
+                        logInfo("Added %d scenes", sceneCount);
+                        if (failedCount > 0) {
+                            PlayAudio("sync_scene_error");
+                        }
                         break;
                     }
                     case TYPE_ADD_GW: {
@@ -1722,7 +1771,10 @@ int main(int argc, char ** argv)
                     case TYPE_ADD_SCENE: {
                         int isLocal = JSON_GetNumber(payload, "isLocal");
                         g_sceneTobeUpdated = JSON_Clone(payload);  // Save scene info so that we can save it to aws later
-                        Db_AddScene(payload);  // Insert scene into database
+                        if (Db_AddScene(payload) == 0) {  // Insert scene into database
+                            PlayAudio("add_scene_error");
+                            break;
+                        }
                         Scene_GetFullInfo(payload);
                         if (isLocal) {
                             sendPacketToBle(-1, TYPE_ADD_SCENE, payload);
@@ -1949,7 +2001,10 @@ int main(int argc, char ** argv)
                         if (StringContains(pid, "BLE")) {
                             sendPacketToBle(-1, reqType, payload); // Send to all HC
                             char* devicesStr = cJSON_PrintUnformatted(devices);
-                            Db_AddGroup(groupAddr, groupName, devicesStr, true, pid, pageIndex);
+                            if (Db_AddGroup(groupAddr, groupName, devicesStr, true, pid, pageIndex) == 0) {
+                                PlayAudio("add_group_error");
+                                break;
+                            }
                             free(devicesStr);
                             // Add this request to response list for checking response
                             JSON_ForEach(d, devices) {
@@ -2064,7 +2119,10 @@ int main(int argc, char ** argv)
                         char* groupName = JSON_GetText(payload, "name");
                         char* pid = JSON_GetText(payload, "pid");
                         char* devicesStr = cJSON_PrintUnformatted(devices);
-                        Db_AddGroup(groupAddr, groupName, devicesStr, false, pid, pageIndex);
+                        if (Db_AddGroup(groupAddr, groupName, devicesStr, false, pid, pageIndex) == 0) {
+                            PlayAudio("add_group_error");
+                            break;
+                        }
                         free(devicesStr);
                         // Add this request to response list for checking response
                         JSON_ForEach(d, devices) {
