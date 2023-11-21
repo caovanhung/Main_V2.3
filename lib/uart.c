@@ -3,6 +3,7 @@
 #include "execinfo.h"
 #include <stdbool.h>
 #include "helper.h"
+#include "aws_mosquitto.h"
 
 FILE *fptr;
 int UART_Open(int fd,char* port)

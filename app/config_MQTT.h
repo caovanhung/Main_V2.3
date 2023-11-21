@@ -15,10 +15,10 @@
 
 #include "core_mqtt.h"
 
-#define AWS_IOT_ENDPOINT            "a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com"
+#define AWS_IOT_ENDPOINT            "a1i465rylwjuwn-ats.iot.ap-southeast-1.amazonaws.com"
 #define ROOT_CA_CERT_PATH           "/usr/bin/AmazonRootCA1.pem"
-#define CLIENT_CERT_PATH            "/usr/bin/c8f9a13dc7c253251b9e250439897bc010f501edd780348ecc1c2e91add22237-certificate.pem.crt"
-#define CLIENT_PRIVATE_KEY_PATH     "/usr/bin/c8f9a13dc7c253251b9e250439897bc010f501edd780348ecc1c2e91add22237-private.pem.key"
+#define CLIENT_CERT_PATH            "/usr/bin/912ec97a119071a5b50180d37857fa97408aefeba4d7206d5135f2182fcb1d0a-certificate.pem.crt"
+#define CLIENT_PRIVATE_KEY_PATH     "/usr/bin/912ec97a119071a5b50180d37857fa97408aefeba4d7206d5135f2182fcb1d0a-private.pem.key"
 
 #define MQTT_LIB    "core-mqtt@" MQTT_LIBRARY_VERSION
 

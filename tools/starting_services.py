@@ -78,7 +78,7 @@ def getMasterIp():
             if failedCount >= 6:
                 failedCount = 0
                 file_path = Path("/home/szbaijie/hc_bin/cfg")
-                if !file_path.exists():
+                if not file_path.exists():
                     os.system("aplay /home/szbaijie/audio/master_not_found.wav")
     sock.close()
 
@@ -97,7 +97,9 @@ def removeOldLogs(folder):
                 os.remove(folder + "/" + f)
 
 def main():
-    os.remove("/home/szbaijie/hc_bin/cfg");
+    file_path = Path("/home/szbaijie/hc_bin/cfg")
+    if file_path.exists():
+        os.remove("/home/szbaijie/hc_bin/cfg");
     os.system("nmcli r wifi on")
     # Create logs folder if not exist
     logsPath = "/home/szbaijie/hc_bin/logs/"

@@ -1063,14 +1063,14 @@ void Aws_SendMergePayload() {
         }
 
         g_coreServiceWatchdog++;
-        if (g_coreServiceWatchdog > 60) {
+        if (g_coreServiceWatchdog > 120) {
             g_coreServiceWatchdog = 0;
             logInfo("Restarting CORE service");
             system("systemctl restart hg_core");
         }
 
         g_bleServiceWatchdog++;
-        if (g_bleServiceWatchdog > 60) {
+        if (g_bleServiceWatchdog > 240) {
             g_bleServiceWatchdog = 0;
             logInfo("Restarting BLE service");
             system("systemctl restart hg_ble");

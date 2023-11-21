@@ -176,8 +176,12 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
                     fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\",\"isMaster\":%d,\"hcAddr\":\"%s\"}", g_accountId, g_homeId, isMaster, hcAddr);
                     fclose(f);
                     // Send message to BLE service to configure gateway
-                    sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
-                    sendPacketTo("CORE_LOCAL", TYPE_RESET_DATABASE, g_gatewayInfo);
+                    // sendPacketTo("BLE_LOCAL", TYPE_ADD_GW, g_gatewayInfo);
+                    // sendPacketTo("CORE_LOCAL", TYPE_RESET_DATABASE, g_gatewayInfo);
+                    if (g_sharedMemory > 0) {
+                        g_sharedMemory[0] = TYPE_ADD_GW;
+                        StringCopy(g_sharedMemory + SHM_PAYLOAD_OFFSET, cJSON_PrintUnformatted(g_gatewayInfo));
+                    }
                 }
             } else {
                 g_gatewayInfo = NULL;
@@ -366,6 +370,7 @@ void MainLoop() {
                     state = 1;
                     // Create wifi hotspot
                     system("touch /home/szbaijie/hc_bin/cfg");
+                    system("pkill -15 create_ap");
                     LED_SLOW_FLASH;
                     g_wifiConnectDone = false;
                     system("nmcli r wifi off");
@@ -386,7 +391,7 @@ void MainLoop() {
             break;
         case 2:
             // Wait for button press or finished configuration
-            if (pinRead(USER_BUTTON) == 0 || g_wifiConnectDone) {
+            if (g_wifiConnectDone) {
                 count = 0;
                 LED_ON;
                 if (g_wifiIsConnected) {
@@ -411,13 +416,19 @@ void MainLoop() {
                     }
                 } else {
                     LED_ON;
+                    // pclose(g_createApFile);
+                    system("pkill -15 create_ap");
                 }
                 if (!g_needConfigGw) {
                     system("pkill -15 create_ap");
                 }
-                // pclose(g_createApFile);
                 logInfo("Done configuring");
                 state = 0;
+            } else if (pinRead(USER_BUTTON) == 0) {
+                state = 0;
+                LED_ON;
+                logInfo("Cancelled configuring");
+                PlayAudio("wifi_config_cancel");
             }
             break;
         }

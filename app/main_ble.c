@@ -113,7 +113,10 @@ void ProcessSharedMemory() {
     if (g_sharedMemory[0] == TYPE_ADD_GW) {
         g_sharedMemory[0] = 0;
         logInfo("Configuring gateway: %s", &g_sharedMemory[SHM_PAYLOAD_OFFSET]);
-        AddGateway(JSON_Parse(&g_sharedMemory[SHM_PAYLOAD_OFFSET]));
+        JSON* payload = JSON_Parse(&g_sharedMemory[SHM_PAYLOAD_OFFSET]);
+        if (payload) {
+            AddGateway(payload);
+        }
     }
 }
 
@@ -637,58 +640,60 @@ void addDeviceToRespList(int reqType, const char* itemId, const char* addr) {
 
 
 void AddGateway(JSON* payload) {
+    logInfo("AddGateway: %s", cJSON_PrintUnformatted(payload));
     char* gatewayAddr = JSON_GetText(payload, "gateway1");
-    if (StringCompare(gatewayAddr, g_hcAddr)) {
-        int needToConfig = true;
-        if (JSON_HasKey(payload, "needToConfig")) {
-            needToConfig = JSON_GetNumber(payload, "needToConfig");
-        }
+    int needToConfig = true;
+    if (JSON_HasKey(payload, "needToConfig")) {
+        needToConfig = JSON_GetNumber(payload, "needToConfig");
+    }
 
-        if (JSON_HasKey(payload, "GWCFG_TIMEOUT_SCENEGROUP")) {
-            GWCFG_TIMEOUT_SCENEGROUP = JSON_GetNumber(payload, "GWCFG_TIMEOUT_SCENEGROUP");
-        }
-        if (JSON_HasKey(payload, "GWCFG_TIMEOUT_ONLINE")) {
-            GWCFG_TIMEOUT_ONLINE = JSON_GetNumber(payload, "GWCFG_TIMEOUT_ONLINE");
-        }
-        if (JSON_HasKey(payload, "GWCFG_TIMEOUT_DEFAULT")) {
-            GWCFG_TIMEOUT_DEFAULT = JSON_GetNumber(payload, "GWCFG_TIMEOUT_DEFAULT");
-        }
-        if (JSON_HasKey(payload, "GWCFG_MIN_TIME_SCENEGROUP")) {
-            GWCFG_MIN_TIME_SCENEGROUP = JSON_GetNumber(payload, "GWCFG_MIN_TIME_SCENEGROUP");
-        }
-        if (JSON_HasKey(payload, "GWCFG_MIN_TIME_ONLINE")) {
-            GWCFG_MIN_TIME_ONLINE = JSON_GetNumber(payload, "GWCFG_MIN_TIME_ONLINE");
-        }
-        if (JSON_HasKey(payload, "GWCFG_MIN_TIME_DEFAULT")) {
-            GWCFG_MIN_TIME_DEFAULT = JSON_GetNumber(payload, "GWCFG_MIN_TIME_DEFAULT");
-        }
-        if (JSON_HasKey(payload, "GWCFG_GET_ONLINE_TIME")) {
-            GWCFG_GET_ONLINE_TIME = JSON_GetNumber(payload, "GWCFG_GET_ONLINE_TIME");
-            logInfo("GWCFG_GET_ONLINE_TIME: %d", GWCFG_GET_ONLINE_TIME);
-        }
+    if (JSON_HasKey(payload, "GWCFG_TIMEOUT_SCENEGROUP")) {
+        GWCFG_TIMEOUT_SCENEGROUP = JSON_GetNumber(payload, "GWCFG_TIMEOUT_SCENEGROUP");
+    }
+    if (JSON_HasKey(payload, "GWCFG_TIMEOUT_ONLINE")) {
+        GWCFG_TIMEOUT_ONLINE = JSON_GetNumber(payload, "GWCFG_TIMEOUT_ONLINE");
+    }
+    if (JSON_HasKey(payload, "GWCFG_TIMEOUT_DEFAULT")) {
+        GWCFG_TIMEOUT_DEFAULT = JSON_GetNumber(payload, "GWCFG_TIMEOUT_DEFAULT");
+    }
+    if (JSON_HasKey(payload, "GWCFG_MIN_TIME_SCENEGROUP")) {
+        GWCFG_MIN_TIME_SCENEGROUP = JSON_GetNumber(payload, "GWCFG_MIN_TIME_SCENEGROUP");
+    }
+    if (JSON_HasKey(payload, "GWCFG_MIN_TIME_ONLINE")) {
+        GWCFG_MIN_TIME_ONLINE = JSON_GetNumber(payload, "GWCFG_MIN_TIME_ONLINE");
+    }
+    if (JSON_HasKey(payload, "GWCFG_MIN_TIME_DEFAULT")) {
+        GWCFG_MIN_TIME_DEFAULT = JSON_GetNumber(payload, "GWCFG_MIN_TIME_DEFAULT");
+    }
+    if (JSON_HasKey(payload, "GWCFG_GET_ONLINE_TIME")) {
+        GWCFG_GET_ONLINE_TIME = JSON_GetNumber(payload, "GWCFG_GET_ONLINE_TIME");
+        logInfo("GWCFG_GET_ONLINE_TIME: %d", GWCFG_GET_ONLINE_TIME);
+    }
 
-        if (needToConfig) {
-            provison_inf PRV;
-            char* message = "{\"step\":3, \"message\":\"Đang cấu hình bộ trung tâm\"}";
-            mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
-            PlayAudio("configuring_gateway");
-            sendToService(SERVICE_CFG, 0, "LED_FAST_FLASH");
-            ble_getInfoProvison(&PRV, payload);
-            GW_ConfigGateway(0, &PRV);
-            sleep(1);
-            if (PRV.deviceKey2 != NULL && PRV.address2 != NULL) {
-                GW_ConfigGateway(1, &PRV);
-            }
-            sendToService(SERVICE_CFG, 0, "LED_ON");
-            char* message2 = "{\"step\":4, \"message\":\"cấu hình bộ trung tâm thành công, đang khởi động lại thiết bị\"}";
-            mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message2), message2, 0, false);
-            PlayAudio("gateway_end_restarting");
-            PlayAudio("device_restart_warning");
-            system("systemctl stop hg_core");
-            system("cp /home/szbaijie/main_origin.db /home/szbaijie/main.db");
-            sleep(1);
-            system("reboot");
+    if (needToConfig) {
+        provison_inf PRV;
+        char* message = "{\"step\":3, \"message\":\"Đang cấu hình bộ trung tâm\"}";
+        mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message), message, 0, false);
+        PlayAudio("configuring_gateway");
+        sendToService(SERVICE_CFG, 0, "LED_FAST_FLASH");
+        ble_getInfoProvison(&PRV, payload);
+        GW_ConfigGateway(0, &PRV);
+        sleep(1);
+        if (PRV.deviceKey2 != NULL && PRV.address2 != NULL) {
+            GW_ConfigGateway(1, &PRV);
         }
+        sendToService(SERVICE_CFG, 0, "LED_ON");
+        char* message2 = "{\"step\":4, \"message\":\"cấu hình bộ trung tâm thành công, đang khởi động lại thiết bị\"}";
+        mosquitto_publish(mosq, NULL, MQTT_LOCAL_RESP_TOPIC, strlen(message2), message2, 0, false);
+        PlayAudio("gateway_end_restarting");
+        PlayAudio("device_restart_warning");
+        system("systemctl stop hg_core");
+        system("cp /home/szbaijie/main_origin.db /home/szbaijie/main.db");
+        // Reboot master
+        char* message = "{\"state\":{\"reported\": {\"sender\": 1,\"type\": 39,\"reboot\": 1}}}";
+        mosquitto_publish(mosq, NULL, "APPLICATION_SERVICES/AWS/0", strlen(message), message, 0, false);
+        sleep(1);
+        system("reboot");
     }
 }
 
@@ -779,12 +784,18 @@ void GetIpAddressLoop() {
 
 void GetDevicesStateProcess() {
     static long long int oldTick = 0;
+    static long long int resetWdtTick = 0;
 
     if (GWCFG_GET_ONLINE_TIME >= 10000 && timeInMilliseconds() - oldTick > GWCFG_GET_ONLINE_TIME) {
         oldTick = timeInMilliseconds();
         // Sending broadcast frame to get real device status
         logInfo("Sending broadcast frame to get real device status: %d", GWCFG_GET_ONLINE_TIME);
         GW_GetDevicesOnOffBroardcast(0);
+    }
+
+    if (timeInMilliseconds() - resetWdtTick > 20000) {
+        resetWdtTick = timeInMilliseconds();
+        UART_Send(g_gatewayFds[1], "Hello", 5);
     }
 }
 
@@ -815,7 +826,7 @@ int main( int argc,char ** argv )
     usleep(50000);
 
     do {
-        err = UART_Init(g_gatewayFds[1], 115200, 0, 8, 1, 'N');
+        err = UART_Init(g_gatewayFds[1], 4800, 0, 8, 1, 'N');
         usleep(50000);
     }
     while (-1 == err || -1 == g_gatewayFds[1]);
@@ -875,7 +886,7 @@ int main( int argc,char ** argv )
             char* dpAddr, *groupAddr;
             switch (reqType) {
                 case TYPE_ADD_GW: {
-                    AddGateway(payload);
+                    // AddGateway(payload);
                     break;
                 }
                 case TYPE_CTR_DEVICE: {

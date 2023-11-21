@@ -73,8 +73,8 @@ JSON* Aws_GetShadow(const char* thingName, const char* shadowName) {
     char result[100000];
     char request[500];
     char url[200];
-    sprintf(url, "https://a2376tec8bakos-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", thingName, shadowName);
-    char* certName = "c8f9a13dc7c253251b9e250439897bc010f501edd780348ecc1c2e91add22237";
+    sprintf(url, "https://a1i465rylwjuwn-ats.iot.ap-southeast-1.amazonaws.com:8443/things/%s/shadow?name=%s", thingName, shadowName);
+    char* certName = "912ec97a119071a5b50180d37857fa97408aefeba4d7206d5135f2182fcb1d0a";
     sprintf(request, "curl --connect-timeout 10 --tlsv1.2 --cacert /usr/bin/AmazonRootCA1.pem --cert /usr/bin/%s-certificate.pem.crt --key /usr/bin/%s-private.pem.key  %s", certName, certName, url);
     printInfo(request);
     printInfo("\n");
@@ -218,11 +218,13 @@ void Aws_SyncDatabase() {
         if (JArr_Count(syncingDevices) > 0) {
             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
         }
+
+        if (JArr_Count(syncingGroups) == 0 && JArr_Count(syncingScenes) == 0 && JArr_Count(syncingDevices) == 0) {
+            PlayAudio("ready");
+        }
     } else {
         PlayAudio("cannot_connect_server");
     }
-
-    JSON_Delete(syncingDevices);
     JSON_Delete(syncingGroups);
     JSON_Delete(syncingScenes);
 }
