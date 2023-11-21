@@ -865,7 +865,7 @@ void Aws_ProcessLoop() {
 void Mosq_Init() {
     mosquitto_lib_init();
     mosq = mosquitto_new("HG_AWS", true, NULL);
-    rc = mosquitto_username_pw_set(mosq, "MqttLocalHomegy", "Homegysmart");
+    rc = mosquitto_username_pw_set(mosq, "homegyinternal", "sgSk@ui41DA09#Lab%1");
     if(rc != 0)
     {
         LogInfo((get_localtime_now()),("mosquitto_username_pw_set! Error Code: %d\n", rc));

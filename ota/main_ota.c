@@ -640,34 +640,6 @@ int Aws_PublishMessage(const char* pTopic, const char* pMessage) {
     return returnStatus;
 }
 
-void on_connect(struct mosquitto *mosq, void *obj, int rc) {
-    if(rc) {
-        printf("Error with result code: %d\n", rc);
-        exit(-1);
-    }
-    mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_AWS, 0);
-    mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_CONTROL_LOCAL, 0);
-}
-
-void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
-    if (StringCompare(msg->topic, MOSQ_TOPIC_CONTROL_LOCAL)) {
-        char* payload = calloc((int)msg->payloadlen + 1, sizeof(char));
-        strncpy(payload, msg->payload, msg->payloadlen);
-        payload[(int)msg->payloadlen] = '\0';
-        int size_queue = get_sizeQueue(queue_received_aws);
-        if(size_queue < QUEUE_SIZE) {
-            enqueue(queue_received_aws, payload);
-        }
-        free(payload);
-    } else {
-        int size_queue = get_sizeQueue(queue_mos_sub);
-        if (size_queue < QUEUE_SIZE) {
-            enqueue(queue_mos_sub, (char *) msg->payload);
-        }
-    }
-}
-
-
 void Aws_Init() {
     int returnStatus = EXIT_SUCCESS;
     networkContext.pParams = &opensslParams;
@@ -713,38 +685,6 @@ void Aws_ProcessLoop() {
     }
 }
 
-void Mosq_Init() {
-    mosquitto_lib_init();
-    mosq = mosquitto_new("HG_OTA", true, NULL);
-    int rc = mosquitto_username_pw_set(mosq, "MqttLocalHomegy", "Homegysmart");
-    if (rc != 0) {
-        LogInfo((get_localtime_now()),("mosquitto_username_pw_set! Error Code: %d\n", rc));
-        return;
-    }
-    mosquitto_connect_callback_set(mosq, on_connect);
-    mosquitto_message_callback_set(mosq, on_message);
-    rc = mosquitto_connect(mosq, MQTT_MOSQUITTO_HOST, MQTT_MOSQUITTO_PORT, MQTT_MOSQUITTO_KEEP_ALIVE);
-    if (rc != 0) {
-        logInfo("Client could not connect to broker! Error Code: %d\n", rc);
-        mosquitto_destroy(mosq);
-        return;
-    }
-    logInfo("Mosq_Init done");
-    g_mosqIsConnected = true;
-}
-
-void Mosq_ProcessLoop() {
-    if (g_mosqIsConnected) {
-        int rc = mosquitto_loop(mosq, 5, 1);
-        if (rc != 0) {
-            logError("mosquitto_loop error: %d.", rc);
-            g_mosqIsConnected = false;
-        }
-    } else {
-        mosquitto_destroy(mosq);
-        Mosq_Init();
-    }
-}
 
 void CheckNewForceVersion() {
     // PlayAudio("version_checking");

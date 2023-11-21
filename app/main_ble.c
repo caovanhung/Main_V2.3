@@ -173,7 +173,7 @@ void Mosq_Init(const char* clientId) {
     int rc = 0;
     mosquitto_lib_init();
     mosq = mosquitto_new(clientId, true, NULL);
-    rc = mosquitto_username_pw_set(mosq, "MqttLocalHomegy", "Homegysmart");
+    rc = mosquitto_username_pw_set(mosq, "homegyinternal", "sgSk@ui41DA09#Lab%1");
     mosquitto_connect_callback_set(mosq, On_mqttConnect);
     mosquitto_message_callback_set(mosq, On_mqttMessage);
     logInfo("[Mosq_Init] Connecting to %s", g_mosqIP);

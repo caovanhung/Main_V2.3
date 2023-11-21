@@ -93,7 +93,7 @@ void* RUN_MQTT_LOCAL(void* p)
     int rc = 0;
     mosquitto_lib_init();
     mosq = mosquitto_new(MQTT_MOSQUITTO_CIENT_ID, true, NULL);
-    rc = mosquitto_username_pw_set(mosq, "MqttLocalHomegy", "Homegysmart");
+    rc = mosquitto_username_pw_set(mosq, "homegyinternal", "sgSk@ui41DA09#Lab%1");
     mosquitto_connect_callback_set(mosq, on_connect);
     mosquitto_message_callback_set(mosq, on_message);
     rc = mosquitto_connect(mosq, MQTT_MOSQUITTO_HOST, MQTT_MOSQUITTO_PORT, MQTT_MOSQUITTO_KEEP_ALIVE);

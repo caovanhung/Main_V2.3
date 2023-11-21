@@ -220,10 +220,16 @@ void Aws_SyncDatabase() {
         }
 
         if (JArr_Count(syncingGroups) == 0 && JArr_Count(syncingScenes) == 0 && JArr_Count(syncingDevices) == 0) {
-            PlayAudio("ready");
+            int currentHour = get_hour_today();
+            if (currentHour >= 6 && currentHour < 21) {
+                PlayAudio("ready");
+            }
         }
     } else {
-        PlayAudio("cannot_connect_server");
+        int currentHour = get_hour_today();
+        if (currentHour >= 6 && currentHour < 21) {
+            PlayAudio("cannot_connect_server");
+        }
     }
     JSON_Delete(syncingGroups);
     JSON_Delete(syncingScenes);

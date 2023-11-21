@@ -397,8 +397,8 @@ func MqttInit() {
     opts := mqtt.NewClientOptions()
     opts.AddBroker(fmt.Sprintf("tcp://localhost:1883"))
     opts.SetClientID("kjhfpslkjwkmcs")
-    opts.SetUsername("MqttLocalHomegy")
-    opts.SetPassword("Homegysmart")
+    opts.SetUsername("homegyinternal")
+    opts.SetPassword("sgSk@ui41DA09#Lab%1")
     opts.SetDefaultPublishHandler(Mqtt_OnReceivedMessage)
     opts.OnConnect = Mqtt_OnConnectHandler
     opts.OnConnectionLost = Mqtt_OnConnectLostHandler
