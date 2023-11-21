@@ -1,0 +1,5 @@
+user homegyinternal
+topic readwrite #
+
+user homegy
+topic readwrite /topic/detected/#

@@ -305,3 +305,20 @@ ngrok config edit
         addr: 22
 ngrok service install --config $HOME/.config/ngrok/ngrok.yml
 ngrok service start
+
+# golang
+cd ~
+curl -OL https://golang.org/dl/go1.21.1.linux-arm64.tar.gz
+sudo tar -C /usr/local -xvf go1.21.1.linux-arm64.tar.gz
+sudo nano ~/.profile
+export PATH=$PATH:/usr/local/go/bin
+source ~/.profile
+go version
+
+# mosquitto account
+Public: homegy/1111
+Internal: homegyinternal/sgSk@ui41DA09#Lab%1
+
+# find python packages location
+cd ~
+python3 -m site   =>  /usr/lib/python3/dist-packages/

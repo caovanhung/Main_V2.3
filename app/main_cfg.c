@@ -376,7 +376,12 @@ void MainLoop() {
                     system("nmcli r wifi off");
                     // system("rfkill unblock wlan");
                     system("nmcli r wifi on");
-                    g_createApFile = popen("create_ap -n wlan0 hc2023", "r");
+                    // Generate a random 4-digit number
+                    int random_number = rand() % 10000;
+                    // Create a string with the fixed prefix and the random number
+                    char cmd[100]; // "Homegy" + 4 digits + '\0'
+                    sprintf(cmd, "create_ap -n wlan0 Homegy%04d", random_number);
+                    g_createApFile = popen(cmd, "r");
                     PlayAudio("config_mode_active");
                 }
             } else {
@@ -490,6 +495,7 @@ void AutoResetNetwork() {
 }
 
 int main(int argc, char ** argv) {
+    srand((unsigned int)time(NULL));
     for (int i = 0; i < SERVICES_NUMBER; i++) {
         g_logQueues[i] = newQueue(LOG_QUEUE_SIZE);
     }

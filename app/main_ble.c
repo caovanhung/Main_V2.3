@@ -690,8 +690,8 @@ void AddGateway(JSON* payload) {
         system("systemctl stop hg_core");
         system("cp /home/szbaijie/main_origin.db /home/szbaijie/main.db");
         // Reboot master
-        char* message = "{\"state\":{\"reported\": {\"sender\": 1,\"type\": 39,\"reboot\": 1}}}";
-        mosquitto_publish(mosq, NULL, "APPLICATION_SERVICES/AWS/0", strlen(message), message, 0, false);
+        char* message3 = "{\"state\":{\"reported\": {\"sender\": 1,\"type\": 39,\"reboot\": 1}}}";
+        mosquitto_publish(mosq, NULL, "APPLICATION_SERVICES/AWS/0", strlen(message3), message3, 0, false);
         sleep(1);
         system("reboot");
     }

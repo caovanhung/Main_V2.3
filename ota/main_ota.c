@@ -882,6 +882,9 @@ int main( int argc,char ** argv ) {
                         } else {
                             logInfo("TYPE_OTA_HC with default version");
                             ForceUpdate();
+                            char* topic = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_PUB);
+                            Aws_PublishMessage(topic, "Updating...");
+                            free(topic);
                         }
                         break;
                     }

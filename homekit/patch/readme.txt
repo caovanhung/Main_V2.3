@@ -1,0 +1,1 @@
+Apply patch files to folder: /root/go/pkg/mod/github.com/brutella/hap@v0.0.26
