@@ -1226,17 +1226,16 @@ int main( int argc,char ** argv ) {
                         break;
                     case TYPE_GET_LOG:
                         logInfo("TYPE_GET_LOG");
+                        char* topic = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_PUB);
                         if (JSON_HasKey(reported, "fileName")) {
                             char cmd[200];
                             char* fileName = JSON_GetText(reported, "fileName");
                             sprintf(cmd, "python3 /usr/bin/uploadFile.pyc %s %s", fileName, g_homeId);
                             logInfo("Uploading file %s to S3", fileName);
                             system(cmd);
-                            char* topic = Aws_GetTopic(PAGE_NONE, 0, TOPIC_NOTI_PUB);
                             char str[200];
                             sprintf(str, "{\"sender\":11, \"type\": %d, \"message\": \"DONE\"}", TYPE_GET_LOG);
                             mqttCloudPublish(topic, str);
-                            free(topic);
                         } else if (JSON_HasKey(reported, "reboot")) {
                             char str[200];
                             sprintf(str, "{\"sender\":11, \"type\": %d, \"message\": \"RESTARTING\"}", TYPE_GET_LOG);
@@ -1251,6 +1250,7 @@ int main( int argc,char ** argv ) {
                             sprintf("ssh -R hg_%s:22:localhost:22 serveo.net", g_homeId);
                             popen(cmd, "r");
                         }
+                        free(topic);
                         break;
                 }
             }
