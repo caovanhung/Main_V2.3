@@ -209,14 +209,14 @@ void Aws_SyncDatabase() {
         sendPacketTo(SERVICE_CORE, TYPE_ADD_GW, gatewayInfo);
         JSON_Delete(gatewayInfo);
 
+        if (JArr_Count(syncingDevices) > 0) {
+            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
+        }
         if (JArr_Count(syncingGroups) > 0) {
             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_GROUPS, syncingGroups);
         }
         if (JArr_Count(syncingScenes) > 0) {
             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, syncingScenes);
-        }
-        if (JArr_Count(syncingDevices) > 0) {
-            sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_DEVICES, syncingDevices);
         }
 
         if (JArr_Count(syncingGroups) == 0 && JArr_Count(syncingScenes) == 0 && JArr_Count(syncingDevices) == 0) {
