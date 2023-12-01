@@ -240,10 +240,9 @@ Tính năng IR:
         {
             "state": {
                 "reported": {
-                        "type": 37,
-                        "sender": 1,
-                        "checkVersion": 0
-                    }
+                    "type": 37,
+                    "sender": 1,
+                    "checkVersion": 0
                 }
             }
         }

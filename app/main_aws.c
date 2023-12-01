@@ -1238,8 +1238,18 @@ int main( int argc,char ** argv ) {
                             mqttCloudPublish(topic, str);
                             free(topic);
                         } else if (JSON_HasKey(reported, "reboot")) {
+                            char str[200];
+                            sprintf(str, "{\"sender\":11, \"type\": %d, \"message\": \"RESTARTING\"}", TYPE_GET_LOG);
+                            mqttCloudPublish(topic, str);
                             PlayAudio("restarting");
                             system("reboot");
+                        } else if (JSON_HasKey(reported, "remotessh")) {
+                            char str[200];
+                            sprintf(str, "{\"sender\":11, \"type\": %d, \"message\": \"ENABLED_SSH\"}", TYPE_GET_LOG);
+                            mqttCloudPublish(topic, str);
+                            char cmd[200];
+                            sprintf("ssh -R hg_%s:22:localhost:22 serveo.net", g_homeId);
+                            popen(cmd, "r");
                         }
                         break;
                 }

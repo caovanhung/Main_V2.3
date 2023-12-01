@@ -154,7 +154,7 @@ void Aws_DeleteDevice(const char* deviceId, int pageIndex) {
 void Aws_SaveDeviceState(const char* deviceId, int state, int pageIndex) {
     ASSERT(deviceId);
     char payload[200];
-    sprintf(payload,"{\"state\": {\"reported\": {\"type\": %d,\"sender\":%d,\"%s\": {\"state\":%d}}}}", TYPE_UPDATE_DEVICE, SENDER_HC_TO_CLOUD, deviceId, state);
+    sprintf(payload,"{\"deviceId\":\"%s\", \"state\":%d}", deviceId, state);
     sendToServicePageIndex(SERVICE_AWS, GW_RESP_ONLINE_STATE, pageIndex, payload);
 }
 
@@ -435,7 +435,7 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
     ASSERT(groupAddr);
     ASSERT(dictDPs);
     char* dictDPsString = cJSON_PrintUnformatted(dictDPs);
-    printInfo("[Ble_ControlGroupJSON] groupAddr = %s, dictDPs=%s", groupAddr, dictDPsString);
+    logInfo("[Ble_ControlGroupJSON] groupAddr = %s, dictDPs=%s", groupAddr, dictDPsString);
     free(dictDPsString);
     DeviceInfo deviceInfo;
     int foundDevices = Db_FindDevice(&deviceInfo, groupAddr);
@@ -512,6 +512,8 @@ void Ble_ControlGroupJSON(const char* groupAddr, JSON* dictDPs, const char* caus
 
         sendPacketToBle(-1, TYPE_CTR_GROUP_NORMAL, p);
         JSON_Delete(p);
+    } else {
+        logError("Cannot find groupAddr %s in database", groupAddr);
     }
 }
 
