@@ -232,8 +232,8 @@ Tính năng IR:
 # Compile python to binary .pyc: python3 -m compileall .
 
 # Quy trình OTA HC
-    + Force update:
-        - Mỗi khi khởi động, HC sẽ lấy thông tin version mới từ trường hcforce của showdow: $aws/things/agency2022/Setting và so sánh với version được lưu trong file version. Nếu version hiện tại nhỏ hơn version mới thì tiến hành update. Version được đánh theo số ví dụ 1, 2, 12, 13,...
+    + Force update cho tất cả:
+        - Mỗi khi khởi động, HC sẽ lấy thông tin version mới từ trường lastestVersion của showdow: $aws/things/agency2022/Setting và so sánh với version được lưu trong file version. Nếu version hiện tại nhỏ hơn version mới thì tiến hành update. Version được đánh theo số ví dụ 1, 2, 12, 13,...
         - Firmware của HC phải đủ 6 file HG_AWS, HG_CORE, HG_BLE, HG_WIFI, HG_CFG, homekit được nén thành file zip và đặt tên là hc_bin_17.zip, trong đó 17 là version của HC, phải nén trực tiếp 6 file thành file .zip không được nén folder. File zip này phải được đặt ở S3 tại đường dẫn: S3/Buckets/otable/hc_bin_17.zip
     + OTA thủ công cho từng board:
         Gửi lệnh sau xuống hc qua topic /shadow/name/notify, nếu trường checkVersion dùng bằng 0 thì hc sẽ luôn download file hc_bin_0.zip, ngược lại thì hc sẽ thực hiện các bước check version mới, nếu có thì mới thực hiện update
@@ -276,6 +276,17 @@ Tính năng IR:
             "reported": {
                 "sender": 1,
                 "type": 24
+            }
+        }
+    }
+
+4. Bật tính năng ssh từ xa
+    {
+        "state": {
+            "reported": {
+                "sender": 1,
+                "type": 39,
+                "remotessh": 1
             }
         }
     }

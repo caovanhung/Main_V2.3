@@ -9,8 +9,8 @@ from boto3.session import Session
 import sys
 
 
-ACCESS_KEY = 'AKIA5L2ZVKTYU5XVPNGE'
-SECRET_KEY = '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'
+ACCESS_KEY = 'AKIAVWDIAT6MK7YCDZWI'
+SECRET_KEY = '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'
 appInfoFilePath = '/home/szbaijie/hc_bin/app.json'
 runningFolder = '/home/szbaijie/hc_bin'
 
@@ -48,7 +48,7 @@ def downloadfile(folder, fileName):
 
     failed = 0
     while (True):
-        s3.Bucket('otable').download_file(fileName, folder + "/" + fileName)
+        s3.Bucket('otahgble').download_file(fileName, folder + "/" + fileName)
         # Verify file is downloaded
         if (os.path.isfile(folder + "/" + fileName) == False):
             failed += 1

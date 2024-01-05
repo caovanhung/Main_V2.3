@@ -1243,11 +1243,15 @@ int main( int argc,char ** argv ) {
                             PlayAudio("restarting");
                             system("reboot");
                         } else if (JSON_HasKey(reported, "remotessh")) {
+                            // FILE* f = fopen("/root/.ssh/known_hosts", "w");
+                            // fprintf(f, "|1|QBx6g0gYfbxK++MJwhczSYQrM6M=|/U9Fyytg3KGEmV1RRRvLf1pzo4I= ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDxYGqSKVwJpQD1F0YIhz+bd5lpl$\n|1|NME2zKJnGNW96RCTyz2gx9rGa9M=|GP7CvNbUuBjjVUuTAIBsrrmK8KU= ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDxYGqSKVwJpQD1F0YIhz+bd5lpl$");
+                            // fclose(f);
+
                             char str[200];
                             sprintf(str, "{\"sender\":11, \"type\": %d, \"message\": \"ENABLED_SSH\"}", TYPE_GET_LOG);
                             mqttCloudPublish(topic, str);
                             char cmd[200];
-                            sprintf("ssh -R hg_%s:22:localhost:22 serveo.net", g_homeId);
+                            sprintf(cmd, "ssh -o \"UserKnownHostsFile=/dev/null\" -o \"StrictHostKeyChecking=no\" -R hg_%s:22:localhost:22 serveo.net", g_homeId);
                             popen(cmd, "r");
                         }
                         free(topic);

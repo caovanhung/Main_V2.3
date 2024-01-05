@@ -68,14 +68,14 @@
 #define TYPE_DEL_SCENE_LC               (7U)
 #define TYPE_CTR_SCENE_LC               (8U)
 #define TYPE_UPDATE_DEVICE              (9U)
-#define TYPE_ADD_GROUP_LIGHT            (12U)
-#define TYPE_DEL_GROUP_LIGHT            (13U)
-#define TYPE_CTR_GROUP_NORMAL           (14U)
-#define TYPE_UPDATE_GROUP_LIGHT         (15U)
+#define TYPE_ADD_GROUP_LIGHT            (12U)   // Tạo nhóm đèn
+#define TYPE_DEL_GROUP_LIGHT            (13U)   // Xoá nhóm đèn
+#define TYPE_CTR_GROUP_NORMAL           (14U)   
+#define TYPE_UPDATE_GROUP_LIGHT         (15U)   // Chỉnh sửa nhóm đèn
 //SWITCH
-#define TYPE_ADD_GROUP_LINK             (16U)
-#define TYPE_UPDATE_GROUP_LINK          (17U)
-#define TYPE_DEL_GROUP_LINK             (18U)
+#define TYPE_ADD_GROUP_LINK             (16U)   // Tạo nhóm liên động cho công tắc
+#define TYPE_UPDATE_GROUP_LINK          (17U)   // Chỉnh sửa nhóm liên động cho công tắc
+#define TYPE_DEL_GROUP_LINK             (18U)   // Xoá nhóm liên động cho công tắc
 #define TYPE_GET_DEVICE_HISTORY         (19U)
 #define TYPE_DIM_LED_SWITCH             (20U)
 #define TYPE_LOCK_KIDS                  (21U)

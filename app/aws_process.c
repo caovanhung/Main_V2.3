@@ -169,7 +169,11 @@ void Aws_SyncDatabase() {
                 int pageIndex = JSON_HasKey(scenes, "pageIndex")? JSON_GetNumber(scenes, "pageIndex") : 1;
                 JSON_ForEach(s, scenes) {
                     if (cJSON_IsObject(s)) {
-                        if (JSON_HasKey(s, "name")) {
+                        int isWifi = 0;
+                        if (JSON_HasKey(s, "isWifi")) {
+                            isWifi = JSON_GetNumber(s, "isWifi");
+                        }
+                        if (JSON_HasKey(s, "name") && isWifi == 0) {
                             JSON* scene = JArr_CreateObject(syncingScenes);
                             JSON_SetText(scene, "id", s->string);
                             JSON_SetText(scene, "name", JSON_GetText(s, "name"));

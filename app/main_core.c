@@ -1683,13 +1683,12 @@ int main(int argc, char ** argv)
                         // Add new devices from cloud
                         JSON_ForEach(d, payload) {
                             char* tmp = cJSON_PrintUnformatted(d);
-                            printf("Adding device: %s\n", tmp);
+                            logInfo("Adding device: %s\n", tmp);
                             free(tmp);
-                            if (addNewDevice(d) == false) {
-                                failedCount++;
-                            }
-                            int provider = JSON_GetNumber(d, "provider");
-                            if (provider == HOMEGY_BLE) {
+                            if (JSON_HasKey(d, "gateWay")) {
+                                if (addNewDevice(d) == false) {
+                                    failedCount++;
+                                }
                                 char* gatewayAddr = JSON_GetText(d, "gateWay");
                                 int gatewayId = Db_FindGatewayId(gatewayAddr);
                                 if (gatewayId >= 0) {

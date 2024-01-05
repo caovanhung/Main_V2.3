@@ -8,8 +8,8 @@ from boto3.session import Session
 import sys
 
 
-ACCESS_KEY = 'AKIA5L2ZVKTYU5XVPNGE'
-SECRET_KEY = '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'
+ACCESS_KEY = 'AKIAVWDIAT6MK7YCDZWI'
+SECRET_KEY = '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'
 appInfoFilePath = '/home/szbaijie/hc_bin/app.json'
 runningFolder = '/home/szbaijie/hc_bin'
 
@@ -17,7 +17,7 @@ session = Session(aws_access_key_id = ACCESS_KEY, aws_secret_access_key = SECRET
 s3 = session.resource('s3')
 
 def uploadfile(remoteFile, localFile, homeId):
-    s3.Bucket('homegylogs').upload_file(localFile, homeId + "/" + remoteFile)
+    s3.Bucket('homegyhclogs').upload_file(localFile, homeId + "/" + remoteFile)
 
 if __name__ == '__main__':
     if (len(sys.argv) == 3):
