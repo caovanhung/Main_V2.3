@@ -18,6 +18,8 @@ JSON* requestIsInRespList(int reqType, const char* itemId);
 void updateDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr, int status);
 // Get response status of a device according to a command
 int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr);
+void SaveDpValueByAddr(const char* dpAddr, const char* hcAddr, int dpID, double dpValue);
+void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const char* dpValueStr, bool syncRelatedDevices);
 /***************************************************************************************/
 
 /********************* APIS TO COMMUNICATE WITH AWS SERVICE ****************************/

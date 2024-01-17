@@ -157,7 +157,7 @@ int Db_SaveGroupDevices(const char* groupAddr, JSON* devices);
 int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex);
 int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId);
 int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr, const* hcAddr);
-int Db_FindDpByAddrAndDpId(DpInfo* dpInfo, const char* dpAddr, int dpId);
+int Db_FindDpByAddrAndDpId(DpInfo* dpInfo, const char* dpAddr, const char* hcAddr, int dpId);
 int Db_SaveDpValue(const char* deviceId, int dpId, double value);
 int Db_SaveDpValueString(const char* deviceId, int dpId, const char* value);
 

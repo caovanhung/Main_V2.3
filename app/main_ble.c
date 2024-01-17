@@ -82,11 +82,12 @@ extern int GWCFG_TIMEOUT_DEFAULT;
 extern int GWCFG_MIN_TIME_SCENEGROUP;
 extern int GWCFG_MIN_TIME_ONLINE;
 extern int GWCFG_MIN_TIME_DEFAULT;
-int GWCFG_GET_ONLINE_TIME = 120000;
+int GWCFG_GET_ONLINE_TIME = 400000;
 
 bool addSceneActions(const char* sceneId, JSON* actions);
 bool deleteSceneActions(const char* sceneId, JSON* actions);
 bool addSceneCondition(const char* sceneId, JSON* condition);
+void addSceneConditions(const char* sceneId, int sceneType, JSON* conditions);
 bool deleteSceneCondition(const char* sceneId, JSON* condition);
 void Ble_ProcessPacket();
 void AddGateway(JSON* payload);
@@ -284,7 +285,7 @@ void Ble_ProcessPacket()
             BLE_PrintFrame(str, &bleFrames[i]);
             struct state_element *tmp = malloc(sizeof(struct state_element));
             InfoDataUpdateDevice *InfoDataUpdateDevice_t = malloc(sizeof(InfoDataUpdateDevice));
-            int frameType = check_form_recived_from_RX(tmp, &bleFrames[i]);
+            int frameType = GW_CheckReceivedFrame(tmp, &bleFrames[i]);
             if (frameType == GW_RESP_ONOFF_STATE && bleFrames[i].frameSize >= 5 && bleFrames[i].param[0] == 0x82 && bleFrames[i].param[1] == 0x01) {
                 BLE_SetDeviceResp(frameType, bleFrames[i].sendAddr, 0, false);
             } else {
@@ -332,9 +333,8 @@ void Ble_ProcessPacket()
                             JSON* packet = JSON_CreateObject();
                             JSON_SetText(packet, "hcAddr", g_hcAddr);
                             JSON_SetNumber(packet, "opcode", 0x8201);
-                            uint16_t addr = (uint8_t)(deviceAddr >> 8);
+                            uint16_t addr = (uint16_t)(deviceAddr << 8) | (uint16_t)(deviceAddr >> 8);
                             addr += d;
-                            addr = (addr << 8) | (uint8_t)deviceAddr;
                             sprintf(str, "%04X", addr);
                             JSON_SetText(packet, "deviceAddr", str);
                             JSON_SetText(packet, "dpAddr", str);
@@ -368,6 +368,30 @@ void Ble_ProcessPacket()
                         sendPacketTo(SERVICE_CORE, frameType, packet);
                         JSON_Delete(packet);
                     }
+                    break;
+                }
+                case GW_RESPONSE_SENSOR_PRESENCE: {
+                    int active = bleFrames[i].param[3];
+                    int type = bleFrames[i].param[4];
+                    int lightness = bleFrames[i].param[6];
+                    lightness = (lightness << 8) | bleFrames[i].param[5];
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    JSON_SetNumber(packet, "active", active);
+                    JSON_SetNumber(packet, "type", type);
+                    JSON_SetNumber(packet, "lightness", lightness);
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    JSON_Delete(packet);
+                    break;   
+                }
+                case GW_RESPONSE_FORWARD_ONLY: {
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    JSON_SetText(packet, "cmd", recvPackage);
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    JSON_Delete(packet);
                     break;
                 }
                 case GW_RESPONSE_LIGHT_RD_CONTROL: {
@@ -642,7 +666,7 @@ void addDeviceToRespList(int reqType, const char* itemId, const char* addr) {
 void AddGateway(JSON* payload) {
     logInfo("AddGateway: %s", cJSON_PrintUnformatted(payload));
     char* gatewayAddr = JSON_GetText(payload, "gateway1");
-    int needToConfig = true;
+    int needToConfig = 0;
     if (JSON_HasKey(payload, "needToConfig")) {
         needToConfig = JSON_GetNumber(payload, "needToConfig");
     }
@@ -782,6 +806,7 @@ void GetIpAddressLoop() {
     }
 }
 
+extern int g_uartSendingIdx;
 void GetDevicesStateProcess() {
     static long long int oldTick = 0;
     static long long int resetWdtTick = 0;
@@ -795,7 +820,10 @@ void GetDevicesStateProcess() {
 
     if (timeInMilliseconds() - resetWdtTick > 20000) {
         resetWdtTick = timeInMilliseconds();
+        int tmp = g_uartSendingIdx;
+        g_uartSendingIdx = 2;
         UART_Send(g_gatewayFds[1], "Hello", 5);
+        g_uartSendingIdx = tmp;
     }
 }
 
@@ -886,7 +914,7 @@ int main( int argc,char ** argv )
             char* dpAddr, *groupAddr;
             switch (reqType) {
                 case TYPE_ADD_GW: {
-                    // AddGateway(payload);
+                    AddGateway(payload);
                     break;
                 }
                 case TYPE_CTR_DEVICE: {
@@ -1108,7 +1136,7 @@ int main( int argc,char ** argv )
                     char* deviceKey = JSON_GetText(payload, "deviceKey");
                     int gatewayId = JSON_GetNumber(payload, "gatewayId");
                     logInfo("[TYPE_ADD_DEVICE]: gatewayId=%d,deviceAddr=%s,devicePid=%s,deviceKey=%s", gatewayId, deviceAddr, devicePid, deviceKey);
-                    set_inf_DV_for_GW(gatewayId, deviceAddr, devicePid, deviceKey);
+                    GW_SaveDeviceKey(gatewayId, deviceAddr, devicePid, deviceKey);
                     if (JSON_HasKey(payload, "command")) {
                         GW_ControlIRCmd(gatewayId, JSON_GetText(payload, "command"));
                     }
@@ -1132,14 +1160,13 @@ int main( int argc,char ** argv )
                 case TYPE_ADD_SCENE: {
                     // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* sceneId = JSON_GetText(payload, "id");
-                    JSON* actions = JSON_GetObject(payload, "actions");
-                    bool ret = addSceneActions(sceneId, actions);
-                    if (ret && JSON_HasKey(payload, "conditions")) {
+                    int sceneType = atoi(JSON_GetText(payload, "sceneType"));
+                    if (JSON_HasKey(payload, "conditions")) {
                         JSON* conditions = JSON_GetObject(payload, "conditions");
-                        JSON_ForEach(c, conditions) {
-                            addSceneCondition(sceneId, c);
-                        }
+                        addSceneConditions(sceneId, sceneType, conditions);
                     }
+                    JSON* actions = JSON_GetObject(payload, "actions");
+                    addSceneActions(sceneId, actions);
                     break;
                 }
                 case TYPE_DEL_SCENE: {
@@ -1161,14 +1188,9 @@ int main( int argc,char ** argv )
                 case TYPE_UPDATE_SCENE: {
                     // sendToServiceNoDebug(SERVICE_CFG, 0, "LED_FLASH_1_TIME");
                     char* sceneId = JSON_GetText(payload, "sceneId");
+                    int sceneType = atoi(JSON_GetText(payload, "sceneType"));
                     JSON* actionsNeedRemove = JSON_GetObject(payload, "actionsNeedRemove");
                     JSON* actionsNeedAdd = JSON_GetObject(payload, "actionsNeedAdd");
-                    if (JArr_Count(actionsNeedRemove) > 0) {
-                        deleteSceneActions(sceneId, actionsNeedRemove);
-                    }
-                    if (JArr_Count(actionsNeedAdd) > 0) {
-                        addSceneActions(sceneId, actionsNeedAdd);
-                    }
                     if (JSON_HasKey(payload, "conditionsNeedRemove")) {
                         JSON* conditionsNeedRemove = JSON_GetObject(payload, "conditionsNeedRemove");
                         JSON_ForEach(c, conditionsNeedRemove) {
@@ -1177,9 +1199,13 @@ int main( int argc,char ** argv )
                     }
                     if (JSON_HasKey(payload, "conditionsNeedAdd")) {
                         JSON* conditionsNeedAdd = JSON_GetObject(payload, "conditionsNeedAdd");
-                        JSON_ForEach(c, conditionsNeedAdd) {
-                            addSceneCondition(sceneId, c);
-                        }
+                        addSceneConditions(sceneId, sceneType, conditionsNeedAdd);
+                    }
+                    if (JArr_Count(actionsNeedRemove) > 0) {
+                        deleteSceneActions(sceneId, actionsNeedRemove);
+                    }
+                    if (JArr_Count(actionsNeedAdd) > 0) {
+                        addSceneActions(sceneId, actionsNeedAdd);
                     }
                     break;
                 }
@@ -1376,6 +1402,48 @@ bool addSceneCondition(const char* sceneId, JSON* condition) {
         }
     }
     return true;
+}
+
+void addSceneConditions(const char* sceneId, int sceneType, JSON* conditions) {
+    logInfo("[addSceneConditions] sceneId=%s, sceneType=%d", sceneId, sceneType);
+    char presenceSensorAddr[10];
+    uint8_t presenceLightlessCond = 0;
+    uint16_t presenceSensorLightless = 0;
+    uint8_t presenceSensorActive = 0;
+    uint8_t presenceSensorType = 0;
+    JSON_ForEach(c, conditions) {
+        char *pid = JSON_GetText(c, "pid");
+        // if (StringCompare(pid, HG_BLE_SENSOR_PRESENCE)) {
+        //     int dpId = JSON_GetNumber(c, "dpId");
+        //     char* dpAddr = JSON_GetText(c, "dpAddr");
+        //     int dpValue   = JSON_GetNumber(c, "dpValue");
+        //     StringCopy(presenceSensorAddr, dpAddr);
+            
+        //     if (dpId == 1) {
+        //         presenceSensorActive |= (1 << dpValue);
+        //     } else if (dpId == 2) {
+        //         presenceSensorType |= (1 << dpValue);
+        //     } else {
+        //         char* operator = JSON_GetText(c, "operator");
+        //         if (StringCompare(operator, ">")) {
+        //             presenceLightlessCond = 3;
+        //         } else if (StringCompare(operator, "<")) {
+        //             presenceLightlessCond = 1;
+        //         } else {
+        //             presenceLightlessCond = 2;
+        //         }
+        //         presenceSensorLightless = dpValue;
+        //     }
+        // } else {
+            addSceneCondition(sceneId, c);
+        // }
+    }
+
+    if (presenceLightlessCond > 0 || presenceSensorActive > 0 || presenceSensorType > 0) {
+        GW_AddSceneConditionPresenceSensor(presenceSensorAddr, sceneId, sceneType, presenceLightlessCond, presenceSensorLightless, presenceSensorActive, presenceSensorType);
+        // Add this device to response list to check TIMEOUT later
+        addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
+    }
 }
 
 bool deleteSceneCondition(const char* sceneId, JSON* condition) {

@@ -173,6 +173,7 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
                     FILE* f = fopen("app.json", "w");
                     int isMaster = JSON_GetNumber(g_gatewayInfo, "isMaster");
                     char* hcAddr = JSON_GetText(g_gatewayInfo, "gateway1");
+                    JSON_SetNumber(g_gatewayInfo, "needToConfig", 1);
                     fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\",\"isMaster\":%d,\"hcAddr\":\"%s\"}", g_accountId, g_homeId, isMaster, hcAddr);
                     fclose(f);
                     // Send message to BLE service to configure gateway
@@ -406,6 +407,7 @@ void MainLoop() {
                         FILE* f = fopen("app.json", "w");
                         int isMaster = JSON_GetNumber(g_gatewayInfo, "isMaster");
                         char* hcAddr = JSON_GetText(g_gatewayInfo, "gateway1");
+                        JSON_SetNumber(g_gatewayInfo, "needToConfig", 1);
                         fprintf(f, "{\"thingId\":\"%s\",\"homeId\":\"%s\",\"isMaster\":%d,\"hcAddr\":\"%s\"}", g_accountId, g_homeId, isMaster, hcAddr);
                         fclose(f);
                         // Send message to BLE service to configure gateway

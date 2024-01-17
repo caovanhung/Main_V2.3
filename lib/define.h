@@ -146,6 +146,8 @@
 #define GW_RESPONSE_IR                                  (84U)
 #define CAM_HANET_RESPONSE                              (85U)
 #define GW_RESPONSE_LOCK_KIDS                           (87U)
+#define GW_RESPONSE_SENSOR_PRESENCE                     (88U)
+#define GW_RESPONSE_FORWARD_ONLY                        (89U)
 
 #define GW_RESPONSE_NOTIFI                              ( 111U)
 #define KEY_MESSAGE                                     "message"
@@ -320,6 +322,7 @@
 
 #define HG_BLE_LIGHT_WHITE      "BLEHGAA0201"
 #define HG_BLE_SENSOR_MOTION    "BLEHGAA0401"
+#define HG_BLE_SENSOR_PRESENCE  "BLEHGAA0606"
 
 #define RD_BLE_SENSOR_TEMP      "BLEHG030801"
 #define RD_BLE_SENSOR_SMOKE     "BLEHG030301,BLEHGAA0406"

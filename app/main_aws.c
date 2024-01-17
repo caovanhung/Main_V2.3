@@ -941,7 +941,7 @@ void Mosq_ProcessMessage() {
                         }
                         int dpId = JSON_GetNumber(payload, "dpId");
                         sprintf(str, "%d", dpId);
-                        if (dpId == 24 || dpId == 21) {
+                        if (dpId == 24 || dpId == 21 || dpId == 106) {
                             JSON_SetText(dictDPs, str, JSON_GetText(payload, "dpValue"));
                         } else {
                             JSON_SetNumber(dictDPs, str, JSON_GetNumber(payload, "dpValue"));

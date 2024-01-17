@@ -375,11 +375,11 @@ int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr, const* hcAddr) {
     return rowCount;
 }
 
-int Db_FindDpByAddrAndDpId(DpInfo* dpInfo, const char* dpAddr, int dpId) {
+int Db_FindDpByAddrAndDpId(DpInfo* dpInfo, const char* dpAddr, const char* hcAddr, int dpId) {
     ASSERT(dpInfo); ASSERT(dpAddr);
     int rowCount = 0;
     char sqlCommand[300];
-    sprintf(sqlCommand, "SELECT deviceId, dpId, address, dpValue, pageIndex FROM devices WHERE address='%s' AND dpId=%d;", dpAddr, dpId);
+    sprintf(sqlCommand, "SELECT dp.deviceId, dp.dpId, dp.address, dp.dpValue, dp.pageIndex FROM devices dp JOIN devices_inf d ON dp.deviceId = d.deviceId JOIN gateway g ON g.id=d.gwIndex WHERE dp.address='%s' AND g.hcAddr='%s' AND dp.dpId=%d LIMIT 1;", dpAddr, hcAddr, dpId);
     Sql_Query(sqlCommand, row) {
         dpInfo->id = atoi(sqlite3_column_text(row, 1));
         char* value = sqlite3_column_text(row, 3);
@@ -418,6 +418,7 @@ int Db_SaveDpValueString(const char* deviceId, int dpId, const char* value) {
 
 int Db_LoadSceneToRam() {
     g_sceneCount = 0;
+    List* sceneIds = List_Create();
     char* sqlCmd = "SELECT * FROM scene_inf";
     Sql_Query(sqlCmd, row) {
         g_sceneList = realloc(g_sceneList, (g_sceneCount + 1) * sizeof(Scene));
@@ -604,10 +605,14 @@ int Db_LoadSceneToRam() {
         }
         g_sceneList[g_sceneCount].conditionCount = conditionCount;
         g_sceneCount++;
+        List_PushString(sceneIds, g_sceneList[g_sceneCount].id);
         JSON_Delete(actionsArray);
         JSON_Delete(conditionsArray);
     }
-    logInfo("Loaded %d scenes from database\n", g_sceneCount);
+    char sceneIdStr[1000];
+    List_ToString(sceneIds, ", ", sceneIdStr);
+    List_Delete(sceneIds);
+    logInfo("Loaded %d scenes from database: (%s)", g_sceneCount, sceneIdStr);
     return 1;
 }
 

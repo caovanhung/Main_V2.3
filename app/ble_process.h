@@ -112,10 +112,10 @@ bool ble_getInfoProvison(provison_inf *PRV, JSON* packet);
 bool GW_ConfigGateway(int gwIndex, provison_inf *PRV);
 int  get_count_element_of_DV(const char* pid_);
 void get_string_add_DV_write_GW(char **result,const char* address_device,const char* element_count,const char* deviceID);
-int  set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,const char* deviceKey);
+int  GW_SaveDeviceKey(int gwIndex, const char* address_device,const char* pid,const char* deviceKey);
 int  GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* originPackage, size_t size);
 
-int  check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame);
+int  GW_CheckReceivedFrame(struct state_element *temp, ble_rsp_frame_t* frame);
 bool GW_DeleteDevice(int gwIndex, const char* deviceAddr);
 
 bool GW_CtrlGroupLightOnOff(int gwIndex, const char *groupAddr, uint8_t onoff);
@@ -134,5 +134,8 @@ bool GW_AddSceneActionIR(int gwIndex, const char* deviceAddr, const char* sceneI
 bool GW_DeleteSceneActionIR(int gwIndex, const char* deviceAddr, const char* sceneId, uint8_t commandType, uint8_t brandId, uint8_t remoteId);
 bool GW_AddSceneConditionIR(int gwIndex, const char* deviceAddr, const char* sceneId, uint16_t voiceCode);
 bool GW_DeleteSceneConditionIR(int gwIndex, const char* deviceAddr, const char* sceneId);
+
+bool GW_AddSceneConditionPresenceSensor(const char* deviceAddr, const char* sceneId, uint8_t andOr, uint8_t lighnessCond, uint16_t lightness, uint8_t activeMask, uint8_t sensorTypeMask);
+
 
 #endif

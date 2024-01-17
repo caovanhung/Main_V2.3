@@ -31,8 +31,8 @@
 #include "cJSON.h"
 #include "common.h"
 
-int GWCFG_TIMEOUT_SCENEGROUP = 5000;
-int GWCFG_GET_ONLINE_TIME = 120000;
+int GWCFG_TIMEOUT_SCENEGROUP = 6000;
+int GWCFG_GET_ONLINE_TIME = 400000;
 
 const char* SERVICE_NAME = SERVICE_CORE;
 uint8_t SERVICE_ID = SERVICE_ID_CORE;
@@ -710,13 +710,21 @@ void checkSceneCondition(Scene* scene) {
                 //Check type of value in DB is Double or String ( with many Device is double type, with Camera Hanet is string type(personID))
                 if (foundDps == 1) {
                     if (scene->conditions[i].valueType == ValueTypeDouble) {
-                        if (dpInfo.value == scene->conditions[i].dpValue){
-                            printInfo("      Satisfied. current value=%.0f, expect=%.0f", dpInfo.value, scene->conditions[i].dpValue);
+                        bool satisfied = false;
+                        if (StringCompare(scene->conditions[i].expr, ">") && dpInfo.value > scene->conditions[i].dpValue) {
+                            satisfied = true;
+                        } else if (StringCompare(scene->conditions[i].expr, "<") && dpInfo.value < scene->conditions[i].dpValue) {
+                            satisfied = true;
+                        } else if (dpInfo.value == scene->conditions[i].dpValue) {
+                            satisfied = true;
+                        }
+                        if (satisfied) {
+                            printInfo("      Satisfied. current value=%.0f, expect=%.0f, expr='%s'", dpInfo.value, scene->conditions[i].dpValue, scene->conditions[i].expr);
                             sendSceneRunEventToUser(scene, i);
                             markSceneToRun(scene, NULL);
                             break;
                         } else {
-                            printInfo("      Not satisfied. current value=%.0f, expect=%.0f", dpInfo.value, scene->conditions[i].dpValue);
+                            printInfo("      Not satisfied. current value=%.0f, expect=%.0f, expr='%s'", dpInfo.value, scene->conditions[i].dpValue, scene->conditions[i].expr);
                         }
                     } else {
                         if(StringCompare(dpInfo.valueStr, scene->conditions[i].dpValueStr)){
@@ -766,7 +774,11 @@ void checkSceneCondition(Scene* scene) {
 
 // Check if there are scenes needed to be executed if status of a device is changed
 void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const char* dpValueStr, bool syncRelatedDevices) {
-    printInfo("checkSceneForDevice: %s.%d", deviceId, dpId);
+    if (dpValueStr != NULL) {
+        printInfo("checkSceneForDevice: %s.%d=%s", deviceId, dpId, dpValueStr);
+    } else {
+        printInfo("checkSceneForDevice: %s.%d=%d", deviceId, dpId, (int)dpValue);
+    }
     // Find all scenes that this device is in conditions
     for (int i = 0; i < g_sceneCount; i++) {
         Scene* scene = &g_sceneList[i];
@@ -1181,7 +1193,7 @@ int main(int argc, char ** argv)
                 switch (reqType) {
                     case GW_RESPONSE_LIGHT_RD_CONTROL: {
                         char* deviceAddr = JSON_GetText(payload, "deviceAddr");
-
+                        char* hcAddr = JSON_GetText(payload, "hcAddr");
                         for (int dpId = 22; dpId <= 23; dpId++) {
                             uint16_t value = 0xFFFF;
                             if (dpId == 22 && JSON_HasKey(payload, "lightness")) {
@@ -1194,7 +1206,7 @@ int main(int argc, char ** argv)
                             if (value != 0xFFFF) {
                                 DpInfo dpInfo;
                                 DeviceInfo deviceInfo;
-                                int foundDps = Db_FindDpByAddrAndDpId(&dpInfo, deviceAddr, dpId);
+                                int foundDps = Db_FindDpByAddrAndDpId(&dpInfo, deviceAddr, hcAddr, dpId);
                                 if (foundDps == 1) {
                                     int foundDevices = Db_FindDevice(&deviceInfo, dpInfo.deviceId);
                                     if (foundDevices == 1) {
@@ -1214,7 +1226,7 @@ int main(int argc, char ** argv)
                         int dpId = 24;
                         DpInfo dpInfo;
                         DeviceInfo deviceInfo;
-                        int foundDps = Db_FindDpByAddrAndDpId(&dpInfo, deviceAddr, dpId);
+                        int foundDps = Db_FindDpByAddrAndDpId(&dpInfo, deviceAddr, hcAddr, dpId);
                         if (foundDps == 1) {
                             int foundDevices = Db_FindDevice(&deviceInfo, dpInfo.deviceId);
                             if (foundDevices == 1) {
@@ -1273,6 +1285,35 @@ int main(int argc, char ** argv)
                             }
                         } else {
                             logError("Cannot find dpAddr %s on hcAddr %s", dpAddr, hcAddr);
+                        }
+                        break;
+                    }
+                    case GW_RESPONSE_SENSOR_PRESENCE: {
+                        char* hcAddr = JSON_GetText(payload, "hcAddr");
+                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                        int active = JSON_GetNumber(payload, "active");
+                        int type = JSON_GetNumber(payload, "type");
+                        int lightness = JSON_GetNumber(payload, "lightness");
+                        if (active > 0) {
+                            SaveDpValueByAddr(deviceAddr, hcAddr, 1, active - 1);
+                        }
+                        if (type > 0) {
+                            SaveDpValueByAddr(deviceAddr, hcAddr, 2, type - 1);
+                        }
+                        if (lightness > 0) {
+                            SaveDpValueByAddr(deviceAddr, hcAddr, 3, lightness);
+                        }
+                        break;
+                    }
+                    case GW_RESPONSE_FORWARD_ONLY: {
+                        char* hcAddr = JSON_GetText(payload, "hcAddr");
+                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                        char* cmd = JSON_GetText(payload, "cmd");
+                        logInfo("GW_RESPONSE_FORWARD_ONLY: %s = %s", deviceAddr, cmd);
+                        DpInfo dpInfo;
+                        int foundDps = Db_FindDpByAddr(&dpInfo, deviceAddr, hcAddr);
+                        if (foundDps == 1) {
+                            Aws_SaveDpValueString(dpInfo.deviceId, 106, cmd, dpInfo.pageIndex);    
                         }
                         break;
                     }
@@ -1685,21 +1726,25 @@ int main(int argc, char ** argv)
                             char* tmp = cJSON_PrintUnformatted(d);
                             logInfo("Adding device: %s\n", tmp);
                             free(tmp);
-                            if (JSON_HasKey(d, "gateWay")) {
+                            if (JSON_HasKey(d, "devices") && StringContains(JSON_GetText(d, "devices"), "BLE")) {
                                 if (addNewDevice(d) == false) {
                                     failedCount++;
                                 }
-                                char* gatewayAddr = JSON_GetText(d, "gateWay");
-                                int gatewayId = Db_FindGatewayId(gatewayAddr);
-                                if (gatewayId >= 0) {
-                                    // Send packet to BLE to save device information in to gateway
-                                    JSON_SetNumber(d, "gatewayId", gatewayId);
-                                    // printf("ok: %s\n", cJSON_PrintUnformatted(d));
-                                    sendPacketToBle(gatewayId, TYPE_ADD_DEVICE, d);
-                                    usleep(SAVE_DEVICE_KEY_DELAY_MS);
-                                } else {
-                                    logError("Gateway %s is not found", gatewayAddr);
+                                if (JSON_HasKey(d, "gateWay")) {
+                                    char* gatewayAddr = JSON_GetText(d, "gateWay");
+                                    int gatewayId = Db_FindGatewayId(gatewayAddr);
+                                    if (gatewayId >= 0) {
+                                        // Send packet to BLE to save device information into gateway
+                                        JSON_SetNumber(d, "gatewayId", gatewayId);
+                                        // printf("ok: %s\n", cJSON_PrintUnformatted(d));
+                                        sendPacketToBle(gatewayId, TYPE_ADD_DEVICE, d);
+                                        usleep(SAVE_DEVICE_KEY_DELAY_MS);
+                                    } else {
+                                        logError("Gateway %s is not found", gatewayAddr);
+                                    }
                                 }
+                            } else {
+                                logInfo("Ignored non-ble device");
                             }
                         }
                         if (failedCount == 0) {
@@ -1848,6 +1893,7 @@ int main(int argc, char ** argv)
                         g_sceneTobeUpdated = JSON_Clone(payload);  // Save scene info so that we can save it to aws later
                         Scene_GetFullInfo(newScene);
                         char* sceneId = JSON_GetText(newScene, "Id");
+                        char* sceneType = JSON_GetText(newScene, "sceneType");
                         logInfo("[TYPE_UPDATE_SCENE]: sceneId=%s", sceneId);
                         printInfo("Parsed scene: %s", cJSON_PrintUnformatted(newScene));
                         JSON* oldScene = Db_FindScene(sceneId);
@@ -1883,6 +1929,7 @@ int main(int argc, char ** argv)
                                 // Send updated packet to BLE
                                 JSON* packet = JSON_CreateObject();
                                 JSON_SetText(packet, "sceneId", sceneId);
+                                JSON_SetText(packet, "sceneType", sceneType);
                                 JSON_SetObject(packet, "actionsNeedRemove", actionsNeedRemove);
                                 JSON_SetObject(packet, "actionsNeedAdd", actionsNeedAdd);
                                 JSON_SetObject(packet, "conditionsNeedRemove", conditionsNeedRemove);
@@ -2416,7 +2463,7 @@ bool Scene_GetFullInfo(JSON* packet) {
             int foundDevices = Db_FindDevice(&deviceInfo, entityId);
             if (foundDevices == 1) {
                 int dpId = atoi(JArr_GetText(exprArray, 0) + 3);   // Template is "$dp1"
-                // int dpValue = JArr_GetNumber(exprArray, 2);
+                char* operator = JArr_GetText(exprArray, 1);
                 JSON* objItem = JArr_GetObject(exprArray, 2); //get obj for check type value of exprArray
                 DpInfo dpInfo;
                 int foundDps = Db_FindDp(&dpInfo, entityId, dpId);
@@ -2426,6 +2473,7 @@ bool Scene_GetFullInfo(JSON* packet) {
                     JSON_SetText(condition, "entityAddr", deviceInfo.addr);
                     JSON_SetNumber(condition, "gwIndex", deviceInfo.gwIndex);
                     JSON_SetNumber(condition, "dpId", dpId);
+                    JSON_SetText(condition, "operator", operator);
                     if (foundDps == 1) {
                         JSON_SetText(condition, "dpAddr", dpInfo.addr);
                     }

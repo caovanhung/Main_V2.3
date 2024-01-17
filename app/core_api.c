@@ -143,6 +143,21 @@ int getDeviceRespStatus(int reqType, const char* itemId, const char* deviceAddr)
     return 0;
 }
 
+void SaveDpValueByAddr(const char* deviceAddr, const char* hcAddr, int dpID, double dpValue) {
+    DpInfo dpInfo;
+    DeviceInfo deviceInfo;
+    int foundDps = Db_FindDpByAddrAndDpId(&dpInfo, deviceAddr, hcAddr, dpID);
+    if (foundDps == 1) {
+        int foundDevices = Db_FindDevice(&deviceInfo, dpInfo.deviceId);
+        if (foundDevices == 1) {
+            Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
+            Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
+            Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
+        }
+    }
+    checkSceneForDevice(deviceInfo.id, dpID, dpValue, NULL, true);
+}
+
 
 void Aws_DeleteDevice(const char* deviceId, int pageIndex) {
     ASSERT(deviceId);

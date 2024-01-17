@@ -215,7 +215,9 @@ void BLE_SendToGateway() {
                     // TIMEOUT occurs
                     g_uartDeviceResps[respIdx].respType = 0;
                     g_uartDeviceResps[respIdx].deviceAddr = 0;
-                    logInfo("Sending to 0x%04X is TIMEOUT", sentFrame.addr);
+                    if (sentFrame.respType != 0xFF) {
+                        logInfo("Sending to 0x%04X is TIMEOUT", sentFrame.addr);
+                    }
                     // Send TIMEOUT response to CORE service
                     JSON* p = JSON_CreateObject();
                     if (sentFrame.respType == GW_RESPONSE_GROUP) {
@@ -756,9 +758,9 @@ void get_string_add_DV_write_GW(char **result,const char* address_device,const c
     strcat(*result, deviceID);
 }
 
-int set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,const char* deviceKey)
+int GW_SaveDeviceKey(int gwIndex, const char* deviceAddr, const char* pid,const char* deviceKey)
 {
-    ASSERT(address_device); ASSERT(pid); ASSERT(deviceKey);
+    ASSERT(deviceAddr); ASSERT(pid); ASSERT(deviceKey);
     gwIndex = 0;
     g_uartSendingIdx = gwIndex == 0 ? 3 : 2;
     char *str_send_uart = (char*) malloc(1000 * sizeof(char));
@@ -768,7 +770,7 @@ int set_inf_DV_for_GW(int gwIndex, const char* address_device,const char* pid,co
 
     int  element_count = get_count_element_of_DV(pid);
     Int2String(element_count,element_count_str);
-    get_string_add_DV_write_GW(&str_send_uart,address_device,element_count_str,deviceKey);
+    get_string_add_DV_write_GW(&str_send_uart,deviceAddr,element_count_str,deviceKey);
     int len_str = (int)strlen(str_send_uart);
     hex_send_uart  = (char*) malloc(len_str * sizeof(char)*10);
     String2HexArr(str_send_uart,hex_send_uart);
@@ -1101,7 +1103,7 @@ int GW_SplitFrame(ble_rsp_frame_t resultFrames[MAX_FRAME_COUNT], uint8_t* origin
     return frameCount;
 }
 
-int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* frame)
+int GW_CheckReceivedFrame(struct state_element *temp, ble_rsp_frame_t* frame)
 {
     ASSERT(temp); ASSERT(frame);
     uint8_t len_uart = frame->frameSize + 2;
@@ -1160,6 +1162,10 @@ int check_form_recived_from_RX(struct state_element *temp, ble_rsp_frame_t* fram
     } else if (frame->opcode == 0x8245 && frame->paramSize >= 1) {
         // Add LC scene action
         return GW_RESPONSE_ADD_SCENE;
+    } else if (frame->opcode == 0xe111 && frame->param[0] == 0x02 && frame->param[1] == 0x00 && frame->param[2] == 0xFF) {
+        return GW_RESPONSE_FORWARD_ONLY;
+    } else if (frame->opcode == 0xe111 && frame->paramSize == 7 && frame->param[0] == 0x02 && frame->param[1] == 0x02 && frame->param[2] == 0xFF) {
+        return GW_RESPONSE_SENSOR_PRESENCE;
     } else if (frame->opcode == 0xe111 && frame->paramSize >= 7) {
         // Add LC scene condition
         return GW_RESPONSE_ADD_SCENE;
@@ -1389,13 +1395,13 @@ bool GW_LockTouch(int gwIndex, const char *deviceAddr, uint8_t dpId, int state)
 {
     ASSERT(deviceAddr);
     long int addrHex = strtol(deviceAddr, NULL, 16);
-    uint8_t LOG_TOUCH[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0xE0,0x11,0x02,0x00,0x00,  0xC0,0x00,   0x00,   0x00};
+    uint8_t data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00, 0xE0,0x11,0x02,0x00,0x00,  0xC0,0x00,   0x00,   0x00};
     uint8_t hex_address[5];
     String2HexArr((char*)deviceAddr, hex_address);
-    LOG_TOUCH[8] = (*hex_address) + (dpId - 1);
-    LOG_TOUCH[9] = *(hex_address + 1);
-    LOG_TOUCH[17] = state;
-    UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, addrHex, LOG_TOUCH, 19);
+    data[8] = (*hex_address) + (dpId - 1);
+    data[9] = *(hex_address + 1);
+    data[17] = state;
+    UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, addrHex, data, 19);
     return true;
 }
 
@@ -1573,6 +1579,32 @@ bool GW_DeleteSceneConditionIR(int gwIndex, const char* deviceAddr, const char* 
     data[17] = (uint8_t)(sceneIdHex);
     data[18] = (uint8_t)(1 << 6);
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 19);
+    return true;
+}
+
+bool GW_AddSceneConditionPresenceSensor(const char* deviceAddr, const char* sceneId, uint8_t andOr, uint8_t lighnessCond, uint16_t lightness, uint8_t activeMask, uint8_t sensorTypeMask) {
+    ASSERT(deviceAddr);
+    ASSERT(sceneId);
+    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0xff,0xff,      0xE0,0x11,0x02,0x00,0x00,     0x50,0x00,          0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+    long int deviceAddrHex = strtol(deviceAddr, NULL, 16);
+    long int sceneIdHex = strtol(sceneId, NULL, 16);
+
+    data[8] = (uint8_t)(deviceAddrHex >> 8);
+    data[9] = (uint8_t)(deviceAddrHex);
+    uint8_t* payload = &data[15];
+    payload[2] = (uint8_t)(sceneIdHex >> 8);
+    payload[3] = (uint8_t)(sceneIdHex);
+    payload[4] = andOr;
+    payload[7] = (lighnessCond << 6) & 0b11000000;
+    if (lighnessCond > 0) {
+        payload[7] |= (uint8_t)(lightness >> 10);
+        payload[6] = (uint8_t)lightness;
+    }
+    payload[5] = (activeMask << 4) & 0b11110000;
+    payload[5] |= (sensorTypeMask >> 4);
+
+    UartSendingFrame* frame = sendFrameToGwIndex(0, deviceAddrHex, data, 25);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }
 
