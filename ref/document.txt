@@ -272,12 +272,8 @@ Tính năng IR:
     }
 3. Bản tin ping HC:
     {
-        "state": {
-            "reported": {
-                "sender": 1,
-                "type": 24
-            }
-        }
+        "sender": 1,
+        "type": 24
     }
 
 4. Bật tính năng ssh từ xa

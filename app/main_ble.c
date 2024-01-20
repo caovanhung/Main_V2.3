@@ -335,7 +335,7 @@ void Ble_ProcessPacket()
                             JSON_SetNumber(packet, "opcode", 0x8201);
                             uint16_t addr = (uint16_t)(deviceAddr << 8) | (uint16_t)(deviceAddr >> 8);
                             addr += d;
-                            sprintf(str, "%04X", addr);
+                            sprintf(str, "%02X%02X", (uint8_t)addr, (uint8_t)(addr >> 8));
                             JSON_SetText(packet, "deviceAddr", str);
                             JSON_SetText(packet, "dpAddr", str);
                             JSON_SetNumber(packet, "dpValue", bleFrames[i].param[3 + d]);

@@ -93,7 +93,7 @@ bool addNewDevice(JSON* packet) {
             int dpValue = dp->valueint;
             uint16_t increasedAddr = tmp + dpId - 1;
             sprintf(dpAddrStr, "%02X%02X", increasedAddr & 0x00FF, increasedAddr >> 8);
-            if (addressIncrement) {
+            if (addressIncrement && dpId < 10) {
                 Db_AddDp(deviceId, dpId, dpAddrStr, pageIndex);
             } else {
                 Db_AddDp(deviceId, dpId, deviceAddr, pageIndex);
