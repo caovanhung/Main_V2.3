@@ -643,6 +643,16 @@ void Ble_ProcessPacket()
                     JSON_Delete(packet);
                     break;
                 }
+                case GW_RESP_MODULE: {
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    JSON_SetNumber(packet, "dpId", 101);
+                    JSON_SetNumber(packet, "dpValue", bleFrames[i].param[1]);
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    JSON_Delete(packet);
+                    break;
+                }
                 default:
                     logError("Packet type is not supported: %d", frameType);
                     break;

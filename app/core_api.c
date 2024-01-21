@@ -153,6 +153,15 @@ void SaveDpValueByAddr(const char* deviceAddr, const char* hcAddr, int dpID, dou
             Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
             Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
             Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
+            JSON* history = JSON_CreateObject();
+            JSON_SetText(history, "deviceId", dpInfo.deviceId);
+            JSON_SetNumber(history, "dpId", dpInfo.id);
+            JSON_SetNumber(history, "dpValue", dpValue);
+            JSON_SetNumber(history, "causeType", 0);
+            JSON_SetText(history, "causeId", "");
+            JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+            Db_AddDeviceHistory(history);
+            JSON_Delete(history);
         }
     }
     checkSceneForDevice(deviceInfo.id, dpID, dpValue, NULL, true);

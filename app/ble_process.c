@@ -1178,6 +1178,8 @@ int GW_CheckReceivedFrame(struct state_element *temp, ble_rsp_frame_t* frame)
         return GW_RESPONSE_SET_TTL;
     } else if (frame->opcode == 0xE511 && frame->paramSize >= 6 && frame->param[0] == 0x02) {
         return GW_RESPONSE_IR;
+    } else if (frame->opcode == 0x5206 && frame->paramSize >= 2 && frame->param[0] == 0x01) {
+        return GW_RESP_MODULE;
     }
 
     return GW_RESPONSE_UNKNOW;

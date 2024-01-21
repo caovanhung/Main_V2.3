@@ -427,12 +427,10 @@ void ResponseWaiting() {
                         }
                     }
                 }
-                // if (JArr_Count(updatedDevices) > 0) {
-                    JSON_SetObject(g_groupTobeUpdated, "devices", updatedDevices);
-                    Aws_UpdateGroupDevices(g_groupTobeUpdated);
-                    char* groupAddr = JSON_GetText(g_groupTobeUpdated, "groupAddr");
-                    Db_SaveGroupDevices(groupAddr, updatedDevices);
-                // }
+                JSON_SetObject(g_groupTobeUpdated, "devices", updatedDevices);
+                Aws_UpdateGroupDevices(g_groupTobeUpdated);
+                char* groupAddr = JSON_GetText(g_groupTobeUpdated, "groupAddr");
+                Db_SaveGroupDevices(groupAddr, updatedDevices);
                 JSON_Delete(g_groupTobeUpdated);
             } else if (reqType == TYPE_ADD_SCENE || reqType == TYPE_UPDATE_SCENE) {
                 // Save state of devices to AWS
@@ -491,59 +489,66 @@ void ResponseWaiting() {
                     }
                 }
                 JSON_SetObject(g_sceneTobeUpdated, "actions", updatedActions);
-
-                JSON* newConditions = JSON_GetObject(g_sceneTobeUpdated, "conditions");
-                JSON* updatedConditions = JSON_CreateArray();
-                JSON_ForEach(condition, newConditions) {
-                    int state = JSON_HasKey(condition, "state")? JSON_GetNumber(condition, "state") : -2;
-                    char* entityId = JSON_GetText(condition, "entityId");
-                    int dpId = JSON_GetNumber(condition, "subDeviceId");
-                    dpId = dpId <= 4? dpId : 0;
-                    if (state == 0) {
-                        JSON* updatedCondition = JSON_Clone(condition);
-                        JArr_AddObject(updatedConditions, updatedCondition);
-                    } else if (state == -2) {
-                        // Find status of this device
-                        for (int d = 0; d < deviceCount; d++) {
-                            JSON* device = JArr_GetObject(devices, d);
-                            char* deviceId = JSON_GetText(device, "deviceId");
-                            int respDpId = JSON_GetNumber(device, "dpId");
-                            if (StringCompare(entityId, deviceId)) {
-                                if (dpId == 0 || dpId == respDpId) {
-                                    JSON* updatedCondition = JSON_Clone(condition);
-                                    int status = JSON_GetNumber(device, "status");
-                                    status = status == -2? -1 : status;
-                                    JSON_SetNumber(updatedCondition, "state", status);
-                                    JArr_AddObject(updatedConditions, updatedCondition);
-                                    break;
-                                }
-                            }
-                        }
-                    } else if (state == -3) {
-                        // Find status of this device and remove it if this device is deleted successfully
-                        for (int d = 0; d < deviceCount; d++) {
-                            JSON* device = JArr_GetObject(devices, d);
-                            char* respDeviceId = JSON_GetText(device, "deviceId");
-                            int respDpId = JSON_GetNumber(device, "dpId");
-                            if (StringCompare(entityId, respDeviceId)) {
-                                if (dpId == 0 || dpId == respDpId) {
-                                    int status = JSON_GetNumber(device, "status");
-                                    if (status != 0) {
-                                        status = status == -2? -1 : status;
+                int actionCount = JArr_Count(updatedActions);
+                if (actionCount == 0) {
+                    // Delete this scene if action is empty
+                    char* sceneId = JSON_GetText(g_sceneTobeUpdated, "id");
+                    Aws_DeleteScene(sceneId);
+                    Db_DeleteScene(sceneId);
+                } else {
+                    JSON* newConditions = JSON_GetObject(g_sceneTobeUpdated, "conditions");
+                    JSON* updatedConditions = JSON_CreateArray();
+                    JSON_ForEach(condition, newConditions) {
+                        int state = JSON_HasKey(condition, "state")? JSON_GetNumber(condition, "state") : -2;
+                        char* entityId = JSON_GetText(condition, "entityId");
+                        int dpId = JSON_GetNumber(condition, "subDeviceId");
+                        dpId = dpId <= 4? dpId : 0;
+                        if (state == 0) {
+                            JSON* updatedCondition = JSON_Clone(condition);
+                            JArr_AddObject(updatedConditions, updatedCondition);
+                        } else if (state == -2) {
+                            // Find status of this device
+                            for (int d = 0; d < deviceCount; d++) {
+                                JSON* device = JArr_GetObject(devices, d);
+                                char* deviceId = JSON_GetText(device, "deviceId");
+                                int respDpId = JSON_GetNumber(device, "dpId");
+                                if (StringCompare(entityId, deviceId)) {
+                                    if (dpId == 0 || dpId == respDpId) {
                                         JSON* updatedCondition = JSON_Clone(condition);
+                                        int status = JSON_GetNumber(device, "status");
+                                        status = status == -2? -1 : status;
                                         JSON_SetNumber(updatedCondition, "state", status);
                                         JArr_AddObject(updatedConditions, updatedCondition);
+                                        break;
                                     }
-                                    break;
+                                }
+                            }
+                        } else if (state == -3) {
+                            // Find status of this device and remove it if this device is deleted successfully
+                            for (int d = 0; d < deviceCount; d++) {
+                                JSON* device = JArr_GetObject(devices, d);
+                                char* respDeviceId = JSON_GetText(device, "deviceId");
+                                int respDpId = JSON_GetNumber(device, "dpId");
+                                if (StringCompare(entityId, respDeviceId)) {
+                                    if (dpId == 0 || dpId == respDpId) {
+                                        int status = JSON_GetNumber(device, "status");
+                                        if (status != 0) {
+                                            status = status == -2? -1 : status;
+                                            JSON* updatedCondition = JSON_Clone(condition);
+                                            JSON_SetNumber(updatedCondition, "state", status);
+                                            JArr_AddObject(updatedConditions, updatedCondition);
+                                        }
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
+                    JSON_SetObject(g_sceneTobeUpdated, "conditions", updatedConditions);
+                    Aws_UpdateSceneInfo(g_sceneTobeUpdated);
+                    char* sceneId = JSON_GetText(g_sceneTobeUpdated, "id");
+                    Db_SaveScene(sceneId, updatedActions, updatedConditions);
                 }
-                JSON_SetObject(g_sceneTobeUpdated, "conditions", updatedConditions);
-                Aws_UpdateSceneInfo(g_sceneTobeUpdated);
-                char* sceneId = JSON_GetText(g_sceneTobeUpdated, "id");
-                Db_SaveScene(sceneId, updatedActions, updatedConditions);
                 Db_LoadSceneToRam();
                 JSON_Delete(g_sceneTobeUpdated);
             } else if (reqType == TYPE_CTR_DEVICE) {
@@ -1415,7 +1420,8 @@ int main(int argc, char ** argv)
                     case GW_RESPONSE_SENSOR_PIR_LIGHT:
                     case GW_RESPONSE_SENSOR_ENVIRONMENT:
                     case GW_RESPONSE_SENSOR_DOOR_DETECT:
-                    case GW_RESPONSE_SENSOR_DOOR_ALARM: {
+                    case GW_RESPONSE_SENSOR_DOOR_ALARM:
+                    case GW_RESP_MODULE: {
                         char* hcAddr = JSON_GetText(payload, "hcAddr");
                         char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                         int dpId = JSON_GetNumber(payload, "dpId");
@@ -1651,39 +1657,43 @@ int main(int argc, char ** argv)
                     }
                     case TYPE_ADD_DEVICE: {
                         char* deviceId = JSON_GetText(payload, "deviceId");
-                        // Delete device from database if exist
-                        logInfo("Delete device %s from database if exist", deviceId);
-                        Db_DeleteDevice(deviceId);
-                        logInfo("Adding device: %s", deviceId);
-                        // Insert device to database
-                        if (addNewDevice(payload) == false) {
-                            PlayAudio("add_device_error");
-                            break;
-                        }
-                        int provider = JSON_GetNumber(payload, "provider");
-                        if (provider == HOMEGY_BLE) {
-                            char* gatewayAddr = JSON_GetText(payload, "gateWay");
-                            int gatewayId = Db_FindGatewayId(gatewayAddr);
-                            if (gatewayId >= 0) {
-                                // Send packet to BLE to save device information in to gateway
-                                JSON* dictDPs = JSON_GetObject(payload, "dictDPs");
-                                if (JSON_HasKey(dictDPs, "106")) {
-                                    JSON_SetText(payload, "command", JSON_GetText(dictDPs, "106"));
-                                }
-                                JSON_SetNumber(payload, "gatewayId", gatewayId);
-                                sendPacketToBle(gatewayId, TYPE_ADD_DEVICE, payload);
-                            } else {
-                                logError("Gateway %s is not found", gatewayAddr);
+                        if (JSON_HasKey(payload, "devices") && StringContains(JSON_GetText(payload, "devices"), "BLE")) {
+                            // Delete device from database if exist
+                            logInfo("Delete device %s from database if exist", deviceId);
+                            Db_DeleteDevice(deviceId);
+                            logInfo("Adding device: %s", deviceId);
+                            // Insert device to database
+                            if (addNewDevice(payload) == false) {
+                                PlayAudio("add_device_error");
+                                break;
                             }
-                        }
+                            int provider = JSON_GetNumber(payload, "provider");
+                            if (provider == HOMEGY_BLE) {
+                                char* gatewayAddr = JSON_GetText(payload, "gateWay");
+                                int gatewayId = Db_FindGatewayId(gatewayAddr);
+                                if (gatewayId >= 0) {
+                                    // Send packet to BLE to save device information in to gateway
+                                    JSON* dictDPs = JSON_GetObject(payload, "dictDPs");
+                                    if (JSON_HasKey(dictDPs, "106")) {
+                                        JSON_SetText(payload, "command", JSON_GetText(dictDPs, "106"));
+                                    }
+                                    JSON_SetNumber(payload, "gatewayId", gatewayId);
+                                    sendPacketToBle(gatewayId, TYPE_ADD_DEVICE, payload);
+                                } else {
+                                    logError("Gateway %s is not found", gatewayAddr);
+                                }
+                            }
 
-                        JSON* history = JSON_CreateObject();
-                        JSON_SetNumber(history, "eventType", EV_DEVICE_ADDED);
-                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
-                        JSON_SetText(history, "causeId", JSON_GetText(payload, "senderId"));
-                        JSON_SetText(history, "deviceId", deviceId);
-                        Db_AddDeviceHistory(history);
-                        JSON_Delete(history);
+                            JSON* history = JSON_CreateObject();
+                            JSON_SetNumber(history, "eventType", EV_DEVICE_ADDED);
+                            JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_APP);
+                            JSON_SetText(history, "causeId", JSON_GetText(payload, "senderId"));
+                            JSON_SetText(history, "deviceId", deviceId);
+                            Db_AddDeviceHistory(history);
+                            JSON_Delete(history);
+                        } else {
+                            logInfo("Ignored non-ble device");
+                        }
                         break;
                     }
                     case TYPE_DEL_DEVICE: {

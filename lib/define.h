@@ -148,6 +148,7 @@
 #define GW_RESPONSE_LOCK_KIDS                           (87U)
 #define GW_RESPONSE_SENSOR_PRESENCE                     (88U)
 #define GW_RESPONSE_FORWARD_ONLY                        (89U)
+#define GW_RESP_MODULE                                  (90U)
 
 #define GW_RESPONSE_NOTIFI                              ( 111U)
 #define KEY_MESSAGE                                     "message"
