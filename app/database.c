@@ -604,10 +604,10 @@ int Db_LoadSceneToRam() {
             g_sceneList[g_sceneCount].type = SceneTypeManual;
         }
         g_sceneList[g_sceneCount].conditionCount = conditionCount;
-        g_sceneCount++;
         List_PushString(sceneIds, g_sceneList[g_sceneCount].id);
         JSON_Delete(actionsArray);
         JSON_Delete(conditionsArray);
+        g_sceneCount++;
     }
     char sceneIdStr[1000];
     List_ToString(sceneIds, ", ", sceneIdStr);

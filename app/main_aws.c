@@ -134,7 +134,8 @@ uint32_t generateRandomNumber()
 void sendPacketToCloud(const char* topic, JSON* packet) {
     char* message = cJSON_PrintUnformatted(packet);
     mqttCloudPublish(topic, message);
-    mosquitto_publish(mosq, NULL, topic, strlen(message), message, 0, false);
+    // Remove '$' character because mosquito does not allow it
+    mosquitto_publish(mosq, NULL, &topic[1], strlen(message), message, 0, false);
     free(message);
 }
 
@@ -1023,28 +1024,6 @@ void Aws_SendMergePayload() {
     if (timeInMilliseconds() - time > 500) {
         time = timeInMilliseconds();
 
-        JSON_ForEach(page, g_mergePayloads) {
-            int pageIndex = atoi(page->string);
-            JSON* p = JSON_CreateObject();
-            JSON* state = JSON_CreateObject();
-            JSON* reported = JSON_CreateObject();
-            JSON_SetObject(state, "reported", reported);
-            JSON_SetObject(p, "state", state);
-            JSON_SetNumber(reported, "type", TYPE_UPDATE_DEVICE);
-            JSON_SetNumber(reported, "sender", SENDER_HC_TO_CLOUD);
-            // printf("g_mergePayloads: %s\n", cJSON_PrintUnformatted(page));
-            JSON_ForEach(d, page) {
-                JSON_SetObject(reported, d->string, JSON_Clone(d));
-            }
-            char* topic = Aws_GetTopic(PAGE_DEVICE, pageIndex, TOPIC_UPD_PUB);
-            sendPacketToCloud(topic, p);
-            char str[10];
-            sprintf(str, "%d", pageIndex);
-            JSON_RemoveKey(g_mergePayloads, str);
-            free(topic);
-            return;
-        }
-
         // Ping services every 10 seconds
         pingServiceCount++;
         if (pingServiceCount > 20) {
@@ -1074,6 +1053,28 @@ void Aws_SendMergePayload() {
             g_bleServiceWatchdog = 0;
             logInfo("Restarting BLE service");
             system("systemctl restart hg_ble");
+        }
+
+        JSON_ForEach(page, g_mergePayloads) {
+            int pageIndex = atoi(page->string);
+            JSON* p = JSON_CreateObject();
+            JSON* state = JSON_CreateObject();
+            JSON* reported = JSON_CreateObject();
+            JSON_SetObject(state, "reported", reported);
+            JSON_SetObject(p, "state", state);
+            JSON_SetNumber(reported, "type", TYPE_UPDATE_DEVICE);
+            JSON_SetNumber(reported, "sender", SENDER_HC_TO_CLOUD);
+            // printf("g_mergePayloads: %s\n", cJSON_PrintUnformatted(page));
+            JSON_ForEach(d, page) {
+                JSON_SetObject(reported, d->string, JSON_Clone(d));
+            }
+            char* topic = Aws_GetTopic(PAGE_DEVICE, pageIndex, TOPIC_UPD_PUB);
+            sendPacketToCloud(topic, p);
+            char str[10];
+            sprintf(str, "%d", pageIndex);
+            JSON_RemoveKey(g_mergePayloads, str);
+            free(topic);
+            return;
         }
     }
 }

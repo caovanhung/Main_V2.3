@@ -92,6 +92,15 @@ char* StringCopy(char* dest, const char* src) {
     return NULL;
 }
 
+char* StringAppend(char* dest, const char* src) {
+    if (dest != NULL && src != NULL) {
+        int len = StringLength(dest);
+        char* d = strcpy((char*)(dest + len), src);
+        return d;
+    }
+    return NULL;
+}
+
 bool StringCompare(const char* str1, const char* str2) {
     if (str1 && str2) {
         if (strcmp(str1, str2) == 0) {
@@ -148,9 +157,9 @@ int List_Push(List* l, const void* item, size_t size) {
 void List_ToString(List* l, const char* separator, char* resultStr) {
     resultStr[0] = 0;
     for (size_t i = 0; i < l->count; i++) {
-        strcat(resultStr, l->items[i]);
+        StringAppend(resultStr, l->items[i]);
         if (separator && i < l->count - 1) {
-            strcat(resultStr, separator);
+            StringAppend(resultStr, separator);
         }
     }
 }

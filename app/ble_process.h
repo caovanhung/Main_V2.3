@@ -123,6 +123,9 @@ bool GW_CtrlGroupLightCT(int gwIndex, const char *dpAddr, int lightness, int col
 bool GW_SetTTL(int gwIndex, const char *deviceAddr, uint8_t ttl);
 bool GW_GetScenes(int gwIndex, const char *deviceAddr);
 bool GW_GetGroups(int gwIndex, const char *deviceAddr, const char *dpAddr);
+bool GW_ControlNewCurtain(int gwIndex, const char* dpAddr, uint8_t openClose, uint8_t position);
+bool GW_SetSceneConditionNewCurtain(int gwIndex, const char* dpAddr, const char* sceneId, uint8_t operator, uint8_t position);
+bool GW_SetSceneActionNewCurtain(int gwIndex, const char* dpAddr, const char* sceneId, uint8_t operator, uint8_t position);
 
 /*
  * Control IR

@@ -54,6 +54,13 @@ bool sendToServiceFunc(struct mosquitto* mosq, const char* serviceToSend, int ty
     int reponse = mosquitto_publish(mosq, NULL, topic, strlen(message), message, 0, false);
     if (MOSQ_ERR_SUCCESS == reponse) {
         if (printDebug) {
+            // Remove '%' character in the message because the print function will fault
+            int messageLength = StringLength(message);
+            for (int i = 0; i < messageLength; i++) {
+                if (message[i] == '%') {
+                    message[i] = '_';
+                }
+            }
             logInfo("Sent to service %s (topic %s), data: %s", serviceToSend, topic, message);
         }
         ret = true;

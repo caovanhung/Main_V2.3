@@ -149,6 +149,7 @@
 #define GW_RESPONSE_SENSOR_PRESENCE                     (88U)
 #define GW_RESPONSE_FORWARD_ONLY                        (89U)
 #define GW_RESP_MODULE                                  (90U)
+#define GW_RESP_NEW_CURTAIN                             (91U)
 
 #define GW_RESPONSE_NOTIFI                              ( 111U)
 #define KEY_MESSAGE                                     "message"
@@ -313,7 +314,6 @@
 #define HG_BLE_SWITCH_3         "BLEHGAA0103"
 #define HG_BLE_SWITCH_4         "BLEHGAA0104"
 
-
 #define HG_BLE_IR               "BLEHGAA0301"
 #define HG_BLE_IR_TV            "BLEHGAA0302"
 #define HG_BLE_IR_FAN           "BLEHGAA0303"
@@ -343,6 +343,8 @@
 #define HG_BLE_ROLLING_DOOR     "BLEHGAA0106"
 #define HG_BLE_CURTAIN_2_LAYER  "BLEHGAA0107"
 #define HG_BLE_CURTAIN          "BLEHGAA0105,BLEHGAA0106,BLEHGAA0107"
+#define HG_BLE_CURTAIN_IH35     "BLEHGAA0608"
+#define HG_BLE_CURTAIN_IH68     "BLEHGAA0609"
 
 ///////////////////////////////////////////////////////////////////////
 //define

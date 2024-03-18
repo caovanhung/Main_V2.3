@@ -20,6 +20,7 @@ void printInfo(const char* formatedString, ...);
 
 #define StringLength(str)   (str == NULL? 0 : strlen(str))
 char* StringCopy(char* dest, const char* src);
+char* StringAppend(char* dest, const char* src);
 bool StringCompare(const char* str1, const char* str2);
 bool StringContains(const char* mainString, const char* subString);
 

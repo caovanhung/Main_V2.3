@@ -813,7 +813,15 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                     DpInfo dpInfo;
                     int foundDps = Db_FindDp(&dpInfo, scene->conditions[c].entityId, scene->conditions[c].dpId);
                     if (foundDps == 1 && scene->conditions[c].valueType == ValueTypeDouble) {
-                        if(dpInfo.value == scene->conditions[c].dpValue) {
+                        bool satisfied = false;
+                        if (StringCompare(scene->conditions[c].expr, ">") && dpInfo.value > scene->conditions[c].dpValue) {
+                            satisfied = true;
+                        } else if (StringCompare(scene->conditions[c].expr, "<") && dpInfo.value < scene->conditions[c].dpValue) {
+                            satisfied = true;
+                        } else if (StringCompare(scene->conditions[c].expr, "==") && dpInfo.value == scene->conditions[c].dpValue) {
+                            satisfied = true;
+                        }
+                        if (satisfied) {
                             // Save history for this local scene
                             JSON* history = JSON_CreateObject();
                             JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_DEVICE);
@@ -1515,6 +1523,19 @@ int main(int argc, char ** argv)
                         int foundDps = Db_FindDpByAddr(&dpInfo, dpAddr, hcAddr);
                         if (foundDps == 1) {
                             Aws_UpdateLockKids(dpInfo.deviceId, dpInfo.id, lockValue);
+                        }
+                        break;
+                    }
+                    case GW_RESP_NEW_CURTAIN: {
+                        char* hcAddr = JSON_GetText(payload, "hcAddr");
+                        char* deviceAddr = JSON_GetText(payload, "deviceAddr");
+                        int openClose = JSON_GetNumber(payload, "openClose");
+                        int position = JSON_GetNumber(payload, "position");
+                        DeviceInfo deviceInfo;
+                        int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr, hcAddr);
+                        if (foundDevices == 1) {
+                            SaveDpValueByAddr(deviceAddr, hcAddr, 1, openClose);
+                            SaveDpValueByAddr(deviceAddr, hcAddr, 2, position);
                         }
                         break;
                     }

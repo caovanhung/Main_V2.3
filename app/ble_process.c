@@ -708,38 +708,24 @@ bool GW_ConfigGateway(int gwIndex, provison_inf *PRV)
 }
 
 
-int get_count_element_of_DV(const char* pid_)
-{
-    if(isMatchString(pid_,HG_BLE_SWITCH_1))
-    {
+int get_count_element_of_DV(const char* pid_) {
+    if(isMatchString(pid_,HG_BLE_SWITCH_1)) {
         return 1;
-    }
-    else if(isMatchString(pid_,HG_BLE_SWITCH_2))
-    {
+    } else if(isMatchString(pid_,HG_BLE_SWITCH_2)) {
         return 2;
-    }
-    else if(isMatchString(pid_,HG_BLE_SWITCH_3))
-    {
+    } else if(isMatchString(pid_,HG_BLE_SWITCH_3)) {
         return 3;
-    }
-    else if(isMatchString(pid_,HG_BLE_SWITCH_4))
-    {
+    } else if(isMatchString(pid_,HG_BLE_SWITCH_4)) {
         return 4;
-    }
-        else if(isMatchString(pid_,HG_BLE_CURTAIN_NORMAL))
-    {
+    } else if(isMatchString(pid_,HG_BLE_CURTAIN_NORMAL)) {
         return 1;
-    }
-        else if(isMatchString(pid_,HG_BLE_ROLLING_DOOR))
-    {
+    } else if(isMatchString(pid_,HG_BLE_ROLLING_DOOR)) {
         return 1;
-    }
-    else if(isMatchString(pid_,HG_BLE_CURTAIN_2_LAYER))
-    {
+    } else if(isMatchString(pid_,HG_BLE_CURTAIN_2_LAYER)) {
         return 2;
-    }
-    else
+    } else {
         return 0;
+    }
 }
 
 void get_string_add_DV_write_GW(char **result,const char* address_device,const char* element_count,const char* deviceID)
@@ -1159,6 +1145,9 @@ int GW_CheckReceivedFrame(struct state_element *temp, ble_rsp_frame_t* frame)
     } else if(frame->opcode == 0x5204 && frame->paramSize >= 3 && frame->param[0] == 0x00) {
         // PIR sensor light intensity
         return GW_RESPONSE_SENSOR_PIR_LIGHT;
+    } else if(frame->opcode == 0x520A && frame->paramSize >= 3 && frame->param[0] == 0x00) {
+        // Response status for new curtain (HG_BLE_CURTAIN_IH35, HG_BLE_CURTAIN_IH68)
+        return GW_RESP_NEW_CURTAIN;
     } else if (frame->opcode == 0x8245 && frame->paramSize >= 1) {
         // Add LC scene action
         return GW_RESPONSE_ADD_SCENE;
@@ -1631,5 +1620,56 @@ bool GW_GetGroups(int gwIndex, const char *deviceAddr, const char *dpAddr) {
     data[12] = (dpAddrHex >> 8) & 0x00FF;
     data[13] = (dpAddrHex & 0x00FF);
     UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, addrHex, data, 14);
+    return true;
+}
+
+bool GW_ControlNewCurtain(int gwIndex, const char* dpAddr, uint8_t openClose, uint8_t position) {
+    ASSERT(dpAddr);
+
+    uint8_t data[] = {0xe8, 0xff,  0x00,0x00,0x00,0x00,0x00,0x00,  0xff,0xff,  0x82,0x02, 0x00, 0x00, 0x00};
+    long int dpAddrHex = strtol(dpAddr, NULL, 16);
+    data[9] = dpAddrHex & (0xFF);
+    data[8] = (dpAddrHex >> 8) & 0xFF;
+    data[12] = openClose;
+    data[14] = position;
+
+    UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 15);
+    frame->priority = 0;
+    return true;
+}
+
+bool GW_SetSceneConditionNewCurtain(int gwIndex, const char* dpAddr, const char* sceneId, uint8_t operator, uint8_t position) {
+    ASSERT(dpAddr); ASSERT(sceneId);
+
+    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0xff,0xff,      0xE0,0x11,0x02,0x00,0x00,     0x50,0x00,          0x00,0x00,  0x00,0x00};
+    long int dpAddrHex = strtol(dpAddr, NULL, 16);
+    long int sceneIdHex = strtol(sceneId, NULL, 16);
+
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[17] = (uint8_t)(sceneIdHex >> 8);
+    data[18] = (uint8_t)(sceneIdHex);
+    data[19] = operator;
+    data[20] = position;
+
+    UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 21);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
+    return true;
+}
+
+bool GW_SetSceneActionNewCurtain(int gwIndex, const char* dpAddr, const char* sceneId, uint8_t operator, uint8_t position) {
+    ASSERT(sceneId); ASSERT(dpAddr);
+
+    uint8_t  data[] = {0xe8,0xff,0x00,0x00,0x00,0x00,0x00,0x00, 0xff,0xff,      0x82,0x46,  0x00,0x00, 0x00,0x00};
+    long int dpAddrHex = strtol(dpAddr, NULL, 16);
+    long int sceneIdHex = strtol(sceneId, NULL, 16);
+    data[8] = (uint8_t)(dpAddrHex >> 8);
+    data[9] = (uint8_t)(dpAddrHex);
+    data[12] = (uint8_t)(sceneIdHex >> 8);
+    data[13] = (uint8_t)(sceneIdHex);
+    data[14] = operator;
+    data[15] = position;
+    UartSendingFrame* frame = sendFrameToGwIndex(gwIndex, dpAddrHex, data, 16);
+    addTimeoutToSendingFrame(GWCFG_TIMEOUT_SCENEGROUP);
     return true;
 }

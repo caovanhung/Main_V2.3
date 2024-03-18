@@ -653,6 +653,19 @@ void Ble_ProcessPacket()
                     JSON_Delete(packet);
                     break;
                 }
+                case GW_RESP_NEW_CURTAIN: {
+                    logInfo("GW_RESP_NEW_CURTAIN");
+                    JSON* packet = JSON_CreateObject();
+                    JSON_SetText(packet, "hcAddr", g_hcAddr);
+                    uint16_t openClose = bleFrames[i].param[1];
+                    uint16_t position = bleFrames[i].param[2];
+                    JSON_SetText(packet, "deviceAddr", tmp->address_element);
+                    JSON_SetNumber(packet, "openClose", openClose);
+                    JSON_SetNumber(packet, "position", position);
+                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    JSON_Delete(packet);
+                    break;
+                }
                 default:
                     logError("Packet type is not supported: %d", frameType);
                     break;
@@ -796,6 +809,9 @@ void GetIpAddressLoop() {
 
         // Check connected wifi name
         char wifiName[100];
+        g_wifiName[0] = 'N';
+        g_wifiName[1] = 'A';
+        g_wifiName[2] = 0;
         fp = popen("iw wlan0 info | grep -Po '(?<=ssid ).*'", "r");
         while (fgets(wifiName, sizeof(wifiName), fp) != NULL);
         if (wifiName && StringLength(wifiName) > 1) {
@@ -935,6 +951,7 @@ int main( int argc,char ** argv )
                     int lightness = -1, colorTemperature = -1;
                     int irCommandType = 0, irBrandId = 0, irRemoteId = 0, irTemp = 0, irMode = 0, irFan = 0, irSwing = 1;
                     bool sendCmdDirectlyFromApp = false;
+                    int newCurtainOpenClose = -1, newCurtainPosition = -1;
                     JSON_ForEach(o, dictDPs) {
                         int dpId = JSON_GetNumber(o, "id");
                         if (dpId == 106) {   // dpId == 106 for sending BLE commands from app
@@ -946,6 +963,12 @@ int main( int argc,char ** argv )
                             int dpValue = JSON_GetNumber(o, "value");
                             if (StringContains(HG_BLE_SWITCH, pid)) {
                                 GW_HgSwitchOnOff(gwIndex, dpAddr, dpValue);
+                            } else if (StringContains(HG_BLE_CURTAIN_IH35, pid) || StringContains(HG_BLE_CURTAIN_IH68, pid)) {
+                                if (dpId == 1) {
+                                    newCurtainOpenClose = dpValue;
+                                } else if (dpId == 2) {
+                                    newCurtainPosition = dpValue;
+                                }
                             } else if (StringContains(HG_BLE_CURTAIN, pid) || dpId == 20) {
                                 GW_CtrlLightOnOff(gwIndex, dpAddr, dpValue);
                             } else if (dpId == 24) {
@@ -990,6 +1013,15 @@ int main( int argc,char ** argv )
                     }
                     if (irCommandType > 0 && irBrandId > 0 && irRemoteId > 0 && sendCmdDirectlyFromApp == false) {
                         GW_ControlIR(gwIndex, dpAddr, irCommandType, irBrandId, irRemoteId, irTemp, irMode, irFan, irSwing);
+                    }
+                    if (newCurtainOpenClose >= 0 || newCurtainPosition >= 0) {
+                        if (newCurtainOpenClose < 0) {
+                            newCurtainOpenClose = 0;
+                        }
+                        if (newCurtainPosition < 0) {
+                            newCurtainPosition = 0;
+                        }
+                        GW_ControlNewCurtain(gwIndex, dpAddr, newCurtainOpenClose, newCurtainPosition);
                     }
                     break;
                 }
@@ -1334,6 +1366,17 @@ bool addSceneActions(const char* sceneId, JSON* actions) {
                         GW_SetSceneActionForLightCCT(gwIndex, deviceAddr, sceneId);
                         // Add this device to response list to check TIMEOUT later
                         addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
+                    } else if (StringContains(HG_BLE_CURTAIN_IH35, pid) || StringContains(HG_BLE_CURTAIN_IH68, pid)) {
+                        int operator = 0, position = 0;
+                        if (dpId == 1) {
+                            operator = dpValue;
+                        }
+                        if (dpId == 2) {
+                            position = dpValue;
+                        }
+                        GW_SetSceneActionNewCurtain(gwIndex, deviceAddr, sceneId, operator, position);
+                        // Add this device to response list to check TIMEOUT later
+                        addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
                     }
                 }
             }
@@ -1406,7 +1449,25 @@ bool addSceneCondition(const char* sceneId, JSON* condition) {
         } else {
             char* dpAddr = JSON_GetText(condition, "dpAddr");
             int dpValue   = JSON_GetNumber(condition, "dpValue");
-            GW_SetSceneCondition(gwIndex, dpAddr, sceneId, dpValue);
+            if (StringCompare(pid, HG_BLE_CURTAIN_IH35) || StringCompare(pid, HG_BLE_CURTAIN_IH68)) {
+                int operator = 1;
+                int position = 0;
+                if (JSON_HasKey(condition, "expr")) {
+                    JSON* exprArray = JSON_GetObject(condition, "expr");
+                    char* expr = JArr_GetText(exprArray, 1);
+                    position = JArr_GetNumber(exprArray, 2);
+                    if (StringCompare(expr, ">")) {
+                        operator = 2;
+                    } else if (StringCompare(expr, "<")) {
+                        operator = 0;
+                    } else if (StringCompare(expr, "==")) {
+                        operator = 1;
+                    }
+                }
+                GW_SetSceneConditionNewCurtain(gwIndex, dpAddr, sceneId, operator, position);
+            } else {
+                GW_SetSceneCondition(gwIndex, dpAddr, sceneId, dpValue);
+            }
             // Add this device to response list to check TIMEOUT later
             addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);
         }
@@ -1423,30 +1484,7 @@ void addSceneConditions(const char* sceneId, int sceneType, JSON* conditions) {
     uint8_t presenceSensorType = 0;
     JSON_ForEach(c, conditions) {
         char *pid = JSON_GetText(c, "pid");
-        // if (StringCompare(pid, HG_BLE_SENSOR_PRESENCE)) {
-        //     int dpId = JSON_GetNumber(c, "dpId");
-        //     char* dpAddr = JSON_GetText(c, "dpAddr");
-        //     int dpValue   = JSON_GetNumber(c, "dpValue");
-        //     StringCopy(presenceSensorAddr, dpAddr);
-            
-        //     if (dpId == 1) {
-        //         presenceSensorActive |= (1 << dpValue);
-        //     } else if (dpId == 2) {
-        //         presenceSensorType |= (1 << dpValue);
-        //     } else {
-        //         char* operator = JSON_GetText(c, "operator");
-        //         if (StringCompare(operator, ">")) {
-        //             presenceLightlessCond = 3;
-        //         } else if (StringCompare(operator, "<")) {
-        //             presenceLightlessCond = 1;
-        //         } else {
-        //             presenceLightlessCond = 2;
-        //         }
-        //         presenceSensorLightless = dpValue;
-        //     }
-        // } else {
-            addSceneCondition(sceneId, c);
-        // }
+        addSceneCondition(sceneId, c);
     }
 
     if (presenceLightlessCond > 0 || presenceSensorActive > 0 || presenceSensorType > 0) {
