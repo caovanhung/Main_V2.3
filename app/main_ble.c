@@ -432,9 +432,14 @@ void Ble_ProcessPacket()
                     JSON* packet = JSON_CreateObject();
                     JSON_SetText(packet, "hcAddr", g_hcAddr);
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
-                    char color[14];
-                    sprintf(color, "%02x%02x%02x%02x%02x%02x", bleFrames[i].param[3], bleFrames[i].param[2], bleFrames[i].param[5], bleFrames[i].param[4], bleFrames[i].param[7], bleFrames[i].param[6]);
-                    JSON_SetText(packet, "color", color);
+                    if (bleFrames[i].opcode == 0x8278) {
+                        char color[14];
+                        sprintf(color, "%02x%02x%02x%02x%02x%02x", bleFrames[i].param[3], bleFrames[i].param[2], bleFrames[i].param[5], bleFrames[i].param[4], bleFrames[i].param[7], bleFrames[i].param[6]);
+                        JSON_SetText(packet, "color", color);
+                    } else {
+                        uint8_t blinkMode = bleFrames[i].param[2];
+                        JSON_SetNumber(packet, "blinkMode", blinkMode);
+                    }
                     sendPacketTo(SERVICE_CORE, frameType, packet);
                     break;
                 }
@@ -1414,7 +1419,7 @@ bool deleteSceneActions(const char* sceneId, JSON* actions) {
                 int dpId = JSON_GetNumber(action, "dpId");
                 char* deviceAddr = JSON_GetText(action, "entityAddr");
                 if (pid != NULL) {
-                    if (StringContains(HG_BLE_SWITCH, pid) || StringContains(HG_BLE_CURTAIN, pid)) {
+                    if (StringContains(HG_BLE_SWITCH, pid) || StringContains(HG_BLE_CURTAIN, pid) || StringContains(HG_BLE_CURTAIN_IH35, pid) || StringContains(HG_BLE_CURTAIN_IH68, pid)) {
                         char* dpAddr = JSON_GetText(action, "dpAddr");
                         GW_DelSceneAction(gwIndex, dpAddr, sceneId);
                         addRespTypeToSendingFrame(GW_RESPONSE_ADD_SCENE, sceneId);

@@ -154,7 +154,7 @@ JSON* Db_FindDevicesInGroup(const char* groupAddr);
 int Db_GetGroupType(const char* groupAddr);
 int Db_SaveGroupDevices(const char* groupAddr, JSON* devices);
 
-int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex);
+int Db_AddDp(const char* deviceId, int dpId, const char* addr, const char* dpName, int pageIndex);
 int Db_FindDp(DpInfo* dpInfo, const char* deviceId, int dpId);
 int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr, const* hcAddr);
 int Db_FindDpByAddrAndDpId(DpInfo* dpInfo, const char* dpAddr, const char* hcAddr, int dpId);
@@ -173,6 +173,9 @@ int Db_SaveScene(const char* sceneId, JSON* actions, JSON* conditions);
 
 int Db_AddDeviceHistory(JSON* packet);
 JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char* deviceId, char* dpIds, int causeType, int eventType, int limit);
+
+void Db_GetDeviceName(const char* deviceID, int dpID, char* deviceName);
+bool Noti_IsEnable(int categoryID, int notiType);
 
 bool open_database(const char *filename, sqlite3 **db);
 bool close_database(sqlite3 **db);

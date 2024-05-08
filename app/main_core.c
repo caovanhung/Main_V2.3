@@ -31,6 +31,7 @@
 #include "cJSON.h"
 #include "common.h"
 
+
 int GWCFG_TIMEOUT_SCENEGROUP = 6000;
 int GWCFG_GET_ONLINE_TIME = 400000;
 
@@ -62,6 +63,7 @@ bool addNewDevice(JSON* packet) {
     List* tmp = String_Split(deviceStr, "|");
     if (tmp->count >= 5) {
         JSON* dictDPs = JSON_GetObject(packet, "dictDPs");
+        JSON* dictNames = JSON_GetObject(packet, "dictName");
         char* deviceId = JSON_GetText(packet, KEY_DEVICE_ID);
         char* deviceAddr = tmp->items[3];
         char* pid = tmp->items[1];
@@ -91,12 +93,18 @@ bool addNewDevice(JSON* packet) {
         JSON_ForEach(dp, dictDPs) {
             int dpId = atoi(dp->string);
             int dpValue = dp->valueint;
+            char* dpName;
+            if (JSON_HasKey(dictNames, dp->string)) {
+                dpName = JSON_GetText(dictNames, dp->string);
+            } else {
+                dpName = " ";
+            }
             uint16_t increasedAddr = tmp + dpId - 1;
             sprintf(dpAddrStr, "%02X%02X", increasedAddr & 0x00FF, increasedAddr >> 8);
             if (addressIncrement && dpId < 10) {
-                Db_AddDp(deviceId, dpId, dpAddrStr, pageIndex);
+                Db_AddDp(deviceId, dpId, dpAddrStr, dpName, pageIndex);
             } else {
-                Db_AddDp(deviceId, dpId, deviceAddr, pageIndex);
+                Db_AddDp(deviceId, dpId, deviceAddr, dpName, pageIndex);
             }
             Db_SaveDpValue(deviceId, dpId, dpValue);
         }
@@ -105,11 +113,11 @@ bool addNewDevice(JSON* packet) {
             StringCompare(pid, HG_BLE_IR_TV) ||
             StringCompare(pid, HG_BLE_IR_FAN) ||
             StringCompare(pid, HG_BLE_IR_REMOTE)) {
-            Db_AddDp(deviceId, 3, deviceAddr, pageIndex);
+            Db_AddDp(deviceId, 3, deviceAddr, " ", pageIndex);
             JSON* dictDPs = JSON_GetObject(packet, "dictDPs");
             JSON_ForEach(dp, dictDPs) {
                 int dpId = atoi(dp->string);
-                if (cJSON_IsNumber) {
+                if (cJSON_IsNumber(dp)) {
                     Db_SaveDpValue(deviceId, dpId, dp->valueint);
                 } else {
                     Db_SaveDpValueString(deviceId, dpId, dp->valuestring);
@@ -119,8 +127,8 @@ bool addNewDevice(JSON* packet) {
             JSON* dictDPs = JSON_GetObject(packet, "dictDPs");
             JSON_ForEach(dp, dictDPs) {
                 int dpId = atoi(dp->string);
-                Db_AddDp(deviceId, dpId, dp->valuestring, pageIndex);
-                if (cJSON_IsNumber) {
+                Db_AddDp(deviceId, dpId, dp->valuestring, " ", pageIndex);
+                if (cJSON_IsNumber(dp)) {
                     Db_SaveDpValue(deviceId, dpId, dp->valueint);
                 } else {
                     Db_SaveDpValueString(deviceId, dpId, dp->valuestring);
@@ -627,8 +635,10 @@ void sendSceneRunEventToUser(Scene* scene, int triggerConditionIndex) {
     ASSERT(scene);
     char noti[500];
     char cond[200];
+    int notiType = NOTI_TYPE_RUN_AUTO_SCENE;
     if (scene->type == SceneTypeManual) {
         sprintf(cond, "Chạy bằng tay");
+        notiType = NOTI_TYPE_RUN_MANUAL_SCENE;
     } if (scene->type == SceneTypeAllConds) {
         sprintf(cond, "thỏa mãn tất cả điều kiện");
     } else if (triggerConditionIndex < scene->conditionCount) {
@@ -643,8 +653,11 @@ void sendSceneRunEventToUser(Scene* scene, int triggerConditionIndex) {
             }
         }
     }
-    sprintf(noti, "Kịch bản '%s' được chạy do điều kiện: %s", scene->name, cond);
-    sendNotiToUser(noti, false);
+    if (Noti_IsEnable(NOTI_CAT_HC, notiType)) {
+        sprintf(noti, "Kịch bản '%s' được chạy do điều kiện: %s", scene->name, cond);
+        // sendNotiToUser(noti, false);
+        Noti_SendFCMNotification("Chạy kịch bản thành công", noti);
+    }
 }
 
 bool checkScenePrecondition(Scene* scene) {
@@ -840,19 +853,39 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                                         if (deviceInfo.state == STATE_ONLINE) {
                                             for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
                                                 if (scene->actions[act].dpIds[dp] != 21 && scene->actions[act].dpIds[dp] != 106) {
-                                                    logInfo("Updating value for device %s.%d by scene %s", deviceInfo.id, scene->actions[act].dpIds[dp], scene->id);
-                                                    Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
-                                                    Db_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp]);
-                                                    checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
+                                                    if (scene->actions[act].valueType == ValueTypeDouble) {
+                                                        logInfo("Updating value for device %s.%d = %d by scene %s", deviceInfo.id, scene->actions[act].dpIds[dp], (int)scene->actions[act].dpValues[dp], scene->id);
+                                                        Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
+                                                        Db_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp]);
+                                                        checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
+                                                    } else {
+                                                        logInfo("Updating value for device %s.%d = '%d' by scene %s", deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].valueString, scene->id);
+                                                        Aws_SaveDpValueString(deviceInfo.id, scene->actions[act].dpIds[0], scene->actions[act].valueString, deviceInfo.pageIndex);
+                                                        Db_SaveDpValueString(deviceInfo.id, scene->actions[act].dpIds[0], scene->actions[act].valueString);
+                                                    }
                                                     JSON* history = JSON_CreateObject();
                                                     JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
                                                     JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
                                                     JSON_SetText(history, "causeId", scene->id);
                                                     JSON_SetText(history, "deviceId", deviceInfo.id);
                                                     JSON_SetNumber(history, "dpId", scene->actions[act].dpIds[dp]);
-                                                    JSON_SetNumber(history, "dpValue", scene->actions[act].dpValues[dp]);
+                                                    if (scene->actions[act].valueType == ValueTypeDouble) {
+                                                        JSON_SetNumber(history, "dpValue", scene->actions[act].dpValues[dp]);
+                                                    } else {
+                                                        JSON_SetText(history, "dpValueStr", scene->actions[act].valueString);
+                                                    }
                                                     Db_AddDeviceHistory(history);
                                                     JSON_Delete(history);
+
+                                                    if (scene->actions[act].dpIds[dp] == 22) {
+                                                        Aws_SaveDpValueString(deviceInfo.id, 21, "white", deviceInfo.pageIndex);
+                                                    } else if (scene->actions[act].dpIds[dp] == 24) {
+                                                        Aws_SaveDpValueString(deviceInfo.id, 21, "colour", deviceInfo.pageIndex);
+                                                    }
+                                                } else if (scene->actions[act].dpIds[dp] == 21 && scene->actions[act].dpValues[dp] >= 0) {
+                                                    char tmp[20];
+                                                    sprintf(tmp, "scene_%d", (int)scene->actions[act].dpValues[dp]);
+                                                    Aws_SaveDpValueString(deviceInfo.id, 21, tmp, deviceInfo.pageIndex);
                                                 }
                                             }
                                         } else {
@@ -1128,12 +1161,21 @@ void CheckDeviceOffline() {
         char sqlCmd[500];
         char pid[1000];
         List* offlineDevices = List_Create();
-        sprintf(pid, "%s,%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN, HG_BLE_IR);
-        sprintf(sqlCmd, "SELECT deviceId, pageIndex FROM devices_inf d \
+        sprintf(pid, "%s,%s,%s,%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN, HG_BLE_IR, HG_BLE_CURTAIN_IH35, HG_BLE_CURTAIN_IH68);
+        sprintf(sqlCmd, "SELECT deviceId, pageIndex, state, name FROM devices_inf d \
                         WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NOT NULL AND %lld - d.last_updated > %d) AND d.deviceKey IS NOT NULL", pid, oldTick, GWCFG_GET_ONLINE_TIME * 4);
         Sql_Query(sqlCmd, row) {
             char* deviceId = sqlite3_column_text(row, 0);
             int pageIndex = sqlite3_column_int(row, 1);
+            int currentState = sqlite3_column_int(row, 2);
+            char* deviceName = sqlite3_column_text(row, 3);
+            if (currentState == STATE_ONLINE) {
+                if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_DEV_ONLINE)) {
+                    char* noti[300];
+                    sprintf(noti, "Thiết bị '%s' đã ngoại tuyến", deviceName);
+                    Noti_SendFCMNotification("Thiết bị ngoại tuyến", noti);
+                }
+            }
             Db_SaveDeviceState(deviceId, STATE_OFFLINE);
             Aws_SaveDeviceState(deviceId, STATE_OFFLINE, pageIndex);
             List_PushString(offlineDevices, deviceId);
@@ -1170,6 +1212,16 @@ int main(int argc, char ** argv)
     sleep(1);
     printInfo("Current epoch time: %d", time(NULL));
 
+    char noti[500];
+    Sql_Query("select name from Gateway where isMaster=1", row) {
+        char* name = sqlite3_column_text(row, 0);
+        sprintf(noti, "Thiết bị '%s' đã trực tuyến", name);
+        break;
+    }
+
+    // if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_HC_ONLINE)) {
+    //     Noti_SendFCMNotification("HC Online", noti);
+    // }
     while(xRun!=0) {
         Mosq_ProcessLoop();
         ResponseWaiting();
@@ -1226,6 +1278,7 @@ int main(int argc, char ** argv)
                                         Db_SaveDpValue(dpInfo.deviceId, dpId, value);
                                         Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
                                         Aws_SaveDpValue(dpInfo.deviceId, dpId, value, dpInfo.pageIndex);
+                                        Aws_SaveDpValueString(dpInfo.deviceId, 21, "white", dpInfo.pageIndex);
                                     }
                                 }
                             }
@@ -1235,17 +1288,33 @@ int main(int argc, char ** argv)
                     case GW_RESPONSE_RGB_COLOR: {
                         char* deviceAddr = JSON_GetText(payload, "deviceAddr");
                         char* hcAddr = JSON_GetText(payload, "hcAddr");
-                        char* color = JSON_GetText(payload, "color");
-                        int dpId = 24;
+                        int dpId = 0;
+                        char* color = NULL;
+                        uint8_t blinkMode;
+                        if (JSON_HasKey(payload, "blinkMode")) {
+                            dpId = 21;
+                            blinkMode = JSON_GetNumber(payload, "blinkMode");
+                        } else {
+                            color = JSON_GetText(payload, "color");
+                            dpId = 24;
+                        }
                         DpInfo dpInfo;
                         DeviceInfo deviceInfo;
                         int foundDps = Db_FindDpByAddrAndDpId(&dpInfo, deviceAddr, hcAddr, dpId);
                         if (foundDps == 1) {
                             int foundDevices = Db_FindDevice(&deviceInfo, dpInfo.deviceId);
                             if (foundDevices == 1) {
-                                Db_SaveDpValueString(dpInfo.deviceId, dpId, color);
                                 Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
-                                Aws_SaveDpValueString(dpInfo.deviceId, dpId, color, dpInfo.pageIndex);
+                                if (color != NULL) {
+                                    Db_SaveDpValueString(dpInfo.deviceId, dpId, color);
+                                    Aws_SaveDpValueString(dpInfo.deviceId, dpId, color, dpInfo.pageIndex);
+                                    Aws_SaveDpValueString(dpInfo.deviceId, 21, "colour", dpInfo.pageIndex);
+                                } else {
+                                    char tmp[20];
+                                    sprintf(tmp, "scene_%d", blinkMode);
+                                    Db_SaveDpValueString(dpInfo.deviceId, dpId, tmp);
+                                    Aws_SaveDpValueString(dpInfo.deviceId, dpId, tmp, dpInfo.pageIndex);
+                                }
                             }
                         }
                         break;
@@ -1267,6 +1336,16 @@ int main(int argc, char ** argv)
                                 }
                                 if (opcode != 0x8201 || oldDpValue != dpValue || deviceInfo.state == STATE_OFFLINE) {
                                     Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
+                                    int categoryID = Noti_GetCategory(deviceInfo.pid);
+                                    if (categoryID > 0) {
+                                        int notiType = NOTI_TYPE_ONOFF;
+                                        if (Noti_IsEnable(categoryID, notiType)) {
+                                            char notiContent[200], deviceName[100];
+                                            Db_GetDeviceName(deviceInfo.id, dpInfo.id, deviceName);
+                                            Noti_GetContent(notiContent, notiType, dpValue, deviceName);
+                                            Noti_SendFCMNotification("Trạng thái thiết bị thay đổi", notiContent);
+                                        }
+                                    }
                                 }
                                 Db_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue);
                                 Db_SaveDeviceState(dpInfo.deviceId, STATE_ONLINE);
@@ -1445,6 +1524,23 @@ int main(int argc, char ** argv)
                             JSON_SetNumber(payload, "eventType", EV_DEVICE_DP_CHANGED);
                             Db_AddDeviceHistory(payload);
                             checkSceneForDevice(deviceInfo.id, dpId, dpValue, NULL, true);     // Check and run scenes for this device if any
+                            int categoryID = Noti_GetCategory(deviceInfo.pid);
+                            if (categoryID > 0 && reqType != GW_RESPONSE_SENSOR_PIR_LIGHT 
+                                               && reqType != GW_RESPONSE_SENSOR_ENVIRONMENT 
+                                               && reqType != GW_RESPONSE_SENSOR_DOOR_ALARM) {
+                                int notiType = NOTI_TYPE_ACTIVE;
+                                if (dpId == TYPE_DPID_DOOR_SENSOR_DETECT) {
+                                    notiType = NOTI_TYPE_OPEN_CLOSE;
+                                } else if (dpId == TYPE_DPID_BATTERY_SENSOR) {
+                                    notiType = NOTI_TYPE_LOW_BATTER;
+                                }
+                                if (Noti_IsEnable(categoryID, notiType)) {
+                                    char notiContent[200], deviceName[100];
+                                    Db_GetDeviceName(deviceInfo.id, 0, deviceName);
+                                    Noti_GetContent(notiContent, notiType, dpValue, deviceName);
+                                    Noti_SendFCMNotification("Trạng thái thiết bị thay đổi", notiContent);
+                                }
+                            }
                         }
 
                         break;
@@ -1485,6 +1581,7 @@ int main(int argc, char ** argv)
                         DeviceInfo deviceInfo;
                         int foundDevices = Db_FindDeviceByAddr(&deviceInfo, deviceAddr, hcAddr);
                         if (foundDevices == 1) {
+                            char deviceName[100];
                             if (StringContains(HG_BLE_IR_FULL, deviceInfo.pid)) {
                                 // Remove TV, AC, FAN, Remote
                                 char sqlCmd[200];
@@ -1492,6 +1589,7 @@ int main(int argc, char ** argv)
                                 Sql_Query(sqlCmd, row) {
                                     char* deviceId = sqlite3_column_text(row, 0);
                                     int pageIndex = sqlite3_column_int(row, 15);
+                                    StringCopy(deviceName, sqlite3_column_text(row, 2));
                                     Aws_DeleteDevice(deviceId, pageIndex);
                                     DeleteDeviceFromScenes(deviceId);
                                 }
@@ -1499,11 +1597,22 @@ int main(int argc, char ** argv)
                                 Sql_Exec(sqlCmd);
                                 sprintf(sqlCmd, "DELETE FROM devices WHERE address = '%s'", deviceAddr);
                                 Sql_Exec(sqlCmd);
+                                if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_HARD_DEL_DEV)) {
+                                    char noti[200];
+                                    sprintf(noti, "Thiết bị '%s' đã được xoá khỏi bộ trung tâm", deviceName);
+                                    Noti_SendFCMNotification("Xoá thiết bị", noti);
+                                }
                             } else {
                                 DeleteDeviceFromGroups(deviceInfo.id);
                                 DeleteDeviceFromScenes(deviceInfo.id);
                                 Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
                                 Db_DeleteDevice(deviceInfo.id);
+                                if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_HARD_DEL_DEV)) {
+                                    char noti[200];
+                                    Db_GetDeviceName(deviceInfo.id, 0, deviceName);
+                                    sprintf(noti, "Thiết bị '%s' đã được xoá khỏi bộ trung tâm", deviceName);
+                                    Noti_SendFCMNotification("Xoá thiết bị", noti);
+                                }
                             }
                         } else {
                             logError("Device %s in hc %s is not found", deviceAddr, hcAddr);
@@ -1648,20 +1757,41 @@ int main(int argc, char ** argv)
                                                 int foundDevices = Db_FindDevice(&deviceInfo, scene->actions[act].entityId);
                                                 if (foundDevices == 1) {
                                                     for (int dp = 0; dp < scene->actions[act].dpCount; dp++) {
-                                                        Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
-                                                        Db_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp]);
-                                                        // Save history for group link
-                                                        JSON* history = JSON_CreateObject();
-                                                        JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
-                                                        JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
-                                                        JSON_SetText(history, "causeId", sceneId);
-                                                        JSON_SetText(history, "deviceId", deviceInfo.id);
-                                                        JSON_SetNumber(history, "dpId", scene->actions[act].dpIds[dp]);
-                                                        JSON_SetNumber(history, "dpValue", scene->actions[act].dpValues[dp]);
-                                                        Db_AddDeviceHistory(history);
-                                                        JSON_Delete(history);
-
-                                                        checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
+                                                        if (scene->actions[act].dpIds[dp] != 21 && scene->actions[act].dpIds[dp] != 106) {
+                                                            if (scene->actions[act].valueType == ValueTypeDouble) {
+                                                                Aws_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], deviceInfo.pageIndex);
+                                                                Db_SaveDpValue(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp]);
+                                                            } else {
+                                                                Aws_SaveDpValueString(deviceInfo.id, scene->actions[act].dpIds[0], scene->actions[act].valueString, deviceInfo.pageIndex);
+                                                                Db_SaveDpValueString(deviceInfo.id, scene->actions[act].dpIds[0], scene->actions[act].valueString);
+                                                            }
+                                                            // Save history
+                                                            JSON* history = JSON_CreateObject();
+                                                            JSON_SetNumber(history, "eventType", EV_DEVICE_DP_CHANGED);
+                                                            JSON_SetNumber(history, "causeType", EV_CAUSE_TYPE_SCENE);
+                                                            JSON_SetText(history, "causeId", sceneId);
+                                                            JSON_SetText(history, "deviceId", deviceInfo.id);
+                                                            JSON_SetNumber(history, "dpId", scene->actions[act].dpIds[dp]);
+                                                            if (scene->actions[act].valueType == ValueTypeDouble) {
+                                                                JSON_SetNumber(history, "dpValue", scene->actions[act].dpValues[dp]);
+                                                            } else {
+                                                                JSON_SetText(history, "dpValueStr", scene->actions[act].valueString);
+                                                            }
+                                                            Db_AddDeviceHistory(history);
+                                                            JSON_Delete(history);
+                                                            if (scene->actions[act].valueType == ValueTypeDouble) {
+                                                                checkSceneForDevice(deviceInfo.id, scene->actions[act].dpIds[dp], scene->actions[act].dpValues[dp], NULL, true);
+                                                            }
+                                                            if (scene->actions[act].dpIds[dp] == 22) {
+                                                                Aws_SaveDpValueString(deviceInfo.id, 21, "white", deviceInfo.pageIndex);
+                                                            } else if (scene->actions[act].dpIds[dp] == 24) {
+                                                                Aws_SaveDpValueString(deviceInfo.id, 21, "colour", deviceInfo.pageIndex);
+                                                            }
+                                                        } else if (scene->actions[act].dpIds[dp] == 21 && scene->actions[act].dpValues[dp] >= 0) {
+                                                            char tmp[20];
+                                                            sprintf(tmp, "scene_%d", (int)scene->actions[act].dpValues[dp]);
+                                                            Aws_SaveDpValueString(deviceInfo.id, 21, tmp, deviceInfo.pageIndex);
+                                                        }
                                                     }
                                                 }
                                             }
@@ -2370,6 +2500,33 @@ int main(int argc, char ** argv)
                         }
                         break;
                     }
+                    case TYPE_UDATE_NOTI_CONF: {
+                        logInfo("TYPE_UDATE_NOTI_CONF");
+                        JSON* categories = JSON_GetObject(payload, "categories");
+                        JSON_ForEach(category, categories) {
+                            int categoryID = atoi(category->string);
+                            JSON_ForEach(notification, category) {
+                                int notificationID = atoi(notification->string);
+                                int notificationEnable = notification->valueint;
+                                char sqlCmd[300];
+                                bool found = false;
+                                sprintf(sqlCmd, "SELECT * FROM NOTI_SETTING WHERE categoryId=%d AND notiType=%d", categoryID, notificationID);
+                                Sql_Query(sqlCmd, row) {
+                                    found = true;
+                                }
+                                if (found == true) {
+                                    sprintf(sqlCmd, "UPDATE NOTI_SETTING SET enable=%d WHERE categoryId=%d AND notiType=%d", notificationEnable, categoryID, notificationID);
+                                    logInfo("Run cmd: %s", sqlCmd);
+                                    Sql_Exec(sqlCmd);
+                                } else {
+                                    sprintf(sqlCmd, "INSERT INTO NOTI_SETTING(categoryId, notiType, enable) VALUES(%d, %d, %d)", categoryID, notificationID, notificationEnable);
+                                    logInfo("Run cmd: %s", sqlCmd);
+                                    Sql_Exec(sqlCmd);
+                                }
+                            }
+                        }
+                        break;
+                    }
                 }
             } else if(isMatchString(NameService, SERVICE_HANET) && payload) {
                 switch (reqType) {
@@ -2543,7 +2700,7 @@ bool Scene_GetFullInfo(JSON* packet) {
 
 void SyncDevicesState() {
     JSON* packet = JSON_CreateArray();
-    char sqlCmd[300];
+    char sqlCmd[500];
     sprintf(sqlCmd, "SELECT address FROM devices \
                     JOIN devices_inf ON devices.deviceId = devices_inf.deviceId \
                     WHERE instr('%s', pid) > 0 OR dpId='20';", HG_BLE);

@@ -7,6 +7,10 @@ extern JSON *g_checkRespList;
 
 /************************************ COMMON APIS **************************************/
 void CoreInit();
+int Noti_SendFCMNotification(const char* title, const char* message);
+int Noti_GetCategory(const char* pid);
+void Noti_GetContent(char* content, int notiType, int dpValue, const char* deviceName);
+
 void sendPacketToBle(int gwIndex, int reqType, JSON* packet);
 bool CompareDeviceById(JSON* device1, JSON* device2);
 JSON* parseGroupLinkDevices(const char* devices);

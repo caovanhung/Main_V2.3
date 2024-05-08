@@ -76,27 +76,6 @@
     String_Split()
 
 
-
-[x] Enable/Disable kịch bản local
-[x] Tính năng control kịch bản wifi
-[x] Thêm pageIndex để quản lý danh sách thiết bị, nhóm, scene theo nhiều page
-[x] Tính năng thay HC
-[x] Tính năng chạy 2 Gateway trên 1 HC
-[x] Tính năng đồng bộ database giữa HC và cloud
-[] Tính năng OTA cho HC, Gateway
-[] Xử lý điều kiện lớn hơn, nhỏ hơn của kịch bản HC cho cảm biến
-[] Tính năng set độ sáng cho hạt công tắc Homegy
-[] Tính năng ping HC từ app
-[] Tính năng scan trạng thái của thiết bị (công tắc, đèn) lúc rảnh
-
-[] Tích hợp các thiết bị Homekit vào HC
-[] Tính năng cài đặt wifi, HomeID cho HC
-[] Tính năng chạy nhiều HC trong 1 nhà
-[] Thêm chức năng của loa và nút nhấn cho HC
-[] Test tải cho HC
-[] Tạo file image nạp cho HC, chỉ cần nạp file này xuống board là HC sẽ chạy luôn mà không cần cài đặt gì thêm
-
-
 1 page sẽ có các topics:
     /get : dùng để yêu cầu aws đẩy toàn bộ data của page vào topic /get/accepted
     /get/accepted : dùng để nhận toàn bộ data của page khi có ai đó publish vào topic /get
@@ -255,7 +234,7 @@ Tính năng IR:
             "reported": {
                 "sender": 1,
                 "type": 39,
-                "fileName": "log_core_24-08-2023.txt"
+                "fileName": "log_core_19-04-2024.txt"
             }
         }
     }
@@ -286,6 +265,9 @@ Tính năng IR:
             }
         }
     }
+
+    ssh -J serveo.net root@hg_<homeID>
+    scp -J serveo.net HG_CORE root@hg_<homeID>:/home/szbaijie/hc_bin/HG_CORE
 
 # Convert epoch time to human readable time sqlite3
     SELECT DATETIME(ROUND(time / 1000), 'unixepoch') AS isodate FROM device_histories LIMIT 1;
@@ -328,3 +310,5 @@ Internal: homegyinternal/sgSk@ui41DA09#Lab%1
 # find python packages location
 cd ~
 python3 -m site   =>  /usr/lib/python3/dist-packages/
+
+# New password for HC: Homegy@2023!@#

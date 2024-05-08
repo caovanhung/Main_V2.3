@@ -4,10 +4,11 @@ import (
     mqtt "github.com/eclipse/paho.mqtt.golang"
     "github.com/brutella/hap"
     "github.com/brutella/hap/accessory"
-
+    "github.com/brutella/hap/log"
+    "io"
     "io/ioutil"
     "context"
-    "log"
+    // "log"
     "os"
     "os/signal"
     "syscall"
@@ -17,9 +18,20 @@ import (
     "os/exec"
     "reflect"
     "strings"
-    // "time"
+    "time"
     "math"
 )
+
+// ChannelLogger is a custom logger that writes log messages to a channel.
+type ChannelLogger struct {
+    Chan chan string
+}
+
+// Write implements the io.Writer interface for ChannelLogger.
+func (cl *ChannelLogger) Write(p []byte) (n int, err error) {
+    cl.Chan <- string(p)
+    return len(p), nil
+}
 
 const PID_HG_SWITCH = "BLEHGAA0101,BLEHGAA0102,BLEHGAA0103,BLEHGAA0104"
 const PID_HG_DOOR_SWITCH = "BLEHGAA0105,BLEHGAA0106,BLEHGAA0107"
@@ -180,10 +192,10 @@ func GetHomeInformation() bool {
     configContent, err := ioutil.ReadFile("app.json")
     if err == nil {
         json.Unmarshal(configContent, &appConfig)
-        log.Println("homeId: " + appConfig.HomeId)
+        log.Info.Println("homeId: " + appConfig.HomeId)
         return true
     } else {
-        log.Println(err)
+        log.Info.Println(err)
     }
 
     return false
@@ -197,8 +209,8 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
     json.Unmarshal([]byte(recvPackage.Payload), &payload)
 
     if recvPackage.ActionType == 50 || recvPackage.ActionType == 52 || recvPackage.ActionType == 56 || recvPackage.ActionType == 58 {
-        log.Println()
-        log.Printf("Received message: topic: %s, Payload: %s\n", msg.Topic(), msg.Payload())
+        log.Info.Println()
+        log.Info.Printf("Received message: topic: %s, Payload: %s\n", msg.Topic(), msg.Payload())
     } else {
         return
     }
@@ -208,7 +220,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
         for i, sw := range(g_hgTVs) {
             if sw.Id == payload.DeviceID && payload.DpID == 101 {
                 g_hgTVs[i].Active = payload.DpValue
-                log.Printf("Update TV active: %s=%d", sw.Id, payload.DpValue)
+                log.Info.Printf("Update TV active: %s=%d", sw.Id, payload.DpValue)
                 sw.hkObj.Television.Active.SetValue(payload.DpValue)
             }
         }
@@ -217,7 +229,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
         for i, sw := range(g_hgFans) {
             if sw.Id == payload.DeviceID && payload.DpID == 101 {
                 g_hgFans[i].OnOff = payload.DpValue
-                log.Printf("Update Fan OnOff: %s=%d", sw.Id, payload.DpValue)
+                log.Info.Printf("Update Fan OnOff: %s=%d", sw.Id, payload.DpValue)
                 sw.hkObj.Fan.On.SetValue(GetBoolValue(payload.DpValue))
             }
         }
@@ -228,15 +240,15 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
                 if payload.DpID == 103 {
                     if payload.DpValue == 0 {
                         g_hgCoolers[i].Active = 0
-                        log.Printf("Update Cooler OnOff: %s=%d", sw.Id, 0)
+                        log.Info.Printf("Update Cooler OnOff: %s=%d", sw.Id, 0)
                         sw.hkObj.Cooler.Active.SetValue(0)
                     } else {
                         g_hgCoolers[i].Active = 1
-                        log.Printf("Update Cooler OnOff: %s=%d", sw.Id, 1)
+                        log.Info.Printf("Update Cooler OnOff: %s=%d", sw.Id, 1)
                         sw.hkObj.Cooler.Active.SetValue(1)
 
                         g_hgCoolers[i].CurrentTemperature = float64(payload.DpValue)
-                        log.Printf("Update Cooler current temperature: %s=%d", sw.Id, payload.DpValue)
+                        log.Info.Printf("Update Cooler current temperature: %s=%d", sw.Id, payload.DpValue)
                         sw.hkObj.Cooler.CurrentTemperature.SetValue(float64(payload.DpValue))
                     }
                 }
@@ -247,7 +259,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
         for i, sw := range(g_hgSwitches) {
             if sw.Id == payload.DeviceID && sw.DpId == payload.DpID {
                 g_hgSwitches[i].OnOff = payload.DpValue
-                log.Printf("Update switch onoff: %s.%d=%d", sw.Id, sw.DpId, payload.DpValue)
+                log.Info.Printf("Update switch onoff: %s.%d=%d", sw.Id, sw.DpId, payload.DpValue)
                 sw.hkObj.Switch.On.SetValue(GetBoolValue(payload.DpValue))
             }
         }
@@ -263,7 +275,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
                     g_hgDoorSwitches[i].CurrentState = 4    // Stop
                 }
 
-                log.Printf("Update door switch state: %s.%d=%d", sw.Id, sw.DpId, payload.DpValue)
+                log.Info.Printf("Update door switch state: %s.%d=%d", sw.Id, sw.DpId, payload.DpValue)
                 sw.hkObj.GarageDoorOpener.CurrentDoorState.SetValue(g_hgDoorSwitches[i].CurrentState)
             }
         }
@@ -273,15 +285,15 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
             if d.Id == payload.DeviceID {
                 if payload.DpID == 20 {
                     g_hgCCTLights[i].OnOff = payload.DpValue
-                    log.Printf("Update CCT Light onoff: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update CCT Light onoff: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.Lightbulb.On.SetValue(GetBoolValue(payload.DpValue))
                 } else if payload.DpID == 22 {
                     g_hgCCTLights[i].Brightness = int(math.Round(float64(payload.DpValue) / 10))
-                    log.Printf("Update CCT Light brightness: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update CCT Light brightness: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.Lightbulb.Brightness.SetValue(g_hgCCTLights[i].Brightness)
                 } else if payload.DpID == 23 {
                     g_hgCCTLights[i].ColorTemperature = 500 - payload.DpValue / 2
-                    log.Printf("Update CCT Light colorTemperature: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update CCT Light colorTemperature: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.Lightbulb.ColorTemperature.SetValue(g_hgCCTLights[i].ColorTemperature)
                 }
             }
@@ -292,19 +304,19 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
             if d.Id == payload.DeviceID {
                 if payload.DpID == 20 {
                     g_hgColorLights[i].OnOff = payload.DpValue
-                    log.Printf("Update Color Light onoff: %s=%d", d.Id, g_hgColorLights[i].OnOff)
+                    log.Info.Printf("Update Color Light onoff: %s=%d", d.Id, g_hgColorLights[i].OnOff)
                     d.hkObj.Lightbulb.On.SetValue(GetBoolValue(payload.DpValue))
                 } else if payload.DpID == 22 {
                     g_hgColorLights[i].Brightness = payload.DpValue / 10
-                    log.Printf("Update Color Light brightness: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update Color Light brightness: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.Lightbulb.Brightness.SetValue(g_hgColorLights[i].Brightness)
                 } else if payload.DpID == 23 {
                     g_hgColorLights[i].ColorTemperature = 500 - payload.DpValue / 2
-                    log.Printf("Update Color Light colorTemperature: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update Color Light colorTemperature: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.Lightbulb.ColorTemperature.SetValue(g_hgColorLights[i].ColorTemperature)
                 } else if payload.DpID == 21 {
                     // d.ColorTemperature = payload.DpValue
-                    // log.Printf("Update Color Light colorTemperature: %s=%d", d.Id, d.ColorTemperature)
+                    // log.Info.Printf("Update Color Light colorTemperature: %s=%d", d.Id, d.ColorTemperature)
                     // d.hkObj.Lightbulb.ColorTemperature.SetValue(d.ColorTemperature / 2)
                 } else if payload.DpID == 24 {
 
@@ -317,7 +329,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
             if d.Id == payload.DeviceID {
                 if payload.DpID == 1 {
                     g_hgDoorSensors[i].Detected = payload.DpValue
-                    log.Printf("Update door sensor: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update door sensor: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.ContactSensor.ContactSensorState.SetValue(payload.DpValue)
                 }
             }
@@ -328,7 +340,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
             if d.Id == payload.DeviceID {
                 if payload.DpID == 1 {
                     g_hgSmokeSensors[i].Detected = payload.DpValue
-                    log.Printf("Update smoke sensor: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update smoke sensor: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.SmokeSensor.SmokeDetected.SetValue(payload.DpValue)
                 }
             }
@@ -339,7 +351,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
             if d.Id == payload.DeviceID {
                 if payload.DpID == 101 {
                     g_hgMotionSensors[i].Detected = payload.DpValue
-                    log.Printf("Update motion sensor: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update motion sensor: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.MotionSensor.MotionDetected.SetValue(GetBoolValue(payload.DpValue))
                 }
             }
@@ -350,7 +362,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
             if d.Id == payload.DeviceID {
                 if payload.DpID == 1 {
                     g_hgSmokeSensors[i].Detected = payload.DpValue
-                    log.Printf("Update smoke sensor: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update smoke sensor: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.SmokeSensor.SmokeDetected.SetValue(payload.DpValue)
                 }
             }
@@ -361,7 +373,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
             if d.Id == payload.DeviceID {
                 if payload.DpID == 101 {
                     g_hgMotionSensors[i].Detected = payload.DpValue
-                    log.Printf("Update motion sensor: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update motion sensor: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.MotionSensor.MotionDetected.SetValue(GetBoolValue(payload.DpValue))
                 }
             }
@@ -372,7 +384,7 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
             if d.Id == payload.DeviceID {
                 if payload.DpID == 1 {
                     g_hgDoorSensors[i].Detected = payload.DpValue
-                    log.Printf("Update door sensor: %s=%d", d.Id, payload.DpValue)
+                    log.Info.Printf("Update door sensor: %s=%d", d.Id, payload.DpValue)
                     d.hkObj.ContactSensor.ContactSensorState.SetValue(payload.DpValue)
                 }
             }
@@ -383,14 +395,14 @@ var Mqtt_OnReceivedMessage mqtt.MessageHandler = func(client mqtt.Client, msg mq
 }
 
 var Mqtt_OnConnectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
-    log.Println("Mqtt is connected")
+    log.Info.Println("Mqtt is connected")
     token := g_mqttClient.Subscribe(TOPIC_RESP_DEVICE, 0, nil)
     token.Wait()
-    log.Printf("Subscribed to topic: %s\n", TOPIC_RESP_DEVICE)
+    log.Info.Printf("Subscribed to topic: %s\n", TOPIC_RESP_DEVICE)
 }
 
 var Mqtt_OnConnectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
-    log.Printf("Mqtt connection lost: %v", err)
+    log.Info.Printf("Mqtt connection lost: %v", err)
 }
 
 func MqttInit() {
@@ -404,15 +416,15 @@ func MqttInit() {
     opts.OnConnectionLost = Mqtt_OnConnectLostHandler
     g_mqttClient = mqtt.NewClient(opts)
     if token := g_mqttClient.Connect(); token.Wait() && token.Error() != nil {
-        log.Println("Cannot connect to mqtt: ", token.Error())
+        log.Info.Println("Cannot connect to mqtt: ", token.Error())
     }
-    log.Println("Mqtt init done")
+    log.Info.Println("Mqtt init done")
 }
 
 func ControlDevice(deviceId string, dpId int, onoff int) {
     msgFormat := `{"state":{"reported":{"type":4, "sender":2, "senderId":"homekit", "%s":{"dictDPs":{"%d":%d}}}}}`
     msg := fmt.Sprintf(msgFormat, deviceId, dpId, onoff)
-    log.Printf("Sent to AWS: %s\n", msg)
+    log.Info.Printf("Sent to AWS: %s\n", msg)
     token := g_mqttClient.Publish(TOPIC_CTR_DEVICE, 0, false, msg)
     token.Wait()
 }
@@ -425,7 +437,7 @@ func ControlDoorSwitch(deviceId string, dpId int, state int) {
         state = 1
     }
     msg := fmt.Sprintf(msgFormat, deviceId, dpId, state)
-    log.Printf("Sent to AWS: %s\n", msg)
+    log.Info.Printf("Sent to AWS: %s\n", msg)
     token := g_mqttClient.Publish(TOPIC_CTR_DEVICE, 0, false, msg)
     token.Wait()
 }
@@ -433,7 +445,7 @@ func ControlDoorSwitch(deviceId string, dpId int, state int) {
 func ControlLightCCT(deviceId string, brightness int, colorTemperature int) {
     msgFormat := `{"state":{"reported":{"type":4, "sender":2, "senderId":"homekit", "%s":{"dictDPs":{"22":%d, "23":%d}}}}}`
     msg := fmt.Sprintf(msgFormat, deviceId, brightness * 10, (500 - colorTemperature) * 2)
-    log.Printf("Sent to AWS: %s\n", msg)
+    log.Info.Printf("Sent to AWS: %s\n", msg)
     token := g_mqttClient.Publish(TOPIC_CTR_DEVICE, 0, false, msg)
     token.Wait()
 }
@@ -441,7 +453,7 @@ func ControlLightCCT(deviceId string, brightness int, colorTemperature int) {
 func ControlWifiDevice(deviceId string, dpId int, onoff int) {
     msgFormat := `{"state":{"reported":{"type":4, "sender":2, "senderId":"homekit", "%s":{"dictDPs":{"%d":%d}}}}}`
     msg := fmt.Sprintf(msgFormat, deviceId, dpId, onoff)
-    log.Printf("Sent to AWS: %s\n", msg)
+    log.Info.Printf("Sent to AWS: %s\n", msg)
     token := g_mqttClient.Publish(TOPIC_CTR_DEVICE, 0, false, msg)
     token.Wait()
 }
@@ -452,12 +464,12 @@ func GetShadow(shadowName string) []byte {
     // request := fmt.Sprintf("--tlsv1.2 --cacert /usr/bin/AmazonRootCA1.pem --cert /usr/bin/%s-certificate.pem.crt --key /usr/bin/%s-private.pem.key  %s", certName, certName, url)
     certParam := fmt.Sprintf("/usr/bin/%s-certificate.pem.crt", certName)
     keyParam := fmt.Sprintf("/usr/bin/%s-private.pem.key", certName)
-    log.Println("Requesting: " + url)
+    log.Info.Println("Requesting: " + url)
     out, err := exec.Command("curl", url, "--tlsv1.2", "--cacert", "/usr/bin/AmazonRootCA1.pem", "--cert", certParam, "--key", keyParam).Output()
     if err != nil {
-        log.Fatal(err)
+        log.Info.Fatal(err)
     }
-    log.Printf("Response: %s\n", out)
+    log.Info.Printf("Response: %s\n", out)
     return out
 }
 
@@ -491,15 +503,17 @@ func GetDeviceList() {
                             }
                             for dp, dpValue := range dictDps {
                                 if dpInt, err := strconv.Atoi(dp); err == nil {
-                                    dpValueInt := GetIntValue(dpValue)
-                                    if dpValueInt >= 0 {
-                                        dpName := dp
-                                        if dictNames != nil {
-                                            dpName = dictNames[dp].(string)
+                                    if (dpInt <= 4) {
+                                        dpValueInt := GetIntValue(dpValue)
+                                        if dpValueInt >= 0 {
+                                            dpName := dp
+                                            if dictNames != nil {
+                                                dpName = dictNames[dp].(string)
+                                            }
+                                            deviceName := deviceObj["name"].(string)
+                                            d := HGSwitch{Id: k, Name: deviceName + "-" + dpName, DpId: dpInt, OnOff: dpValueInt}
+                                            g_hgSwitches = append(g_hgSwitches, d)
                                         }
-                                        deviceName := deviceObj["name"].(string)
-                                        d := HGSwitch{Id: k, Name: deviceName + "-" + dpName, DpId: dpInt, OnOff: dpValueInt}
-                                        g_hgSwitches = append(g_hgSwitches, d)
                                     }
                                 }
                             }
@@ -564,24 +578,16 @@ func GetDeviceList() {
                             g_hgDoorSensors = append(g_hgDoorSensors, d)
                         } else if strings.Contains(PID_HG_TV, pid) {
                             dictDps := deviceObj["dictDPs"].(map[string]interface{})
-                            active, err := strconv.Atoi(dictDps["101"].(string))
-                            if err == nil {
-                                deviceName := deviceObj["name"].(string)
-                                d := HGTV{Id: k, Name: deviceName, Active: active}
-                                g_hgTVs = append(g_hgTVs, d)
-                            } else {
-                                log.Printf("Parse tv is error: %+v\n", err)
-                            }
+                            active := GetIntValue(dictDps["101"])
+                            deviceName := deviceObj["name"].(string)
+                            d := HGTV{Id: k, Name: deviceName, Active: active}
+                            g_hgTVs = append(g_hgTVs, d)
                         } else if strings.Contains(PID_HG_FAN, pid) {
                             dictDps := deviceObj["dictDPs"].(map[string]interface{})
-                            onoff, err := strconv.Atoi(dictDps["101"].(string))
-                            if err == nil {
-                                deviceName := deviceObj["name"].(string)
-                                d := HGFan{Id: k, Name: deviceName, OnOff: onoff}
-                                g_hgFans = append(g_hgFans, d)
-                            } else {
-                                log.Printf("Parse fan is error: %+v\n", err)
-                            }
+                            onoff := GetIntValue(dictDps["101"])
+                            deviceName := deviceObj["name"].(string)
+                            d := HGFan{Id: k, Name: deviceName, OnOff: onoff}
+                            g_hgFans = append(g_hgFans, d)
                         } else if strings.Contains(PID_HG_AC, pid) {
                             dictDps := deviceObj["dictDPs"].(map[string]interface{})
                             active := GetIntValue(dictDps["103"])
@@ -603,7 +609,7 @@ func SyncDeviceState() {
     }
 
     for _, sw := range(g_hgDoorSwitches) {
-        // log.Println(sw)
+        // log.Info.Println(sw)
         sw.hkObj.GarageDoorOpener.CurrentDoorState.SetValue(2)
     }
 
@@ -622,51 +628,51 @@ func SyncDeviceState() {
     }
 
     // Smoke sensor
-    log.Printf("Number of smoke sensors: %d\n", len(g_hgSmokeSensors))
+    log.Info.Printf("Number of smoke sensors: %d\n", len(g_hgSmokeSensors))
     for i, d := range(g_hgSmokeSensors) {
-        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
+        log.Info.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.SmokeSensor.SmokeDetected.SetValue(d.Detected)
     }
 
     // Motion sensor
-    log.Printf("Number of motion sensors: %d\n", len(g_hgMotionSensors))
+    log.Info.Printf("Number of motion sensors: %d\n", len(g_hgMotionSensors))
     for i, d := range(g_hgMotionSensors) {
-        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
+        log.Info.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.MotionSensor.MotionDetected.SetValue(GetBoolValue(d.Detected))
     }
 
     // Door sensor
-    log.Printf("Number of door sensors: %d\n", len(g_hgDoorSensors))
+    log.Info.Printf("Number of door sensors: %d\n", len(g_hgDoorSensors))
     for i, d := range(g_hgDoorSensors) {
-        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
+        log.Info.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.ContactSensor.ContactSensorState.SetValue(d.Detected)
     }
 
     // TV
-    log.Printf("Number of TVs: %d\n", len(g_hgTVs))
+    log.Info.Printf("Number of TVs: %d\n", len(g_hgTVs))
     for i, d := range(g_hgTVs) {
-        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
+        log.Info.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.Television.Active.SetValue(d.Active)
     }
 
     // Fan
-    log.Printf("Number of Fans: %d\n", len(g_hgFans))
+    log.Info.Printf("Number of Fans: %d\n", len(g_hgFans))
     for i, d := range(g_hgFans) {
-        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
+        log.Info.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.Fan.On.SetValue(GetBoolValue(d.OnOff))
     }
 
     // Air conditioner
-    log.Printf("Number of air conditioners: %d\n", len(g_hgCoolers))
+    log.Info.Printf("Number of air conditioners: %d\n", len(g_hgCoolers))
     for i, d := range(g_hgCoolers) {
-        log.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
+        log.Info.Printf("    %d: %s=%s\n", i + 1, d.Id, d.Name)
         d.hkObj.Cooler.Active.SetValue(d.Active)
         d.hkObj.Cooler.CurrentTemperature.SetValue(d.CurrentTemperature)
     }
 }
 
 func Switch_OnOff_Update(v bool) {
-    log.Printf("Switch_OnOff_Update: %t\n", v)
+    log.Info.Printf("Switch_OnOff_Update: %t\n", v)
     for i, sw := range(g_hgSwitches) {
         actualOnOff := 0
         if sw.hkObj.Switch.On.Value() {
@@ -681,25 +687,25 @@ func Switch_OnOff_Update(v bool) {
 }
 
 func Door_State_Update(v int) {
-    log.Printf("Door_State_Update: %d\n", v)
-    // log.Println(g_hgDoorSwitches)
+    log.Info.Printf("Door_State_Update: %d\n", v)
+    // log.Info.Println(g_hgDoorSwitches)
     for i, sw := range(g_hgDoorSwitches) {
         actualState := 0
         actualState = sw.hkObj.GarageDoorOpener.TargetDoorState.Value()
-        log.Println(sw.hkObj.GarageDoorOpener.CurrentDoorState.Value(), sw.hkObj.GarageDoorOpener.TargetDoorState.Value())
+        log.Info.Println(sw.hkObj.GarageDoorOpener.CurrentDoorState.Value(), sw.hkObj.GarageDoorOpener.TargetDoorState.Value())
         if sw.TargetState != actualState {
             ControlDoorSwitch(sw.Id, sw.DpId, actualState)
             g_hgDoorSwitches[i].TargetState = actualState
             g_hgDoorSwitches[i].CurrentState = actualState
-            // log.Println(g_hgDoorSwitches)
+            // log.Info.Println(g_hgDoorSwitches)
             // break
         }
     }
 }
 
 func CCTLight_OnOff_Update(v bool) {
-    log.Printf("CCTLight_OnOff_Update: %t\n", v)
-    // log.Println(g_hgCCTLights)
+    log.Info.Printf("CCTLight_OnOff_Update: %t\n", v)
+    // log.Info.Println(g_hgCCTLights)
     for i, d := range(g_hgCCTLights) {
         actualOnOff := 0
         if d.hkObj.Lightbulb.On.Value() {
@@ -709,18 +715,18 @@ func CCTLight_OnOff_Update(v bool) {
         if d.OnOff != actualOnOff {
             ControlDevice(d.Id, 20, actualOnOff)
             g_hgCCTLights[i].OnOff = actualOnOff
-            // log.Println(g_hgCCTLights)
+            // log.Info.Println(g_hgCCTLights)
             break
         }
     }
 }
 
 func CCTLight_Brightness_Update(v int) {
-    log.Printf("CCTLight_Brightness_Update: %d\n", v)
+    log.Info.Printf("CCTLight_Brightness_Update: %d\n", v)
     for i, d := range(g_hgCCTLights) {
         actualBrightness := d.hkObj.Lightbulb.Brightness.Value()
         if d.Brightness != actualBrightness {
-            log.Printf("Test: %+v\n", d)
+            log.Info.Printf("Test: %+v\n", d)
             ControlLightCCT(d.Id, actualBrightness, d.ColorTemperature)
             g_hgCCTLights[i].Brightness = actualBrightness
             break
@@ -729,7 +735,7 @@ func CCTLight_Brightness_Update(v int) {
 }
 
 func CCTLight_ColorTemperature_Update(v int) {
-    log.Printf("CCTLight_ColorTemperature_Update: %d\n", v)
+    log.Info.Printf("CCTLight_ColorTemperature_Update: %d\n", v)
     for i, d := range(g_hgCCTLights) {
         actualColorTemperature := d.hkObj.Lightbulb.ColorTemperature.Value()
         if d.ColorTemperature != actualColorTemperature {
@@ -741,7 +747,7 @@ func CCTLight_ColorTemperature_Update(v int) {
 }
 
 func ColorLight_OnOff_Update(v bool) {
-    log.Printf("ColorLight_OnOff_Update: %t\n", v)
+    log.Info.Printf("ColorLight_OnOff_Update: %t\n", v)
     for i, d := range(g_hgColorLights) {
         actualOnOff := 0
         if d.hkObj.Lightbulb.On.Value() {
@@ -756,7 +762,7 @@ func ColorLight_OnOff_Update(v bool) {
 }
 
 func ColorLight_Brightness_Update(v int) {
-    log.Printf("ColorLight_Brightness_Update: %d\n", v)
+    log.Info.Printf("ColorLight_Brightness_Update: %d\n", v)
     for i, d := range(g_hgColorLights) {
         actualBrightness := d.hkObj.Lightbulb.Brightness.Value()
         if d.Brightness != actualBrightness {
@@ -768,7 +774,7 @@ func ColorLight_Brightness_Update(v int) {
 }
 
 func ColorLight_ColorTemperature_Update(v int) {
-    log.Printf("ColorLight_ColorTemperature_Update: %d\n", v)
+    log.Info.Printf("ColorLight_ColorTemperature_Update: %d\n", v)
     for i, d := range(g_hgColorLights) {
         actualColorTemperature := d.hkObj.Lightbulb.ColorTemperature.Value()
         if d.ColorTemperature != actualColorTemperature {
@@ -780,7 +786,7 @@ func ColorLight_ColorTemperature_Update(v int) {
 }
 
 func TV_Active_Update(v int) {
-    log.Printf("TV_Active_Update: %t\n", v)
+    log.Info.Printf("TV_Active_Update: %t\n", v)
     for i, d := range(g_hgTVs) {
         actualActive := d.hkObj.Television.Active.Value()
         if d.Active != actualActive {
@@ -792,7 +798,7 @@ func TV_Active_Update(v int) {
 }
 
 func Fan_OnOff_Update(v bool) {
-    log.Printf("Fan_OnOff_Update: %t\n", v)
+    log.Info.Printf("Fan_OnOff_Update: %t\n", v)
     for i, d := range(g_hgFans) {
         actualOnOff := 0
         if d.hkObj.Fan.On.Value() {
@@ -807,7 +813,7 @@ func Fan_OnOff_Update(v bool) {
 }
 
 func Cooler_Active_Update(v int) {
-    log.Printf("Cooler_Active_Update: %t\n", v)
+    log.Info.Printf("Cooler_Active_Update: %t\n", v)
     for i, d := range(g_hgCoolers) {
         actualActive := d.hkObj.Cooler.Active.Value()
         if d.Active != actualActive {
@@ -819,16 +825,47 @@ func Cooler_Active_Update(v int) {
 }
 
 func main() {
-    var accessories []*accessory.A
+    logChan := make(chan string)
+    channelLogger := &ChannelLogger{Chan: logChan}
+    mw := io.MultiWriter(os.Stdout, channelLogger)
+    log.Debug.ToFile(mw)
+    log.Info.ToFile(mw)
 
+    // Start a goroutine to handle log messages
+    go func() {
+        for {
+            select {
+            case msg := <-logChan:
+                logFolderPath := "/home/szbaijie/hc_bin/logs/homekit"
+                // Create log folder if it does not exist
+                if _, err := os.Stat(logFolderPath); os.IsNotExist(err) {
+                    if err := os.MkdirAll(logFolderPath, 0755); err != nil {
+                        log.Info.Println(err)
+                    }
+                }
+                currentDate := time.Now().Format("02-01-2006")
+                logFileName := logFolderPath + "/log_homekit_" + currentDate + ".txt"
+                logFile, err := os.OpenFile(logFileName, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+                if err != nil {
+                    log.Info.Println(err)
+                    return
+                }
+                logFile.WriteString(msg)
+                logFile.Close()
+            }
+        }
+    }()
+
+
+    var accessories []*accessory.A
     MqttInit()
     GetHomeInformation()
     GetDeviceList()
 
     // // Print device list
-    // log.Printf("Number of sensors: %d\n", len(g_hgDoorSensors))
+    // log.Info.Printf("Number of sensors: %d\n", len(g_hgDoorSensors))
     // for i, d := range(g_hgDoorSensors) {
-    //     log.Printf("%d: %s=%s\n", i + 1, d.Id, d.Name)
+    //     log.Info.Printf("%d: %s=%s\n", i + 1, d.Id, d.Name)
     // }
 
     // Store the data in the "./db" directory.
@@ -851,10 +888,10 @@ func main() {
         sw.GarageDoorOpener.TargetDoorState.OnValueRemoteUpdate(Door_State_Update)
         accessories = append(accessories, sw.A)
     }
-    // log.Println(g_hgCCTLights)
+    // log.Info.Println(g_hgCCTLights)
     // Create CCT Lights
     for i, d := range(g_hgCCTLights) {
-        // log.Println(d)
+        // log.Info.Println(d)
         light := accessory.NewLightbulb(accessory.Info{Name: d.Name,})
         g_hgCCTLights[i].hkObj = light
         light.Lightbulb.On.OnValueRemoteUpdate(CCTLight_OnOff_Update)
@@ -891,7 +928,7 @@ func main() {
     for i, d := range(g_hgDoorSensors) {
         sensor := accessory.NewContactSensor(accessory.Info{Name: d.Name,})
         g_hgDoorSensors[i].hkObj = sensor
-        log.Println(d.Name)
+        log.Info.Println(d.Name)
         accessories = append(accessories, sensor.A)
     }
 
@@ -924,7 +961,7 @@ func main() {
     server, err := hap.NewServer(fs, hc.A, accessories...)
     if err != nil {
         // stop if an error happens
-        log.Panic(err)
+        log.Info.Panic(err)
     }
     server.Pin = CreatePassword(appConfig.ThingId)
 
@@ -944,7 +981,7 @@ func main() {
     }()
 
     // Run the server.
-    log.Println("Homekit server is starting")
+    log.Info.Println("Homekit server is starting")
     SyncDeviceState()
     server.ListenAndServe(ctx)
 }
@@ -962,6 +999,10 @@ func GetIntValue(value any) int {
         } else {
             valueInt = 0
         }
+    } else if dpValueString, ok := value.(string); ok {
+        valueInt, _ = strconv.Atoi(dpValueString)
+    } else {
+        valueInt = 0
     }
     return valueInt
 }

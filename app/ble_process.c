@@ -721,6 +721,10 @@ int get_count_element_of_DV(const char* pid_) {
         return 1;
     } else if(isMatchString(pid_,HG_BLE_ROLLING_DOOR)) {
         return 1;
+    } else if(isMatchString(pid_,HG_BLE_ROLLING_DOOR_SWITCH)) {
+        return 1;
+    } else if(isMatchString(pid_,HG_BLE_ROLLING_DOOR_MODULE)) {
+        return 1;
     } else if(isMatchString(pid_,HG_BLE_CURTAIN_2_LAYER)) {
         return 2;
     } else {
@@ -1118,7 +1122,7 @@ int GW_CheckReceivedFrame(struct state_element *temp, ble_rsp_frame_t* frame)
     } else if (frame->opcode == 0x8260 && frame->paramSize >= 7) {
         // Response of lightness and temperature of light
         return GW_RESPONSE_LIGHT_RD_CONTROL;
-    } else if (frame->opcode == 0x8278 && frame->paramSize >= 8) {
+    } else if ((frame->opcode == 0x8278 && frame->paramSize >= 8) || (frame->opcode == 0x8252 && frame->paramSize >= 3)) {
         // Response of lightness and temperature of light
         return GW_RESPONSE_RGB_COLOR;
     } else if(frame->opcode == 0x5208 && frame->paramSize >= 3 && frame->param[0] == 0x01) {
@@ -1141,6 +1145,9 @@ int GW_CheckReceivedFrame(struct state_element *temp, ble_rsp_frame_t* frame)
         return GW_RESPONSE_SENSOR_PIR_DETECT;
     } else if(frame->opcode == 0x5205 && frame->paramSize >= 2 && frame->param[0] == 0x01) {
         // PIR sensor human detect
+        return GW_RESPONSE_SENSOR_PIR_DETECT;
+    } else if(frame->opcode == 0x5207 && frame->paramSize >= 2 && frame->param[0] == 0x01) {
+        // Response current state of rolling door
         return GW_RESPONSE_SENSOR_PIR_DETECT;
     } else if(frame->opcode == 0x5204 && frame->paramSize >= 3 && frame->param[0] == 0x00) {
         // PIR sensor light intensity

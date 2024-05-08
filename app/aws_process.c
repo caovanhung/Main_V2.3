@@ -82,7 +82,7 @@ JSON* Aws_GetShadow(const char* thingName, const char* shadowName) {
     while (fgets(result, sizeof(result), fp) != NULL);
     fclose(fp);
     if (result) {
-        // printf(result);
+        // printInfo(result);
         JSON* obj = JSON_Parse(result);
         if (obj && JSON_HasKey(obj, "state")) {
             JSON_RemoveKey(obj, "metadata");
@@ -111,6 +111,16 @@ void Aws_SyncDatabase() {
         // Sync gateways
         gatewayInfo = JSON_Clone(JSON_GetObject(accountInfo, "gateWay"));
         JSON_Delete(accountInfo);
+
+        // Sync notify_conf
+        JSON* notifyConf = Aws_GetShadow(g_thingId, "notify_conf");
+        if (notifyConf) {
+            // char* tmp = cJSON_PrintUnformatted(notifyConf);
+            // logInfo("notifyConf = %s", tmp);
+            // free(tmp);
+            sendPacketTo(SERVICE_CORE, TYPE_UDATE_NOTI_CONF, notifyConf);
+            JSON_Delete(notifyConf);
+        }
 
         // Sync devices from aws
         for (int i = 1; i <= devicePages; i++) {
@@ -189,7 +199,7 @@ void Aws_SyncDatabase() {
                             JSON_SetObject(scene, "actions", actions);
                             JSON_SetObject(scene, "conditions", conditions);
                         } else {
-                            logError("Error to parse sene %s", s->string);
+                            logError("Ignored sene %s", s->string);
                         }
                     }
                 }

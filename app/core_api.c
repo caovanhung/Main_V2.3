@@ -8,9 +8,103 @@
 
 JSON *g_checkRespList;
 
+char* g_homeId;
+static char* g_thingId;
+
+void getHcInformation() {
+    logInfo("Getting HC parameters");
+    FILE* f = fopen("app.json", "r");
+    char buff[1000];
+    fread(buff, sizeof(char), 1000, f);
+    fclose(f);
+    JSON* setting = JSON_Parse(buff);
+    char* homeId = JSON_GetText(setting, "homeId");
+    char* thingId = JSON_GetText(setting, "thingId");
+    free(g_homeId);
+    free(g_thingId);
+    g_homeId = malloc(StringLength(homeId));
+    g_thingId = malloc(StringLength(thingId));
+    StringCopy(g_homeId, homeId);
+    StringCopy(g_thingId, thingId);
+    logInfo("HomeId: %s, ThingId: %s", g_homeId, g_thingId);
+    JSON_Delete(setting);
+}
+
 
 void CoreInit() {
     g_checkRespList   = JSON_CreateArray();
+    getHcInformation();
+}
+
+int Noti_SendFCMNotification(const char* title, const char* message) {
+    logInfo("Noti_SendFCMNotification('%s', '%s')", title, message);
+    char str[1000];
+    char path[1000];
+    sprintf(str, "./HG_NOTIFICATION HOMEGY_BLE_%s \"%s\" \"%s\"", g_homeId, title, message);
+    logInfo("Run command: %s", str);
+    FILE* fp = popen(str, "r");
+    while (fgets(path, sizeof(path), fp) != NULL) {
+        logInfo("%s", path);
+    }
+    pclose(fp);
+    return 0;
+}
+
+int Noti_GetCategory(const char* pid) {
+    int categoryID = 0;
+    if (StringContains("HC", pid)) {
+        categoryID = NOTI_CAT_HC;
+    } else if (StringContains(HG_BLE_SWITCH, pid)) {
+        categoryID = NOTI_CAT_COMMON_SWITCH;
+    } else if (StringContains(HG_BLE_IR_FULL, pid)) {
+        categoryID = NOTI_CAT_IR;
+    } else if (StringContains(HG_BLE_CURTAIN, pid)) {
+        categoryID = NOTI_CAT_CURTAIN_SWITCH;
+    } else if (StringContains(HG_BLE_CURTAIN_IH35, pid) || StringContains(HG_BLE_CURTAIN_IH68, pid)) {
+        categoryID = NOTI_CAT_CURTAIN_MODULE;
+    } else if (StringContains(HG_BLE_LIGHT_WHITE, pid)) {
+        categoryID = NOTI_CAT_COMMON_LIGHT;
+    } else if (StringContains(RD_BLE_SENSOR_DOOR, pid)) {
+        categoryID = NOTI_CAT_DOOR_SENSOR;
+    } else if (StringContains(RD_BLE_SENSOR_SMOKE, pid)) {
+        categoryID = NOTI_CAT_SMOKE_SENSOR;
+    } else if (StringContains(HG_BLE_SENSOR_PRESENCE, pid)) {
+        categoryID = NOTI_CAT_PRESENCE_SENSOR;
+    }
+    logInfo("[Noti_GetCategory] pid = %s => %d", pid, categoryID);
+    return categoryID;
+}
+
+void Noti_GetContent(char* content, int notiType, int dpValue, const char* deviceName) {
+    content[0] = 0;
+    if (notiType == NOTI_TYPE_DEV_ONLINE) {
+        if (dpValue == STATE_ONLINE) {
+            sprintf(content, "Thiết bị '%s' đã trực tuyến", deviceName);
+        } else {
+            sprintf(content, "Thiết bị '%s' đã ngoại tuyến", deviceName);
+        }
+    } else if (notiType == NOTI_TYPE_ACTIVE) {
+        if (dpValue != 0) {
+            sprintf(content, "Thiết bị '%s' đã kích hoạt", deviceName);
+        }
+    } else if (notiType == NOTI_TYPE_OPEN_CLOSE) {
+        if (dpValue == 0) {
+            sprintf(content, "Thiết bị '%s' đã được mở", deviceName);
+        } else if (dpValue == 2) {
+            sprintf(content, "Thiết bị '%s' đã đóng", deviceName);
+        }
+    } else if (notiType == NOTI_TYPE_ONOFF) {
+        if (dpValue == 0) {
+            sprintf(content, "Thiết bị '%s' đã tắt", deviceName);
+        } else {
+            sprintf(content, "Thiết bị '%s' đã bật", deviceName);
+        }
+    } else if (notiType == NOTI_TYPE_LOW_BATTER) {
+        if (dpValue < 20) {
+            sprintf(content, "Thiết bị '%s' chỉ còn %d%% pin", deviceName);
+        }
+    }
+    logInfo("[Noti_GetContent] notiType = %d, dpValue = %d => '%s'", notiType, dpValue, content);
 }
 
 void sendPacketToBle(int gwIndex, int reqType, JSON* packet) {

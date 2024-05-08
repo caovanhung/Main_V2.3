@@ -102,6 +102,7 @@
 
 #define TYPE_SYNC_DEVICE_STATE          (99U)
 #define TYPE_GET_ONOFF_STATE            (100U)
+#define TYPE_UDATE_NOTI_CONF            (101U)
 
 ///////////////////////Define type repons from Devices///////////////////////////////////////
 #define GW_RESPONSE_UNKNOW               (-1)
@@ -341,10 +342,13 @@
 #define TUYA_DEVICE             "WIFI"
 #define HG_BLE_CURTAIN_NORMAL   "BLEHGAA0105"
 #define HG_BLE_ROLLING_DOOR     "BLEHGAA0106"
+#define HG_BLE_ROLLING_DOOR_SWITCH  "BLEHGAA0109"
+#define HG_BLE_ROLLING_DOOR_MODULE  "BLEHGAA0605"
 #define HG_BLE_CURTAIN_2_LAYER  "BLEHGAA0107"
-#define HG_BLE_CURTAIN          "BLEHGAA0105,BLEHGAA0106,BLEHGAA0107"
+#define HG_BLE_CURTAIN          "BLEHGAA0105,BLEHGAA0106,BLEHGAA0107,BLEHGAA0109,BLEHGAA0605"
 #define HG_BLE_CURTAIN_IH35     "BLEHGAA0608"
 #define HG_BLE_CURTAIN_IH68     "BLEHGAA0609"
+
 
 ///////////////////////////////////////////////////////////////////////
 //define
@@ -623,5 +627,38 @@ typedef enum {
     EV_CAUSE_TYPE_SCENE = 3,
     EV_CAUSE_TYPE_SYNC = 4,
 } HistoryCauseType;
+
+// Notification categories
+typedef enum {
+    NOTI_CAT_HC = 1,
+    NOTI_CAT_COMMON_SWITCH = 2,
+    NOTI_CAT_CURTAIN_SWITCH = 3,
+    NOTI_CAT_GATE_SWITCH = 4,
+    NOTI_CAT_COMMON_LIGHT = 5,
+    NOTI_CAT_LIGHT_MODULE = 6,
+    NOTI_CAT_DOOR_SENSOR = 7,
+    NOTI_CAT_SMOKE_SENSOR = 8,
+    NOTI_CAT_PRESENCE_SENSOR = 9,
+    NOTI_CAT_ELEVATOR_SWITCH = 10,
+    NOTI_CAT_MANUAL_SWITCH = 11,
+    NOTI_CAT_CURTAIN_MODULE = 12,
+    NOTI_CAT_GATE_MODULE = 13,
+    NOTI_CAT_IR = 14
+} NotificationCategories;
+
+// Notification type
+typedef enum {
+    NOTI_TYPE_ONOFF = 1,
+    NOTI_TYPE_DEV_ONLINE = 2,
+    NOTI_TYPE_ACTIVE = 3,
+    NOTI_TYPE_LOW_BATTER = 4,
+    NOTI_TYPE_OPEN_CLOSE = 5,
+    NOTI_TYPE_POSITION = 6,
+    NOTI_TYPE_SYNC_FAIL = 7,
+    NOTI_TYPE_HC_ONLINE = 8,
+    NOTI_TYPE_HARD_DEL_DEV = 9,
+    NOTI_TYPE_RUN_AUTO_SCENE = 10,
+    NOTI_TYPE_RUN_MANUAL_SCENE = 11
+} NotificationTypes;
 
 #endif // __DEFINE_H

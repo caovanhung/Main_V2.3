@@ -31,6 +31,7 @@
 #include "messages.h"
 #include "cJSON.h"
 #include "gpio.h"
+#include <sys/stat.h>
 
 #define LOG_QUEUE_SIZE          1000
 
@@ -87,6 +88,7 @@ static char* g_serviceName[SERVICES_NUMBER] = {"aws", "core", "ble", "tuya", "cf
 
 static long long int g_connectedTime = 0;
 
+bool ConnectToWifi(const char* ssid, const char* password);
 bool CheckWifiConnection(const char* ssid);
 bool CheckSSIDExist(const char* ssid);
 
@@ -309,10 +311,11 @@ void ConnectWifiLoop() {
         break;
     case WIFI_CONNECT: {
         char str[400];
-        logInfo("Run command: nmcli d wifi connect \"%s\" password \"%s\" ifname wlan0", g_wifiSSID, g_wifiPASS);
-        sprintf(str, "nmcli d wifi connect \"%s\" password \"%s\" ifname wlan0", g_wifiSSID, g_wifiPASS);
+        // logInfo("Run command: nmcli d wifi connect \"%s\" password \"%s\" ifname wlan0", g_wifiSSID, g_wifiPASS);
+        // sprintf(str, "nmcli d wifi connect \"%s\" password \"%s\" ifname wlan0", g_wifiSSID, g_wifiPASS);
         LED_OFF;
-        system(str);
+        ConnectToWifi(g_wifiSSID, g_wifiPASS);
+        // system(str);
         state = WIFI_CHECK_STATUS;
         break;
     }
@@ -538,6 +541,52 @@ int main(int argc, char ** argv) {
     return 0;
 }
 
+bool ConnectToWifi(const char* ssid, const char* password) {
+    bool ret = false;
+    char path[1035];
+    char connectionFile[300];
+    char str[300];
+    // Create the connection if it is not exist
+    struct stat buffer;
+    sprintf(connectionFile, "\"/etc/NetworkManager/system-connections/%s\"", ssid);
+    logInfo("connectionFile: %s", connectionFile);
+    if (stat(connectionFile, &buffer) != 0) {
+        sprintf(connectionFile, "nmcli connection add type wifi con-name \"%s\" ifname wlan0 ssid \"%s\"", ssid, ssid);
+        logInfo("Connection is not exist, creating it: %s", connectionFile);
+        system(connectionFile);
+    }
+
+    // Modify password for this connection
+    sprintf(str, "nmcli connection modify \"%s\" wifi-sec.key-mgmt wpa-psk wifi-sec.psk \"%s\"", ssid, password);
+    logInfo("Modifying password: %s", str);
+    system(str);
+
+    // // Verify the content of connection
+    // FILE* f = fopen(connectionFile, "r");
+    // char buff[5000];
+    // fread(buff, sizeof(char), 5000, f);
+    // fclose(f);
+    // logInfo("Content of file '%s'", connectionFile);
+    // logInfo(buff);
+
+    // Activate the connection
+    sprintf(str, "nmcli connection up \"%s\"", ssid);
+    logInfo("Activate the connection: %s", str);
+    FILE* fp = popen(str, "r");
+    while (fgets(path, sizeof(path), fp) != NULL) {
+        logInfo("%s", path);
+        if (StringContains(path, "successfully")) {
+            ret = true;
+            break;
+        } else if (StringContains(path, "Error")) {
+            ret = false;
+            break;
+        }
+    }
+    pclose(fp);
+    return ret;
+}
+
 
 bool CheckWifiConnection(const char* ssid) {
     bool ret = false;
@@ -545,7 +594,7 @@ bool CheckWifiConnection(const char* ssid) {
     logInfo("Checking wifi connection: %s", ssid);
     FILE* fp = popen("nmcli c show --active", "r");
     while (fgets(path, sizeof(path), fp) != NULL) {
-        printf("%s", path);
+        logInfo("%s", path);
         if (strstr(path, ssid)) {
             ret = true;
             break;

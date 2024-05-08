@@ -402,10 +402,19 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
     char* topic = malloc(pPublishInfo->topicNameLength + 1);
     memcpy(topic, pPublishInfo->pTopicName, pPublishInfo->topicNameLength);
     topic[pPublishInfo->topicNameLength] = 0;
-    // if (StringContains(topic, "accountInfo")) {
-    //     free(topic);
-    //     return;
-    // }
+    if (StringContains(topic, "notify_conf")) {
+        logInfo("Received msg from cloud. topic: %s, payload: %s", topic, aws_buff);
+        JSON* recvPacket = JSON_Parse(aws_buff);
+        JSON* state = JSON_GetObject(recvPacket, "state");
+        if (state) {
+            JSON* reported = JSON_GetObject(state, "reported");
+            if (reported) {
+                sendPacketTo(SERVICE_CORE, TYPE_UDATE_NOTI_CONF, reported);
+            }
+        }
+        JSON_Delete(recvPacket);
+        return;
+    }
 
     JSON* recvPacket = JSON_Parse(aws_buff);
     if (recvPacket) {

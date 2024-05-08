@@ -318,12 +318,12 @@ int Db_DeleteAllGroup() {
     return 1;
 }
 
-int Db_AddDp(const char* deviceId, int dpId, const char* addr, int pageIndex) {
+int Db_AddDp(const char* deviceId, int dpId, const char* addr, const char* dpName, int pageIndex) {
     ASSERT(deviceId); ASSERT(addr);
     char sqlCmd[500];
-    sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, dpID,  address, dpValue, pageIndex, updateTime) \
-                                  VALUES('%s',     '%d',  '%s',    '0',     %d,        %lld)",
-                                         deviceId, dpId,  addr,             pageIndex, 0);
+    sprintf(sqlCmd, "INSERT INTO DEVICES(deviceId, dpID,  address, dpValue, pageIndex, updateTime, name) \
+                                  VALUES('%s',     '%d',  '%s',    '0',     %d,        %lld, '%s')",
+                                         deviceId, dpId,  addr,             pageIndex, 0, dpName);
     Sql_Exec(sqlCmd);
     return 1;
 }
@@ -457,6 +457,7 @@ int Db_LoadSceneToRam() {
             if (actionCount < SCENE_ACTIONS_MAX) {
                 SceneAction* action = &g_sceneList[g_sceneCount].actions[actionCount];
                 action->dpCount = 0;
+                action->valueType = ValueTypeDouble;
                 if (g_sceneList[g_sceneCount].isLocal == false || (JSON_HasKey(act, "actionExecutor") && JSON_HasKey(act, "state") && JSON_GetNumber(act, "state") == 0)) {
                     StringCopy(action->entityId, JSON_GetText(act, "entityId"));
                     char* actionExecutor = JSON_GetText(act, "actionExecutor");
@@ -839,6 +840,28 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
     return histories;
 }
 
+void Db_GetDeviceName(const char* deviceID, int dpID, char* deviceName) {
+    char sql[200];
+    if (dpID > 0) {
+        sprintf(sql, "select dp.name || ' của ' || d.name from devices dp JOIN devices_inf d ON dp.deviceId=d.deviceId where dp.deviceId='%s' AND dp.dpID=%d;", deviceID, dpID);
+    } else {
+        sprintf(sql, "SELECT name FROM DEVICES_INF WHERE deviceID='%s'", deviceID);
+    }
+    Sql_Query(sql, row) {
+        StringCopy(deviceName, sqlite3_column_text(row, 0));
+    }
+}
+
+bool Noti_IsEnable(int categoryID, int notiType) {
+    char sql[200];
+    bool isEnable = false;
+    sprintf(sql, "SELECT * FROM NOTI_SETTING WHERE categoryId=%d AND notiType=%d", categoryID, notiType);
+    Sql_Query(sql, row) {
+        isEnable = sqlite3_column_int(row, 2);
+    }
+    return isEnable;
+}
+
 int sql_creat_table(sqlite3 **db,char *name_table)
 {
     char *err_msg;
@@ -887,6 +910,13 @@ bool creat_table_database(sqlite3 **db)
     }
     usleep(100);
     check = sql_creat_table(db,"DROP TABLE IF EXISTS SCENE_INF;CREATE TABLE SCENE_INF(sceneId TEXT PRIMARY KEY,isLocal INTEGER,state INTEGER,name TEXT,sceneType TEXT,actions TEXT,conditions TEXT,created INTEGER,last_updated INTEGER, pageIndex INTEGER, preconditions TEXT);");
+    if(check != 0)
+    {
+        printf("DELETE SCENE_INF is error!\n");
+        return false;
+    }
+    usleep(100);
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS NOTI_SETTING;CREATE TABLE NOTI_SETTING(categoryId INTEGER,notiType INTEGER,enable INTEGER);");
     if(check != 0)
     {
         printf("DELETE SCENE_INF is error!\n");
