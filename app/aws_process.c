@@ -99,6 +99,7 @@ void Aws_SyncDatabase() {
     JSON* syncingDevices = JSON_CreateArray();
     JSON* syncingGroups = JSON_CreateArray();
     JSON* syncingScenes = JSON_CreateArray();
+    JSON* notifyConf;
     JSON* gatewayInfo;
 
     // Get number of pages
@@ -111,16 +112,6 @@ void Aws_SyncDatabase() {
         // Sync gateways
         gatewayInfo = JSON_Clone(JSON_GetObject(accountInfo, "gateWay"));
         JSON_Delete(accountInfo);
-
-        // Sync notify_conf
-        JSON* notifyConf = Aws_GetShadow(g_thingId, "notify_conf");
-        if (notifyConf) {
-            // char* tmp = cJSON_PrintUnformatted(notifyConf);
-            // logInfo("notifyConf = %s", tmp);
-            // free(tmp);
-            sendPacketTo(SERVICE_CORE, TYPE_UDATE_NOTI_CONF, notifyConf);
-            JSON_Delete(notifyConf);
-        }
 
         // Sync devices from aws
         for (int i = 1; i <= devicePages; i++) {
@@ -231,6 +222,13 @@ void Aws_SyncDatabase() {
         }
         if (JArr_Count(syncingScenes) > 0) {
             sendPacketTo(SERVICE_CORE, TYPE_SYNC_DB_SCENES, syncingScenes);
+        }
+
+        // Sync notify_conf
+        notifyConf = Aws_GetShadow(g_thingId, "notify_conf");
+        if (notifyConf) {
+            sendPacketTo(SERVICE_CORE, TYPE_UPDATE_NOTI_CONF, notifyConf);
+            JSON_Delete(notifyConf);
         }
 
         if (JArr_Count(syncingGroups) == 0 && JArr_Count(syncingScenes) == 0 && JArr_Count(syncingDevices) == 0) {

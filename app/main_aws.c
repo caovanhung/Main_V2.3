@@ -184,7 +184,7 @@ int connectToServerWithBackoffRetries( NetworkContext_t * pNetworkContext,MQTTCo
     BackoffAlgorithm_InitializeParams( &reconnectParams,
                                        CONNECTION_RETRY_BACKOFF_BASE_MS,
                                        CONNECTION_RETRY_MAX_BACKOFF_DELAY_MS,
-                                       CONNECTION_RETRY_MAX_ATTEMPTS );
+                                       BACKOFF_ALGORITHM_RETRY_FOREVER );
 
     /* Attempt to connect to MQTT broker. If connection fails, retry after
      * a timeout. Timeout value will exponentially increase until maximum
@@ -409,7 +409,7 @@ void Aws_ReceivedHandler( MQTTPublishInfo_t * pPublishInfo,uint16_t packetIdenti
         if (state) {
             JSON* reported = JSON_GetObject(state, "reported");
             if (reported) {
-                sendPacketTo(SERVICE_CORE, TYPE_UDATE_NOTI_CONF, reported);
+                sendPacketTo(SERVICE_CORE, TYPE_UPDATE_NOTI_CONF, reported);
             }
         }
         JSON_Delete(recvPacket);

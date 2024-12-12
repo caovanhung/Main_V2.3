@@ -143,6 +143,7 @@ int Db_FindDeviceBySql(DeviceInfo* deviceInfo, const char* sqlCommand);
 int Db_FindDevice(DeviceInfo* deviceInfo, const char* deviceId);
 int Db_FindDeviceByAddr(DeviceInfo* deviceInfo, const char* deviceAddr, const* hcAddr);
 int Db_SaveDeviceState(const char* deviceId, int state);
+int Db_SaveDeviceState2(const char* deviceId, int state);
 int Db_SaveOfflineCountForDevice(const char* deviceId, int offlineCount);
 int Db_DeleteDevice(const char* deviceId);
 int Db_DeleteAllDevices();

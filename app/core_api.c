@@ -38,6 +38,9 @@ void CoreInit() {
 
 int Noti_SendFCMNotification(const char* title, const char* message) {
     logInfo("Noti_SendFCMNotification('%s', '%s')", title, message);
+    if (StringCompare(message, "")) {
+        return 0;
+    }
     char str[1000];
     char path[1000];
     sprintf(str, "./HG_NOTIFICATION HOMEGY_BLE_%s \"%s\" \"%s\"", g_homeId, title, message);
@@ -52,24 +55,24 @@ int Noti_SendFCMNotification(const char* title, const char* message) {
 
 int Noti_GetCategory(const char* pid) {
     int categoryID = 0;
-    if (StringContains("HC", pid)) {
-        categoryID = NOTI_CAT_HC;
-    } else if (StringContains(HG_BLE_SWITCH, pid)) {
+    if (StringContains(NOTI_CAT_COMMON_SWITCH_PID, pid)) {
         categoryID = NOTI_CAT_COMMON_SWITCH;
-    } else if (StringContains(HG_BLE_IR_FULL, pid)) {
-        categoryID = NOTI_CAT_IR;
-    } else if (StringContains(HG_BLE_CURTAIN, pid)) {
+    } else if (StringContains(NOTI_CAT_CURTAIN_SWITCH_PID, pid)) {
         categoryID = NOTI_CAT_CURTAIN_SWITCH;
-    } else if (StringContains(HG_BLE_CURTAIN_IH35, pid) || StringContains(HG_BLE_CURTAIN_IH68, pid)) {
-        categoryID = NOTI_CAT_CURTAIN_MODULE;
-    } else if (StringContains(HG_BLE_LIGHT_WHITE, pid)) {
+    } else if (StringContains(NOTI_CAT_GATE_SWITCH_PID, pid)) {
+        categoryID = NOTI_CAT_GATE_SWITCH;
+    } else if (StringContains(NOTI_CAT_COMMON_LIGHT_PID, pid)) {
         categoryID = NOTI_CAT_COMMON_LIGHT;
-    } else if (StringContains(RD_BLE_SENSOR_DOOR, pid)) {
-        categoryID = NOTI_CAT_DOOR_SENSOR;
-    } else if (StringContains(RD_BLE_SENSOR_SMOKE, pid)) {
-        categoryID = NOTI_CAT_SMOKE_SENSOR;
-    } else if (StringContains(HG_BLE_SENSOR_PRESENCE, pid)) {
-        categoryID = NOTI_CAT_PRESENCE_SENSOR;
+    } else if (StringContains(NOTI_CAT_DOOR_SMOKE_SENSOR_PID, pid)) {
+        categoryID =  NOTI_CAT_DOOR_SMOKE_SENSOR;
+    } else if (StringContains(NOTI_CAT_PRESENCE_SENSOR_PID, pid)) {
+        categoryID =  NOTI_CAT_PRESENCE_SENSOR;
+    } else if (StringContains(NOTI_CAT_MULTI_SENSOR_PID, pid)) {
+        categoryID =  NOTI_CAT_MULTI_SENSOR;
+    } else if (StringContains(NOTI_CAT_IR_PID, pid)) {
+        categoryID =  NOTI_CAT_IR;
+    } else if (StringContains(NOTI_CAT_ROLLING_CURTAIN_ENGINE_PID, pid)) {
+        categoryID =   NOTI_CAT_ROLLING_CURTAIN_ENGINE;
     }
     logInfo("[Noti_GetCategory] pid = %s => %d", pid, categoryID);
     return categoryID;
@@ -79,29 +82,43 @@ void Noti_GetContent(char* content, int notiType, int dpValue, const char* devic
     content[0] = 0;
     if (notiType == NOTI_TYPE_DEV_ONLINE) {
         if (dpValue == STATE_ONLINE) {
-            sprintf(content, "Thiết bị '%s' đã trực tuyến", deviceName);
+            sprintf(content, "%s đã trực tuyến", deviceName);
         } else {
-            sprintf(content, "Thiết bị '%s' đã ngoại tuyến", deviceName);
+            sprintf(content, "%s đã ngoại tuyến", deviceName);
         }
     } else if (notiType == NOTI_TYPE_ACTIVE) {
         if (dpValue != 0) {
-            sprintf(content, "Thiết bị '%s' đã kích hoạt", deviceName);
+            sprintf(content, "%s đã được kích hoạt", deviceName);
+        } else {
+            sprintf(content, "%s đã không kích hoạt", deviceName);
         }
     } else if (notiType == NOTI_TYPE_OPEN_CLOSE) {
         if (dpValue == 0) {
-            sprintf(content, "Thiết bị '%s' đã được mở", deviceName);
-        } else if (dpValue == 2) {
-            sprintf(content, "Thiết bị '%s' đã đóng", deviceName);
+            sprintf(content, "%s đã được mở", deviceName);
+        } else if (dpValue == 1) {
+            sprintf(content, "%s đã dừng", deviceName);
+        } else {
+            sprintf(content, "%s đã được đóng", deviceName);
         }
     } else if (notiType == NOTI_TYPE_ONOFF) {
         if (dpValue == 0) {
-            sprintf(content, "Thiết bị '%s' đã tắt", deviceName);
+            sprintf(content, "%s đã tắt", deviceName);
         } else {
-            sprintf(content, "Thiết bị '%s' đã bật", deviceName);
+            sprintf(content, "%s đã bật", deviceName);
         }
     } else if (notiType == NOTI_TYPE_LOW_BATTER) {
         if (dpValue < 20) {
-            sprintf(content, "Thiết bị '%s' chỉ còn %d%% pin", deviceName);
+            sprintf(content, "%s chỉ còn %d%% pin", deviceName, dpValue);
+        }
+    } else if (notiType == NOTI_TYPE_LOW_BATTER) {
+        if (dpValue < 20) {
+            sprintf(content, "%s chỉ còn %d%% pin", deviceName, dpValue);
+        }
+    } else if (notiType == NOTI_TYPE_SENSOR_HANG) {
+        if (dpValue == 0) {
+            sprintf(content, "%s không được treo", deviceName);
+        } else {
+            sprintf(content, "%s đã được treo", deviceName);
         }
     }
     logInfo("[Noti_GetContent] notiType = %d, dpValue = %d => '%s'", notiType, dpValue, content);

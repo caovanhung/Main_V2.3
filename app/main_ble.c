@@ -463,7 +463,7 @@ void Ble_ProcessPacket()
                     JSON_SetText(packet, "deviceAddr", tmp->address_element);
                     JSON_SetNumber(packet, "dpId", TYPE_DPID_SMOKE_SENSOR_BATTERY);
                     JSON_SetNumber(packet, "dpValue", battery);
-                    sendPacketTo(SERVICE_CORE, frameType, packet);
+                    sendPacketTo(SERVICE_CORE, GW_RESPONSE_SENSOR_BATTERY, packet);
                     JSON_Delete(packet);
                     break;
                 }

@@ -48,6 +48,7 @@ int g_sceneCount = 0;
 static bool g_mosqIsConnected = false;
 static JSON* g_sceneTobeUpdated;        // Used to save the scene info when user want to add/edit a scene, then we will push the updated scene to aws
 static JSON* g_groupTobeUpdated;        // Used to save the group info when user want to add/edit a group, then we will push the updated group to aws
+static bool g_sentHcOnlineNoti = false;
 
 bool sendInfoDeviceFromDatabase();
 bool sendInfoSceneFromDatabase();
@@ -79,7 +80,7 @@ bool addNewDevice(JSON* packet) {
         if (Db_AddDevice(packet) == 0) {
             return false;
         }
-        Db_SaveDeviceState(deviceId, onlineState);
+        Db_SaveDeviceState2(deviceId, onlineState);
         bool addressIncrement = StringContains(HG_BLE_SWITCH, pid) || StringContains(HG_BLE_CURTAIN, pid)? true : false;
         // Calculate addresses of dps for Homegy switch
         char dpAddrStr[5];
@@ -287,6 +288,17 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc)
     mosquitto_subscribe(mosq, NULL, "CORE_LOCAL/#", 0);
     mosquitto_subscribe(mosq, NULL, MOSQ_TOPIC_CORE_DATA, 0);
     mosquitto_subscribe(mosq, NULL, "/topic/detected/#", 0); //subcribe MQTT for camera HANET
+
+    if (!g_sentHcOnlineNoti && Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_HC_ONLINE)) {
+        g_sentHcOnlineNoti = true;
+        char noti[500];
+        Sql_Query("select name from Gateway where isMaster=1", row) {
+            char* name = sqlite3_column_text(row, 0);
+            sprintf(noti, "Thiết bị %s đã trực tuyến", name);
+            break;
+        }
+        Noti_SendFCMNotification("HC Online", noti);
+    }
 }
 
 void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg)
@@ -654,9 +666,9 @@ void sendSceneRunEventToUser(Scene* scene, int triggerConditionIndex) {
         }
     }
     if (Noti_IsEnable(NOTI_CAT_HC, notiType)) {
-        sprintf(noti, "Kịch bản '%s' được chạy do điều kiện: %s", scene->name, cond);
+        sprintf(noti, "Kịch bản %s được chạy do điều kiện: %s", scene->name, cond);
         // sendNotiToUser(noti, false);
-        Noti_SendFCMNotification("Chạy kịch bản thành công", noti);
+        Noti_SendFCMNotification("Chạy kịch bản", noti);
     }
 }
 
@@ -729,11 +741,11 @@ void checkSceneCondition(Scene* scene) {
                 if (foundDps == 1) {
                     if (scene->conditions[i].valueType == ValueTypeDouble) {
                         bool satisfied = false;
-                        if (StringCompare(scene->conditions[i].expr, ">") && dpInfo.value > scene->conditions[i].dpValue) {
+                        if (StringContains(scene->conditions[i].expr, ">") && dpInfo.value > scene->conditions[i].dpValue) {
                             satisfied = true;
-                        } else if (StringCompare(scene->conditions[i].expr, "<") && dpInfo.value < scene->conditions[i].dpValue) {
+                        } else if (StringContains(scene->conditions[i].expr, "<") && dpInfo.value < scene->conditions[i].dpValue) {
                             satisfied = true;
-                        } else if (dpInfo.value == scene->conditions[i].dpValue) {
+                        } else if (StringContains(scene->conditions[i].expr, "=") && dpInfo.value == scene->conditions[i].dpValue) {
                             satisfied = true;
                         }
                         if (satisfied) {
@@ -807,8 +819,21 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                 (scene->conditions[c].dpId == dpId)) {
                 if (scene->isLocal == false) {
                     printInfo("  Found scene %s contains this element in conditions", scene->id);
-                    if ((scene->conditions[c].valueType == ValueTypeDouble && scene->conditions[c].dpValue == dpValue) ||
-                        (scene->conditions[c].valueType == ValueTypeString && StringCompare(scene->conditions[c].dpValueStr, dpValueStr))) {
+                    bool satisfied = false;
+                    if (scene->conditions[c].valueType == ValueTypeDouble) {
+                        if (StringContains(scene->conditions[c].expr, ">") && dpValue > scene->conditions[c].dpValue) {
+                            satisfied = true;
+                        } else if (StringContains(scene->conditions[c].expr, "<") && dpValue < scene->conditions[c].dpValue) {
+                            satisfied = true;
+                        } else if (StringContains(scene->conditions[c].expr, "=") && dpValue == scene->conditions[c].dpValue) {
+                            satisfied = true;
+                        }
+                    } else if (scene->conditions[c].valueType == ValueTypeString) {
+                        if (StringCompare(scene->conditions[c].dpValueStr, dpValueStr)) {
+                            satisfied = true;
+                        }
+                    }
+                    if (satisfied) {
                         if (scene->type == SceneTypeOneOfConds) {
                             if (checkScenePrecondition(scene)) {
                                 printInfo("      Satisfied. current value=%.0f, expect=%.0f", dpValue, scene->conditions[c].dpValue);
@@ -820,18 +845,18 @@ void checkSceneForDevice(const char* deviceId, int dpId, double dpValue, const c
                             checkSceneCondition(scene);
                         }
                     } else {
-                        printInfo("  Not satisfied. current value=%.0f, expect=%.0f", dpValue, scene->conditions[c].dpValue);
+                        printInfo("  Not satisfied. current value:%.0f, expect: %s %.0f", dpValue, scene->conditions[c].expr, scene->conditions[c].dpValue);
                     }
                 } else if (syncRelatedDevices && scene->isEnable) {
                     DpInfo dpInfo;
                     int foundDps = Db_FindDp(&dpInfo, scene->conditions[c].entityId, scene->conditions[c].dpId);
                     if (foundDps == 1 && scene->conditions[c].valueType == ValueTypeDouble) {
                         bool satisfied = false;
-                        if (StringCompare(scene->conditions[c].expr, ">") && dpInfo.value > scene->conditions[c].dpValue) {
+                        if (StringContains(scene->conditions[c].expr, ">") && dpInfo.value > scene->conditions[c].dpValue) {
                             satisfied = true;
-                        } else if (StringCompare(scene->conditions[c].expr, "<") && dpInfo.value < scene->conditions[c].dpValue) {
+                        } else if (StringContains(scene->conditions[c].expr, "<") && dpInfo.value < scene->conditions[c].dpValue) {
                             satisfied = true;
-                        } else if (StringCompare(scene->conditions[c].expr, "==") && dpInfo.value == scene->conditions[c].dpValue) {
+                        } else if (StringContains(scene->conditions[c].expr, "=") && dpInfo.value == scene->conditions[c].dpValue) {
                             satisfied = true;
                         }
                         if (satisfied) {
@@ -1155,25 +1180,31 @@ void GetDeviceStatusForGroup(const char* deviceId, int dpId, double dpValue) {
 
 void CheckDeviceOffline() {
     static long long int oldTick = 0;
+    static bool checkedLowBattery = false;
+    static int count = 0;
 
     if (GWCFG_GET_ONLINE_TIME >= 10000 && timeInMilliseconds() - oldTick > 10000) {
         oldTick = timeInMilliseconds();
         char sqlCmd[500];
         char pid[1000];
         List* offlineDevices = List_Create();
-        sprintf(pid, "%s,%s,%s,%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN, HG_BLE_IR, HG_BLE_CURTAIN_IH35, HG_BLE_CURTAIN_IH68);
-        sprintf(sqlCmd, "SELECT deviceId, pageIndex, state, name FROM devices_inf d \
+        sprintf(pid, "%s,%s,%s,%s,%s,%s,%s", HG_BLE_SWITCH, BLE_LIGHT, HG_BLE_CURTAIN, HG_BLE_IR, HG_BLE_CURTAIN_IH35, HG_BLE_CURTAIN_IH68, "BLEHGAA0606,BLEHGAA0607");
+        sprintf(sqlCmd, "SELECT deviceId, pageIndex, state, name, pid FROM devices_inf d \
                         WHERE (instr('%s', pid) > 0) AND (d.last_updated IS NOT NULL AND %lld - d.last_updated > %d) AND d.deviceKey IS NOT NULL", pid, oldTick, GWCFG_GET_ONLINE_TIME * 4);
         Sql_Query(sqlCmd, row) {
             char* deviceId = sqlite3_column_text(row, 0);
             int pageIndex = sqlite3_column_int(row, 1);
             int currentState = sqlite3_column_int(row, 2);
             char* deviceName = sqlite3_column_text(row, 3);
+            char* pid = sqlite3_column_text(row, 4);
             if (currentState == STATE_ONLINE) {
-                if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_DEV_ONLINE)) {
-                    char* noti[300];
-                    sprintf(noti, "Thiết bị '%s' đã ngoại tuyến", deviceName);
-                    Noti_SendFCMNotification("Thiết bị ngoại tuyến", noti);
+                int categoryID = Noti_GetCategory(pid);
+                if (categoryID > 0) {
+                    if (Noti_IsEnable(categoryID, NOTI_TYPE_DEV_ONLINE)) {
+                        char* noti[300];
+                        sprintf(noti, "Thiết bị '%s' đã offline", deviceName);
+                        Noti_SendFCMNotification("Thiết bị offline", noti);
+                    }
                 }
             }
             Db_SaveDeviceState(deviceId, STATE_OFFLINE);
@@ -1188,6 +1219,39 @@ void CheckDeviceOffline() {
         }
 
         List_Delete(offlineDevices);
+
+        // Check low battery
+        if (checkedLowBattery == false) {
+            time_t rawtime; struct tm *info; time( &rawtime ); info = localtime(&rawtime);
+            if (info->tm_hour == 19 && info->tm_min == 00) {
+                checkedLowBattery = true;
+                count = 0;
+                logInfo("Checking battery percentage");
+                sprintf(pid, "%s,%s", RD_BLE_SENSOR_DOOR, RD_BLE_SENSOR_SMOKE);
+                sprintf(sqlCmd, "SELECT dp.dpId, d.name, d.pid, dp.dpValue FROM devices dp JOIN devices_inf d ON dp.deviceID = d.deviceID WHERE instr('%s', pid) > 0 AND dp.dpId=3", pid);
+                Sql_Query(sqlCmd, row) {
+                    int dpValue = sqlite3_column_int(row, 3);
+                    char* deviceName = sqlite3_column_text(row, 1);
+                    char* pid = sqlite3_column_text(row, 2);
+                    logInfo("Battery of %s is %d", deviceName, dpValue);
+                    if (dpValue <= 20) {
+                        int categoryID = Noti_GetCategory(pid);
+                        if (Noti_IsEnable(categoryID, NOTI_TYPE_LOW_BATTER)) {
+                            char* notiContent[300];
+                            Noti_GetContent(notiContent, NOTI_TYPE_LOW_BATTER, dpValue, deviceName);
+                            Noti_SendFCMNotification("Trạng thái pin", notiContent);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Reset checkedLowBattery after 1 minute
+            count++;
+            if (count > 10) {
+                count = 0;
+                checkedLowBattery = false;
+            }
+        }
     }
 }
 
@@ -1211,17 +1275,6 @@ int main(int argc, char ** argv)
     Db_LoadSceneToRam();
     sleep(1);
     printInfo("Current epoch time: %d", time(NULL));
-
-    char noti[500];
-    Sql_Query("select name from Gateway where isMaster=1", row) {
-        char* name = sqlite3_column_text(row, 0);
-        sprintf(noti, "Thiết bị '%s' đã trực tuyến", name);
-        break;
-    }
-
-    // if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_HC_ONLINE)) {
-    //     Noti_SendFCMNotification("HC Online", noti);
-    // }
     while(xRun!=0) {
         Mosq_ProcessLoop();
         ResponseWaiting();
@@ -1336,14 +1389,42 @@ int main(int argc, char ** argv)
                                 }
                                 if (opcode != 0x8201 || oldDpValue != dpValue || deviceInfo.state == STATE_OFFLINE) {
                                     Aws_SaveDpValue(dpInfo.deviceId, dpInfo.id, dpValue, dpInfo.pageIndex);
-                                    int categoryID = Noti_GetCategory(deviceInfo.pid);
-                                    if (categoryID > 0) {
-                                        int notiType = NOTI_TYPE_ONOFF;
-                                        if (Noti_IsEnable(categoryID, notiType)) {
-                                            char notiContent[200], deviceName[100];
-                                            Db_GetDeviceName(deviceInfo.id, dpInfo.id, deviceName);
-                                            Noti_GetContent(notiContent, notiType, dpValue, deviceName);
-                                            Noti_SendFCMNotification("Trạng thái thiết bị thay đổi", notiContent);
+                                    if (!StringCompare(deviceInfo.pid, HG_BLE_CURTAIN_IH35) && !StringCompare(deviceInfo.pid, HG_BLE_CURTAIN_IH68)) {
+                                        int categoryID = Noti_GetCategory(deviceInfo.pid);
+                                        if (categoryID > 0 && (opcode != 0x8201 || oldDpValue != dpValue)) {
+                                            int notiType = NOTI_TYPE_ONOFF;
+                                            int notiTypeContent = NOTI_TYPE_ONOFF;
+                                            if (categoryID == NOTI_CAT_CURTAIN_SWITCH || categoryID == NOTI_CAT_GATE_SWITCH || categoryID == NOTI_CAT_ROLLING_CURTAIN_ENGINE) {
+                                                notiType = NOTI_TYPE_POSITION;
+                                            }
+
+                                            if ((categoryID == NOTI_CAT_CURTAIN_SWITCH || categoryID == NOTI_CAT_GATE_SWITCH || categoryID == NOTI_CAT_ROLLING_CURTAIN_ENGINE) && opcode != 0x8201) {
+                                                notiTypeContent = NOTI_TYPE_OPEN_CLOSE;
+                                                if (Noti_IsEnable(categoryID, notiType) && opcode != 0x8201) {
+                                                    char notiContent[200], deviceName[100];
+                                                    Db_GetDeviceName(deviceInfo.id, dpInfo.id, deviceName);
+                                                    Noti_GetContent(notiContent, notiTypeContent, dpValue, deviceName);
+                                                    Noti_SendFCMNotification("Trạng thái thiết bị thay đổi", notiContent);
+                                                }
+                                            } else {
+                                                if (Noti_IsEnable(categoryID, notiType) && opcode != 0x8201) {
+                                                    char notiContent[200], deviceName[100];
+                                                    Db_GetDeviceName(deviceInfo.id, dpInfo.id, deviceName);
+                                                    if (StringCompare(HG_BLE_LIGHT_DIMMING, deviceInfo.pid)) {
+                                                        if ((int)dpValue == 0) {
+                                                            sprintf(notiContent, "%s đã tắt", deviceName);
+                                                        } else if (dpValue <= 5) {
+                                                            sprintf(notiContent, "%s đã bật (trắng %d%%)", deviceName, (int)dpValue * 20);
+                                                        } else {
+                                                            sprintf(notiContent, "%s đã bật (vàng %d%%)", deviceName, ((int)dpValue - 5) * 20);
+                                                        }
+                                                    }
+                                                    else {
+                                                        Noti_GetContent(notiContent, notiTypeContent, dpValue, deviceName);
+                                                    }
+                                                    Noti_SendFCMNotification("Trạng thái thiết bị thay đổi", notiContent);
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1466,6 +1547,20 @@ int main(int argc, char ** argv)
                                     Aws_SaveDpValue(deviceId, 104, fan, pageIndex);
                                     Aws_SaveDpValue(deviceId, 105, swing, pageIndex);
                                 }
+                                if (temp >= 1) {
+                                    if (Noti_IsEnable(NOTI_CAT_IR, NOTI_TYPE_ONOFF)) {
+                                        char notiContent[200], deviceName[100], sql[1000];
+                                        sprintf(sql, "select pid from devices_inf where deviceId='%s';", deviceId);
+                                        Sql_Query(sql, row) {
+                                            char* pid = sqlite3_column_text(row, 0);
+                                            if (StringCompare(pid, HG_BLE_IR_AC)) {
+                                                Db_GetDeviceName(deviceId, 0, deviceName);
+                                                Noti_GetContent(notiContent, NOTI_TYPE_ONOFF, temp == 1? 0:1, deviceName);
+                                                Noti_SendFCMNotification("Trạng thái thiết bị thay đổi", notiContent);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         } else if (respType == 1) {
                             uint16_t voiceId = JSON_GetNumber(payload, "voiceId");
@@ -1526,18 +1621,39 @@ int main(int argc, char ** argv)
                             checkSceneForDevice(deviceInfo.id, dpId, dpValue, NULL, true);     // Check and run scenes for this device if any
                             int categoryID = Noti_GetCategory(deviceInfo.pid);
                             if (categoryID > 0 && reqType != GW_RESPONSE_SENSOR_PIR_LIGHT 
-                                               && reqType != GW_RESPONSE_SENSOR_ENVIRONMENT 
-                                               && reqType != GW_RESPONSE_SENSOR_DOOR_ALARM) {
-                                int notiType = NOTI_TYPE_ACTIVE;
-                                if (dpId == TYPE_DPID_DOOR_SENSOR_DETECT) {
-                                    notiType = NOTI_TYPE_OPEN_CLOSE;
+                                               && reqType != GW_RESPONSE_SENSOR_ENVIRONMENT
+                                               && reqType != GW_RESPONSE_SENSOR_BATTERY) {
+                                int notiTypeContent = NOTI_TYPE_ACTIVE;
+                                int notiTypeEnable = NOTI_TYPE_ACTIVE;
+                                if (reqType == GW_RESPONSE_SENSOR_DOOR_DETECT) {
+                                    notiTypeContent = NOTI_TYPE_OPEN_CLOSE;
+                                    notiTypeEnable = NOTI_TYPE_ONOFF;
+                                    if (dpValue == 0) {
+                                        dpValue = 2;
+                                    } else {
+                                        dpValue = 0;
+                                    }
+                                } else if (reqType == GW_RESPONSE_SMOKE_SENSOR) {
+                                    notiTypeContent = NOTI_TYPE_ACTIVE;
+                                    notiTypeEnable = NOTI_TYPE_ONOFF;
                                 } else if (dpId == TYPE_DPID_BATTERY_SENSOR) {
-                                    notiType = NOTI_TYPE_LOW_BATTER;
+                                    notiTypeContent = NOTI_TYPE_LOW_BATTER;
+                                    notiTypeEnable = NOTI_TYPE_LOW_BATTER;
+                                } else if (reqType == GW_RESPONSE_SENSOR_DOOR_ALARM) {
+                                    notiTypeContent = NOTI_TYPE_SENSOR_HANG;
+                                    notiTypeEnable = NOTI_TYPE_ACTIVE;
                                 }
-                                if (Noti_IsEnable(categoryID, notiType)) {
+                                if (categoryID == NOTI_CAT_CURTAIN_SWITCH || categoryID == NOTI_CAT_GATE_SWITCH || categoryID == NOTI_CAT_ROLLING_CURTAIN_ENGINE) {
+                                    notiTypeEnable = NOTI_TYPE_POSITION;
+                                    notiTypeContent = NOTI_TYPE_OPEN_CLOSE;
+                                    if (dpValue == 1) {
+                                        dpValue = 2;
+                                    }
+                                }
+                                if (Noti_IsEnable(categoryID, notiTypeEnable)) {
                                     char notiContent[200], deviceName[100];
                                     Db_GetDeviceName(deviceInfo.id, 0, deviceName);
-                                    Noti_GetContent(notiContent, notiType, dpValue, deviceName);
+                                    Noti_GetContent(notiContent, notiTypeContent, dpValue, deviceName);
                                     Noti_SendFCMNotification("Trạng thái thiết bị thay đổi", notiContent);
                                 }
                             }
@@ -1599,20 +1715,20 @@ int main(int argc, char ** argv)
                                 Sql_Exec(sqlCmd);
                                 if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_HARD_DEL_DEV)) {
                                     char noti[200];
-                                    sprintf(noti, "Thiết bị '%s' đã được xoá khỏi bộ trung tâm", deviceName);
+                                    sprintf(noti, "%s đã được xoá từ dưới thiết bị", deviceName);
                                     Noti_SendFCMNotification("Xoá thiết bị", noti);
                                 }
                             } else {
+                                if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_HARD_DEL_DEV)) {
+                                    char noti[200];
+                                    Db_GetDeviceName(deviceInfo.id, 0, deviceName);
+                                    sprintf(noti, "%s đã được xoá từ dưới thiết bị", deviceName);
+                                    Noti_SendFCMNotification("Xoá thiết bị", noti);
+                                }
                                 DeleteDeviceFromGroups(deviceInfo.id);
                                 DeleteDeviceFromScenes(deviceInfo.id);
                                 Aws_DeleteDevice(deviceInfo.id, deviceInfo.pageIndex);
                                 Db_DeleteDevice(deviceInfo.id);
-                                if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_HARD_DEL_DEV)) {
-                                    char noti[200];
-                                    Db_GetDeviceName(deviceInfo.id, 0, deviceName);
-                                    sprintf(noti, "Thiết bị '%s' đã được xoá khỏi bộ trung tâm", deviceName);
-                                    Noti_SendFCMNotification("Xoá thiết bị", noti);
-                                }
                             }
                         } else {
                             logError("Device %s in hc %s is not found", deviceAddr, hcAddr);
@@ -1645,6 +1761,14 @@ int main(int argc, char ** argv)
                         if (foundDevices == 1) {
                             SaveDpValueByAddr(deviceAddr, hcAddr, 1, openClose);
                             SaveDpValueByAddr(deviceAddr, hcAddr, 2, position);
+                            if (StringCompare(deviceInfo.pid, HG_BLE_CURTAIN_IH35) || StringCompare(deviceInfo.pid, HG_BLE_CURTAIN_IH68)) {
+                                if (Noti_IsEnable(NOTI_CAT_ROLLING_CURTAIN_ENGINE, NOTI_TYPE_POSITION)) {
+                                    char notiContent[200], deviceName[100];
+                                    Db_GetDeviceName(deviceInfo.id, 0, deviceName);
+                                    sprintf(notiContent, "%s: %d %%", deviceName, position);
+                                    Noti_SendFCMNotification("Trạng thái thiết bị thay đổi", notiContent);
+                                }
+                            }
                         }
                         break;
                     }
@@ -1707,6 +1831,15 @@ int main(int argc, char ** argv)
                         char* senderId = JSON_GetText(payload, "senderId");
                         JSON* dictDPs = JSON_GetObject(payload, "dictDPs");
                         Ble_ControlGroupJSON(groupAddr, dictDPs, senderId);
+                        if (JSON_HasKey(dictDPs, "20")) {
+                            int onoff = JSON_GetNumber(dictDPs, "20");
+                            if (Noti_IsEnable(NOTI_CAT_COMMON_LIGHT, NOTI_TYPE_ONOFF)) {
+                                char notiContent[200], deviceName[100];
+                                Db_GetDeviceName(groupAddr, 0, deviceName);
+                                Noti_GetContent(notiContent, NOTI_TYPE_ONOFF, onoff, deviceName);
+                                Noti_SendFCMNotification("Trạng thái thiết bị thay đổi", notiContent);
+                            }
+                        }
                         break;
                     }
                     case TYPE_CTR_SCENE: {
@@ -1862,6 +1995,13 @@ int main(int argc, char ** argv)
 
                             } else {
                                 sendPacketToBle(deviceInfo.gwIndex, TYPE_DEL_DEVICE, payload);
+                            }
+                            if (Noti_IsEnable(NOTI_CAT_HC, NOTI_TYPE_HARD_DEL_DEV)) {
+                                char noti[200];
+                                char deviceName[100];
+                                Db_GetDeviceName(deviceInfo.id, 0, deviceName);
+                                sprintf(noti, "%s đã được xoá từ điện thoại", deviceName);
+                                Noti_SendFCMNotification("Xoá thiết bị", noti);
                             }
                             Db_DeleteDevice(deviceId);
                             DeleteDeviceFromGroups(deviceId);
@@ -2500,28 +2640,73 @@ int main(int argc, char ** argv)
                         }
                         break;
                     }
-                    case TYPE_UDATE_NOTI_CONF: {
-                        logInfo("TYPE_UDATE_NOTI_CONF");
-                        JSON* categories = JSON_GetObject(payload, "categories");
-                        JSON_ForEach(category, categories) {
-                            int categoryID = atoi(category->string);
-                            JSON_ForEach(notification, category) {
-                                int notificationID = atoi(notification->string);
-                                int notificationEnable = notification->valueint;
-                                char sqlCmd[300];
-                                bool found = false;
-                                sprintf(sqlCmd, "SELECT * FROM NOTI_SETTING WHERE categoryId=%d AND notiType=%d", categoryID, notificationID);
-                                Sql_Query(sqlCmd, row) {
-                                    found = true;
+                    case TYPE_UPDATE_NOTI_CONF: {
+                        logInfo("TYPE_UPDATE_NOTI_CONF");
+                        if (JSON_HasKey(payload, "notification_enable")) {
+                            char sqlCmd[300];
+                            int notiGlobalEnable = JSON_GetNumber(payload, "notification_enable");
+                            bool found = false;
+                            Sql_Query("SELECT * FROM NOTI_SETTING WHERE categoryId=0", row) {
+                                logInfo("%d, %d, %d", sqlite3_column_int(row, 0), sqlite3_column_int(row, 1), sqlite3_column_int(row, 2));
+                                found = true;
+                            }
+                            if (found == true) {
+                                sprintf(sqlCmd, "UPDATE NOTI_SETTING SET enable=%d WHERE categoryId=0", notiGlobalEnable);
+                                logInfo("Run cmd: %s", sqlCmd);
+                                Sql_Exec(sqlCmd);
+                            } else {
+                                sprintf(sqlCmd, "INSERT INTO NOTI_SETTING(categoryId, notiType, enable) VALUES(0, 0, %d)", notiGlobalEnable);
+                                logInfo("Run cmd: %s", sqlCmd);
+                                Sql_Exec(sqlCmd);
+                            }
+                        }
+                        if (JSON_HasKey(payload, "categories")) {
+                            JSON* categories = JSON_GetObject(payload, "categories");
+                            JSON_ForEach(category, categories) {
+                                int categoryID = atoi(category->string);
+                                JSON_ForEach(notification, category) {
+                                    int notificationID = atoi(notification->string);
+                                    int notificationEnable = notification->valueint;
+                                    char sqlCmd[300];
+                                    bool found = false;
+                                    sprintf(sqlCmd, "SELECT * FROM NOTI_SETTING WHERE categoryId=%d AND notiType=%d", categoryID, notificationID);
+                                    Sql_Query(sqlCmd, row) {
+                                        found = true;
+                                    }
+                                    if (found == true) {
+                                        sprintf(sqlCmd, "UPDATE NOTI_SETTING SET enable=%d WHERE categoryId=%d AND notiType=%d", notificationEnable, categoryID, notificationID);
+                                        logInfo("Run cmd: %s", sqlCmd);
+                                        Sql_Exec(sqlCmd);
+                                    } else {
+                                        sprintf(sqlCmd, "INSERT INTO NOTI_SETTING(categoryId, notiType, enable) VALUES(%d, %d, %d)", categoryID, notificationID, notificationEnable);
+                                        logInfo("Run cmd: %s", sqlCmd);
+                                        Sql_Exec(sqlCmd);
+                                    }
                                 }
-                                if (found == true) {
-                                    sprintf(sqlCmd, "UPDATE NOTI_SETTING SET enable=%d WHERE categoryId=%d AND notiType=%d", notificationEnable, categoryID, notificationID);
-                                    logInfo("Run cmd: %s", sqlCmd);
-                                    Sql_Exec(sqlCmd);
-                                } else {
-                                    sprintf(sqlCmd, "INSERT INTO NOTI_SETTING(categoryId, notiType, enable) VALUES(%d, %d, %d)", categoryID, notificationID, notificationEnable);
-                                    logInfo("Run cmd: %s", sqlCmd);
-                                    Sql_Exec(sqlCmd);
+                            }
+                        }
+                        if (JSON_HasKey(payload, "schedules")) {
+                            JSON* schedules = JSON_GetObject(payload, "schedules");
+                            int count = 100;
+                            Sql_Exec("DELETE FROM NOTI_SETTING WHERE categoryId >= 100");  // Delete old schedules
+                            JSON_ForEach(schedule, schedules) {
+                                char* timeRange = schedule->valuestring;
+                                logInfo("notify_schedules: %s", timeRange);
+                                int startHour, startMinute, endHour, endMinute;
+                                int startTotalMinutes, endTotalMinutes;
+                                sscanf(timeRange, "%d:%d-%d:%d", &startHour, &startMinute, &endHour, &endMinute);
+
+                                // Calculate total minutes since midnight
+                                startTotalMinutes = startHour * 60 + startMinute;
+                                endTotalMinutes = endHour * 60 + endMinute;
+
+                                // Save schedule to database. startTotalMinutes and endTotalMinutes will be 
+                                // saved to columns "notiType" and "enable" accortingly in table NOTI_SETTING 
+                                // with categoryId >= 100
+                                if (startTotalMinutes != endTotalMinutes) {
+                                    char cmd[200];
+                                    sprintf(cmd, "INSERT INTO NOTI_SETTING(categoryId, notiType, enable) VALUES(%d, %d, %d)", count++, startTotalMinutes, endTotalMinutes);
+                                    Sql_Exec(cmd);
                                 }
                             }
                         }

@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <common.h>
+#include <core_api.h>
 
 bool open_database(const char *filename, sqlite3 **db)
 {
@@ -192,6 +193,36 @@ int Db_SaveDeviceState(const char* deviceId, int state) {
     ASSERT(deviceId);
     long long int currentTime = timeInMilliseconds();
     char sqlCmd[200];
+
+    // Find current state of this device
+    DeviceInfo deviceInfo;
+    Db_FindDevice(&deviceInfo, deviceId);
+    if (deviceInfo.state == STATE_OFFLINE && state == STATE_ONLINE) {
+        // Send "Online" notification to user
+        char deviceName[100];
+        Db_GetDeviceName(deviceId, 0, deviceName);
+        int categoryID = Noti_GetCategory(deviceInfo.pid);
+        if (categoryID > 0) {
+            if (Noti_IsEnable(categoryID, NOTI_TYPE_DEV_ONLINE)) {
+                char* noti[300];
+                sprintf(noti, "%s đã online", deviceName);
+                Noti_SendFCMNotification("Thiết bị online", noti);
+            }
+        }
+    }
+    sprintf(sqlCmd, "UPDATE devices_inf SET state='%d', last_updated='%lld' WHERE deviceId='%s';", state, currentTime, deviceId);
+    Sql_Exec(sqlCmd);
+    return 1;
+}
+
+int Db_SaveDeviceState2(const char* deviceId, int state) {
+    ASSERT(deviceId);
+    long long int currentTime = timeInMilliseconds();
+    char sqlCmd[200];
+
+    // Find current state of this device
+    DeviceInfo deviceInfo;
+    Db_FindDevice(&deviceInfo, deviceId);
     sprintf(sqlCmd, "UPDATE devices_inf SET state='%d', last_updated='%lld' WHERE deviceId='%s';", state, currentTime, deviceId);
     Sql_Exec(sqlCmd);
     return 1;
@@ -356,9 +387,9 @@ int Db_FindDpByAddr(DpInfo* dpInfo, const char* dpAddr, const* hcAddr) {
     ASSERT(dpInfo); ASSERT(dpAddr);
     int rowCount = 0;
     char sqlCommand[300];
-    sprintf(sqlCommand, "SELECT dp.deviceId, dp.dpId, dp.address, dp.dpValue, dp.pageIndex FROM devices dp JOIN devices_inf d ON dp.deviceId = d.deviceId JOIN gateway g ON g.id=d.gwIndex WHERE dp.address='%s' AND g.hcAddr='%s' ORDER BY dpId LIMIT 1;", dpAddr, hcAddr);
+    sprintf(sqlCommand, "SELECT dp.deviceId, cast(dp.dpId as int) dpId, dp.address, dp.dpValue, dp.pageIndex FROM devices dp JOIN devices_inf d ON dp.deviceId = d.deviceId JOIN gateway g ON g.id=d.gwIndex WHERE dp.address='%s' AND g.hcAddr='%s' ORDER BY dpId LIMIT 1;", dpAddr, hcAddr);
     Sql_Query(sqlCommand, row) {
-        dpInfo->id = atoi(sqlite3_column_text(row, 1));
+        dpInfo->id = sqlite3_column_int(row, 1);
         char* value = sqlite3_column_text(row, 3);
         if (StringCompare(value, "true")) {
             dpInfo->value = 1;
@@ -843,22 +874,71 @@ JSON* Db_FindDeviceHistories(long long startTime, long long endTime, const char*
 void Db_GetDeviceName(const char* deviceID, int dpID, char* deviceName) {
     char sql[200];
     if (dpID > 0) {
-        sprintf(sql, "select dp.name || ' của ' || d.name from devices dp JOIN devices_inf d ON dp.deviceId=d.deviceId where dp.deviceId='%s' AND dp.dpID=%d;", deviceID, dpID);
+        sprintf(sql, "select d.name, dp.name, d.pid from devices dp JOIN devices_inf d ON dp.deviceId=d.deviceId where dp.deviceId='%s' AND dp.dpID=%d;", deviceID, dpID);
     } else {
-        sprintf(sql, "SELECT name FROM DEVICES_INF WHERE deviceID='%s'", deviceID);
+        sprintf(sql, "SELECT name, pid FROM DEVICES_INF WHERE deviceID='%s'", deviceID);
     }
     Sql_Query(sql, row) {
-        StringCopy(deviceName, sqlite3_column_text(row, 0));
+        char* pid = sqlite3_column_text(row, 2);
+        char* name = sqlite3_column_text(row, 0);
+        char* dpName = "";
+        if (dpID > 0) {
+            dpName = sqlite3_column_text(row, 1);
+        }
+        char tmp[300];
+        if (dpID == 20 || dpName == NULL || StringCompare(dpName, "") || StringContains(NOTI_CAT_GATE_SWITCH_PID, pid) || StringContains(NOTI_CAT_ROLLING_CURTAIN_ENGINE_PID, pid) || StringContains(HG_BLE_LIGHT_DIMMING, pid)) {
+            sprintf(tmp, "Thiết bị %s", name);
+        } else if (StringContains(NOTI_CAT_CURTAIN_SWITCH_PID, pid)) {
+            sprintf(tmp, "Rèm lớp %d của %s", dpID, name);
+        } else {
+            sprintf(tmp, "Thiết bị %s của %s", dpName, name);
+        }
+        StringCopy(deviceName, tmp);
     }
 }
 
 bool Noti_IsEnable(int categoryID, int notiType) {
     char sql[200];
     bool isEnable = false;
+
+    time_t rawtime; struct tm *info; time( &rawtime ); info = localtime(&rawtime);
+    int todayMinutes = info->tm_hour * 60 + info->tm_min;
+    logInfo("todayMinutes = %d", todayMinutes);
+
+    {
+        Sql_Query("SELECT * FROM NOTI_SETTING WHERE categoryId=0", row) {
+            isEnable = sqlite3_column_int(row, 2);
+        }
+    }
+
+    {
+        Sql_Query("SELECT * FROM NOTI_SETTING WHERE categoryId >= 100", row) {
+            int startMinutes = sqlite3_column_int(row, 1);
+            int endMinutes = sqlite3_column_int(row, 2);
+            logInfo("startMinutes=%d, endMinutes=%d", startMinutes, endMinutes);
+            if (startMinutes < endMinutes && (todayMinutes >= startMinutes) && (todayMinutes <= endMinutes)) {
+                logInfo("Satisfied 1");
+                isEnable = false;
+                break;
+            }
+            if ((startMinutes > endMinutes) && (todayMinutes >= startMinutes || todayMinutes <= endMinutes)) {
+                logInfo("Satisfied 2");
+                isEnable = false;
+                break;
+            }
+        }
+    }
+    
+    if (isEnable == 0) {
+        logInfo("Notification is disabled");
+        return false;
+    }
+    
     sprintf(sql, "SELECT * FROM NOTI_SETTING WHERE categoryId=%d AND notiType=%d", categoryID, notiType);
     Sql_Query(sql, row) {
         isEnable = sqlite3_column_int(row, 2);
     }
+    logInfo("Noti_IsEnable(%d, %d)=%d", categoryID, notiType, isEnable);
     return isEnable;
 }
 
@@ -888,7 +968,7 @@ bool creat_table_database(sqlite3 **db)
         return false;
     }
     usleep(100);
-    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES;CREATE TABLE DEVICES(deviceID TEXT, dpID TEXT, address TEXT, dpValue TEXT, pageIndex INTEGER, updateTime INTEGER);");
+    check = sql_creat_table(db,"DROP TABLE IF EXISTS DEVICES;CREATE TABLE DEVICES(deviceID TEXT, dpID TEXT, address TEXT, dpValue TEXT, pageIndex INTEGER, updateTime INTEGER, name TEXT);");
     if(check != 0)
     {
         printf("DELETE DEVICES is error!\n");

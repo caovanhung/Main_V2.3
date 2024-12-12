@@ -1,0 +1,3 @@
+1. Báo trạng thái online/offline của thiết bị BLE
+    - APP chủ động call lên AWS mỗi 15s để lấy trạng thái thiết bị bị, app quy định state state !=2 là thiết bị offf.of
+    - Device chắc chắn off hi state = 3
