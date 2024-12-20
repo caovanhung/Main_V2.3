@@ -108,7 +108,6 @@ void Aws_SyncDatabase() {
         int devicePages = JSON_HasKey(accountInfo, "pageIndex0")? JSON_GetNumber(accountInfo, "pageIndex0") : 0;
         int groupPages = JSON_HasKey(accountInfo, "pageIndex3")? JSON_GetNumber(accountInfo, "pageIndex3") : 0;
         int scenePages = JSON_HasKey(accountInfo, "pageIndex2")? JSON_GetNumber(accountInfo, "pageIndex2") : 0;
-
         // Sync gateways
         gatewayInfo = JSON_Clone(JSON_GetObject(accountInfo, "gateWay"));
         JSON_Delete(accountInfo);
@@ -187,8 +186,10 @@ void Aws_SyncDatabase() {
                             JSON_SetText(scene, "sceneType", sceneType);
                             JSON* actions = JSON_Clone(JSON_GetObject(s, "actions"));
                             JSON* conditions = JSON_Clone(JSON_GetObject(s, "conditions"));
+                            JSON* preconditions = JSON_Clone(JSON_GetObject(s, "preconditions"));
                             JSON_SetObject(scene, "actions", actions);
                             JSON_SetObject(scene, "conditions", conditions);
+                            JSON_SetObject(scene, "preconditions", preconditions);
                         } else {
                             logError("Ignored sene %s", s->string);
                         }
